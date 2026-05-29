@@ -655,7 +655,7 @@ tbody td{padding:6px 8px;vertical-align:middle;white-space:nowrap;}
   <div class="mod-grid" id="modGrid"></div>
 </div>
 
-<div class="footer" data-editable>TRADING JOURNAL PRO · © 2025</div>
+<div class="footer" style="display:none"></div>
 
 <script>
 // ══ DATA GEN ══
@@ -1743,7 +1743,6 @@ const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
 let currentUser = null;
 let syncTimeout = null;
-let _authEmail = '';
 
 function showOverlay(id) {
   document.querySelectorAll('.auth-overlay').forEach(el => el.classList.remove('active'));
