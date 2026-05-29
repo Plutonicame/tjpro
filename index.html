@@ -529,10 +529,24 @@ tbody td{padding:6px 8px;vertical-align:middle;white-space:nowrap;}
         <div class="fg"><label data-editable>Résultat (€)</label><input type="number" id="f-res" placeholder="150 ou -80"></div>
         <div class="fg"><label data-editable>Management</label><select id="f-mgmt"></select></div>
         <div class="fg"><label data-editable>Reprendrais-tu ?</label><select id="f-reprend"></select></div>
-        <div class="fg"><label data-editable>Note ⭐</label><select id="f-stars"><option value="0">—</option><option value="0.5">½ ★</option><option value="1">1 ★</option><option value="1.5">1.5 ★</option><option value="2">2 ★</option><option value="2.5">2.5 ★</option><option value="3">3 ★</option><option value="3.5">3.5 ★</option><option value="4">4 ★</option><option value="4.5">4.5 ★</option><option value="5">5 ★</option></select></div>
+        <div class="fg spanall"><label data-editable>Note ⭐</label>
+          <div class="star-picker" id="f-stars-picker" data-val="0">
+            <span class="star-pick" data-v="1">★</span>
+            <span class="star-pick" data-v="2">★</span>
+            <span class="star-pick" data-v="3">★</span>
+            <span class="star-pick" data-v="4">★</span>
+            <span class="star-pick" data-v="5">★</span>
+          </div>
+          <input type="hidden" id="f-stars" value="0">
+        </div>
         <div class="fg span2"><label data-editable>Timeframes</label><div class="chip-wrap" id="tf-wrap"></div></div>
         <div class="fg spanall"><label data-editable>Confluences</label><div class="chip-wrap" id="conf-wrap"></div></div>
         <div class="fg spanall"><label data-editable>Notes</label><textarea id="f-notes" placeholder="Setup, émotions..."></textarea></div>
+        <div class="fg spanall"><label data-editable>Images du trade</label>
+          <div id="f-images-wrap" style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:8px;"></div>
+          <input type="file" id="f-img-input" accept="image/*" multiple style="display:none" onchange="addFormImage()">
+          <button class="btn btn-g" style="font-size:11px;padding:6px 12px;" onclick="document.getElementById('f-img-input').click()">📷 Ajouter image(s)</button>
+        </div>
       </div>
       <button class="btn btn-p" onclick="addTrade()">＋ Ajouter le Trade</button>
     </div>
@@ -572,7 +586,7 @@ tbody td{padding:6px 8px;vertical-align:middle;white-space:nowrap;}
     <div class="card-header"><div class="card-title" data-editable>CAPITAL &amp; RISK</div></div>
     <div class="card-body">
       <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;margin-bottom:11px;">
-        <div class="fg"><label data-editable>Capital de départ (€)</label><input type="number" id="capInput" min="0" step="100" style="width:120px;font-family:var(--mono);font-size:13px;"></div>
+        <div class="fg"><label data-editable>Capital de départ (€)</label><input type="number" id="capInput" min="0" step="0.01" style="width:120px;font-family:var(--mono);font-size:13px;"></div>
         <div class="fg">
           <label data-editable>Pay Out (€)</label>
           <div style="display:flex;gap:4px;align-items:center;">
@@ -607,6 +621,15 @@ tbody td{padding:6px 8px;vertical-align:middle;white-space:nowrap;}
           <div class="mod-state-item"><div class="mod-state-label" style="font-size:9px;color:var(--muted)" data-editable>Série perte</div><div class="mod-state-value" style="font-family:var(--mono);font-size:15px;color:var(--red)" id="disp4">—</div></div>
         </div>
       </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <div class="card-title" data-editable>SÉCURITÉ</div>
+    </div>
+    <div class="card-body">
+      <button class="btn btn-g" onclick="changePinFlow()" style="font-size:12px;">🔑 Changer mon code PIN</button>
     </div>
   </div>
 
@@ -1047,7 +1070,7 @@ function updateKPIs(){
   const pf=sumP>0?sumG/sumP:(sumG>0?99:0);
   const mOk=t.filter(x=>x.mgmt==='Oui').filter(x=>x.res>0).length,mTot=t.filter(x=>x.mgmt==='Oui').length;
   const rp=getCurrentRiskPct(),re=getCurrentRiskEur(),worst=computeWorstLose();
-  const fr=n=>n.toLocaleString('fr-FR',{maximumFractionDigits:0});
+  const fr=n=>n.toLocaleString('fr-FR',{minimumFractionDigits:2,maximumFractionDigits:2});
   document.getElementById('k0').textContent=fr(getCurrentCap())+'€';
   const k1=document.getElementById('k1');k1.textContent=(pnl>=0?'+':'')+fr(pnl)+'€';k1.style.color=pnl>=0?'var(--green)':'var(--red)';
   document.getElementById('k2').textContent=wr.toFixed(1)+'%';document.getElementById('k3').textContent=rrMoy.toFixed(2)+'R';
@@ -1605,7 +1628,16 @@ function saveEditTrade(){
       <div class="fg"><label>Résultat (€)</label><input type="number" id="e-res"></div>
       <div class="fg"><label>Management</label><select id="e-mgmt"></select></div>
       <div class="fg"><label>Reprendrais-tu ?</label><select id="e-reprend"></select></div>
-      <div class="fg span2"><label>Note ⭐ (0.5 à 5)</label><select id="e-stars"><option value="0">—</option><option value="0.5">½ ★</option><option value="1">1 ★</option><option value="1.5">1.5 ★</option><option value="2">2 ★</option><option value="2.5">2.5 ★</option><option value="3">3 ★</option><option value="3.5">3.5 ★</option><option value="4">4 ★</option><option value="4.5">4.5 ★</option><option value="5">5 ★</option></select></div>
+      <div class="fg span2"><label>Note ⭐</label>
+        <div class="star-picker" id="e-stars-picker" data-val="0">
+          <span class="star-pick" data-v="1">★</span>
+          <span class="star-pick" data-v="2">★</span>
+          <span class="star-pick" data-v="3">★</span>
+          <span class="star-pick" data-v="4">★</span>
+          <span class="star-pick" data-v="5">★</span>
+        </div>
+        <input type="hidden" id="e-stars" value="0">
+      </div>
       <div class="fg span2"><label>Timeframes</label><div class="chip-wrap" id="e-tf-wrap"></div></div>
       <div class="fg spanall"><label>Confluences</label><div class="chip-wrap" id="e-conf-wrap"></div></div>
       <div class="fg spanall"><label>Images du trade</label>
@@ -1624,6 +1656,11 @@ function saveEditTrade(){
 <style>
 .auth-overlay{display:none;position:fixed;inset:0;background:#0b0f1a;z-index:9999;flex-direction:column;align-items:center;justify-content:center;gap:20px;}
 .auth-overlay.active{display:flex;}
+/* ── Star picker ── */
+.star-picker{display:flex;gap:4px;margin-top:4px;}
+.star-pick{font-size:28px;color:#2a3a5c;cursor:pointer;transition:color .1s;user-select:none;}
+.star-pick.on{color:#f59e0b;}
+.star-pick:hover{color:#f59e0b;}
 .auth-title{font-family:'Space Mono',monospace;font-size:22px;color:#4f8ef7;letter-spacing:3px;font-weight:700;}
 .auth-sub{font-family:'DM Sans',sans-serif;font-size:14px;color:#6b7a99;text-align:center;max-width:280px;}
 .auth-err{font-size:12px;color:#ef4444;display:none;min-height:16px;}
@@ -1640,21 +1677,30 @@ function saveEditTrade(){
 .change-pin-btn{font-family:'Space Mono',monospace;font-size:10px;color:#6b7a99;background:none;border:1px solid #1e2d45;border-radius:4px;padding:6px 12px;cursor:pointer;margin-top:4px;}
 </style>
 
-<!-- ÉTAPE 1 : Google Login -->
-<div id="overlayGoogle" class="auth-overlay active">
+<!-- ÉTAPE 1 : Email -->
+<div id="overlayEmail" class="auth-overlay active">
   <div class="auth-title">TRADING JOURNAL PRO</div>
-  <div class="auth-sub">Connecte-toi pour accéder à ton journal</div>
-  <button class="google-btn" id="googleLoginBtn" onclick="signInWithGoogle()">
-    <svg width="20" height="20" viewBox="0 0 48 48"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.18 1.48-4.97 2.31-8.16 2.31-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg>
-    Continuer avec Google
-  </button>
-  <div class="auth-err" id="googleErr"></div>
+  <div class="auth-sub">Saisis ton adresse email pour accéder à ton journal</div>
+  <input id="authEmail" type="email" placeholder="ton@email.com" style="background:#111827;border:1px solid #1e2d45;border-radius:8px;color:#e2e8f0;font-family:'DM Sans',sans-serif;font-size:15px;padding:12px 16px;width:260px;outline:none;">
+  <button onclick="submitEmail()" style="background:#4f8ef7;color:#fff;border:none;border-radius:8px;padding:12px 24px;font-size:15px;font-weight:600;cursor:pointer;font-family:'DM Sans',sans-serif;width:260px;">Continuer →</button>
+  <div class="auth-err" id="emailErr"></div>
 </div>
 
-<!-- ÉTAPE 2 : Créer PIN (1ère fois) -->
+<!-- ÉTAPE 2 : Mot de passe (1ère fois = inscription, sinon = connexion) -->
+<div id="overlayPassword" class="auth-overlay">
+  <div class="auth-title">TRADING JOURNAL PRO</div>
+  <div class="auth-sub" id="pwdSub">Saisis ton mot de passe</div>
+  <input id="authEmail2" type="email" readonly style="background:#0b0f1a;border:1px solid #1e2d45;border-radius:8px;color:#6b7a99;font-family:'DM Sans',sans-serif;font-size:13px;padding:10px 16px;width:260px;outline:none;">
+  <input id="authPwd" type="password" placeholder="Mot de passe" style="background:#111827;border:1px solid #1e2d45;border-radius:8px;color:#e2e8f0;font-family:'DM Sans',sans-serif;font-size:15px;padding:12px 16px;width:260px;outline:none;">
+  <button onclick="submitPassword()" style="background:#4f8ef7;color:#fff;border:none;border-radius:8px;padding:12px 24px;font-size:15px;font-weight:600;cursor:pointer;font-family:'DM Sans',sans-serif;width:260px;" id="pwdBtn">Connexion →</button>
+  <button onclick="showOverlay('overlayEmail')" style="background:none;border:none;color:#6b7a99;font-size:12px;cursor:pointer;font-family:'DM Sans',sans-serif;">← Changer d'email</button>
+  <div class="auth-err" id="pwdErr"></div>
+</div>
+
+<!-- ÉTAPE 3 : Créer PIN (1ère fois) -->
 <div id="overlayCreatePin" class="auth-overlay">
   <div class="auth-title">CRÉER TON PIN</div>
-  <div class="auth-sub">Choisis un code PIN à 4 chiffres pour sécuriser ton journal</div>
+  <div class="auth-sub">Choisis un code PIN à 4 chiffres</div>
   <div class="pin-dots" id="createDots">
     <div class="pin-dot"></div><div class="pin-dot"></div><div class="pin-dot"></div><div class="pin-dot"></div>
   </div>
@@ -1662,10 +1708,10 @@ function saveEditTrade(){
   <div class="pin-pad" id="createPad"></div>
 </div>
 
-<!-- ÉTAPE 3 : Confirmer PIN (1ère fois) -->
+<!-- ÉTAPE 4 : Confirmer PIN (1ère fois) -->
 <div id="overlayConfirmPin" class="auth-overlay">
   <div class="auth-title">CONFIRMER PIN</div>
-  <div class="auth-sub">Saisis à nouveau ton PIN pour confirmer</div>
+  <div class="auth-sub">Saisis à nouveau ton PIN</div>
   <div class="pin-dots" id="confirmDots">
     <div class="pin-dot"></div><div class="pin-dot"></div><div class="pin-dot"></div><div class="pin-dot"></div>
   </div>
@@ -1673,7 +1719,7 @@ function saveEditTrade(){
   <div class="pin-pad" id="confirmPad"></div>
 </div>
 
-<!-- ÉTAPE 4 : Saisir PIN (connexions suivantes) -->
+<!-- ÉTAPE 5 : Saisir PIN (connexions suivantes) -->
 <div id="overlayEnterPin" class="auth-overlay">
   <div class="auth-title">TRADING JOURNAL PRO</div>
   <div class="auth-sub" id="enterPinSub">Saisis ton PIN</div>
@@ -1696,32 +1742,100 @@ const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
 let currentUser = null;
 let syncTimeout = null;
+let _authEmail = '';
+let _isNewUser = false;
 
-// ══ OVERLAY HELPERS ══
+// ══ OVERLAY ══
 function showOverlay(id) {
   document.querySelectorAll('.auth-overlay').forEach(el => el.classList.remove('active'));
   if (id) document.getElementById(id).classList.add('active');
 }
 
-// ══ GOOGLE AUTH ══
-async function signInWithGoogle() {
-  const btn = document.getElementById('googleLoginBtn');
-  btn.textContent = 'Connexion...';
-  btn.disabled = true;
-  const { error } = await sb.auth.signInWithOAuth({
-    provider: 'google',
-    options: { redirectTo: window.location.href }
-  });
-  if (error) {
-    const err = document.getElementById('googleErr');
-    err.textContent = error.message;
+// ══ ÉTAPE 1 : EMAIL ══
+async function submitEmail() {
+  const email = document.getElementById('authEmail').value.trim();
+  const err = document.getElementById('emailErr');
+  err.style.display = 'none';
+  if (!email || !email.includes('@')) { err.textContent = 'Email invalide.'; err.style.display = 'block'; return; }
+  _authEmail = email;
+  // Vérifier si l'utilisateur existe via tentative de signin (on utilisera le résultat)
+  document.getElementById('authEmail2').value = email;
+  document.getElementById('authPwd').value = '';
+  // Tentative de signin pour détecter si le compte existe
+  const { error } = await sb.auth.signInWithPassword({ email, password: '##CHECK_ONLY##_invalid' });
+  if (error && error.message.includes('Invalid login credentials')) {
+    // Le compte existe mais mot de passe faux → connexion normale
+    _isNewUser = false;
+    document.getElementById('pwdSub').textContent = 'Connexion — ' + email;
+    document.getElementById('pwdBtn').textContent = 'Connexion →';
+  } else if (error && (error.message.includes('Email not confirmed') || error.message.includes('not found') || error.message.toLowerCase().includes('user'))) {
+    // Nouveau compte
+    _isNewUser = true;
+    document.getElementById('pwdSub').textContent = 'Créer un compte — ' + email;
+    document.getElementById('pwdBtn').textContent = 'Créer mon compte →';
+  } else {
+    // Compte existant (erreur mot de passe = compte existe)
+    _isNewUser = false;
+    document.getElementById('pwdSub').textContent = 'Connexion — ' + email;
+    document.getElementById('pwdBtn').textContent = 'Connexion →';
+  }
+  showOverlay('overlayPassword');
+}
+
+// ══ ÉTAPE 2 : MOT DE PASSE ══
+async function submitPassword() {
+  const pwd = document.getElementById('authPwd').value;
+  const err = document.getElementById('pwdErr');
+  err.style.display = 'none';
+  if (pwd.length < 6) { err.textContent = 'Mot de passe trop court (6 caractères min).'; err.style.display = 'block'; return; }
+  document.getElementById('pwdBtn').textContent = '...';
+  document.getElementById('pwdBtn').disabled = true;
+
+  let result;
+  if (_isNewUser) {
+    result = await sb.auth.signUp({ email: _authEmail, password: pwd });
+  } else {
+    result = await sb.auth.signInWithPassword({ email: _authEmail, password: pwd });
+  }
+
+  document.getElementById('pwdBtn').disabled = false;
+  document.getElementById('pwdBtn').textContent = _isNewUser ? 'Créer mon compte →' : 'Connexion →';
+
+  if (result.error) {
+    // Si signUp échoue car l'email existe déjà → tenter signin
+    if (_isNewUser && result.error.message.includes('already registered')) {
+      _isNewUser = false;
+      document.getElementById('pwdSub').textContent = 'Connexion — ' + _authEmail;
+      document.getElementById('pwdBtn').textContent = 'Connexion →';
+      err.textContent = 'Compte existant. Saisis ton mot de passe.';
+      err.style.color = '#f59e0b';
+      err.style.display = 'block';
+      return;
+    }
+    err.textContent = result.error.message;
+    err.style.color = '#ef4444';
     err.style.display = 'block';
-    btn.innerHTML = '<svg width="20" height="20" viewBox="0 0 48 48"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.18 1.48-4.97 2.31-8.16 2.31-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg> Continuer avec Google';
-    btn.disabled = false;
+    return;
+  }
+
+  currentUser = result.data.user || result.data.session?.user;
+  if (!currentUser) { err.textContent = 'Erreur de connexion.'; err.style.display = 'block'; return; }
+
+  // Déconnexion immédiate de la session Supabase (on gère nous-mêmes avec PIN)
+  await sb.auth.signOut();
+
+  const pin = localStorage.getItem(pinKey(currentUser.id));
+  if (pin) {
+    showOverlay('overlayEnterPin');
+    document.getElementById('enterPinSub').textContent = 'Bonjour ! Saisis ton PIN';
+    setupEnterPin();
+  } else {
+    showOverlay('overlayCreatePin');
+    setupCreatePin();
   }
 }
 
-// ══ PIN SYSTEM ══
+// ══ PIN ══
 function pinKey(userId) { return 'tjp_pin_' + userId; }
 
 function buildPad(padId, dotsId, onComplete, errId) {
@@ -1729,243 +1843,240 @@ function buildPad(padId, dotsId, onComplete, errId) {
   pad.innerHTML = '';
   let entry = '';
   const dots = document.getElementById(dotsId).querySelectorAll('.pin-dot');
-
   function update() {
     dots.forEach((d, i) => d.classList.toggle('filled', i < entry.length));
-    if (entry.length === 4) {
-      setTimeout(() => onComplete(entry, reset), 150);
-    }
+    if (entry.length === 4) setTimeout(() => onComplete(entry, reset), 150);
   }
   function reset(shake) {
     entry = '';
-    dots.forEach(d => { d.classList.remove('filled'); if(shake) { d.style.animation='none'; d.offsetHeight; d.style.animation='shake .3s'; } });
+    dots.forEach(d => { d.classList.remove('filled'); if(shake){d.style.animation='none';d.offsetHeight;d.style.animation='shake .3s';} });
     const err = document.getElementById(errId);
-    if(!shake && err) err.style.display='none';
+    if (!shake && err) err.style.display = 'none';
   }
-
-  const keys = ['1','2','3','4','5','6','7','8','9','empty','0','del'];
-  keys.forEach(k => {
+  ['1','2','3','4','5','6','7','8','9','empty','0','del'].forEach(k => {
     const btn = document.createElement('button');
     btn.className = 'pin-btn' + (k==='del'?' del':k==='empty'?' empty':'');
-    btn.textContent = k === 'del' ? '⌫' : k === 'empty' ? '' : k;
-    if (k !== 'empty') btn.onclick = () => {
-      if (k === 'del') { if (entry.length > 0) { entry = entry.slice(0,-1); update(); } }
-      else if (entry.length < 4) { entry += k; update(); }
+    btn.textContent = k==='del'?'⌫':k==='empty'?'':k;
+    if (k!=='empty') btn.onclick = () => {
+      if (k==='del'){if(entry.length>0){entry=entry.slice(0,-1);update();}}
+      else if(entry.length<4){entry+=k;update();}
     };
     pad.appendChild(btn);
   });
 }
 
-// Créer PIN
 let pinFirstEntry = '';
 function setupCreatePin() {
   pinFirstEntry = '';
-  buildPad('createPad', 'createDots', (val, reset) => {
+  buildPad('createPad','createDots',(val,reset)=>{
     pinFirstEntry = val;
     showOverlay('overlayConfirmPin');
     setupConfirmPin();
-  }, 'createErr');
+  },'createErr');
 }
 
-// Confirmer PIN
 function setupConfirmPin() {
-  buildPad('confirmPad', 'confirmDots', (val, reset) => {
-    if (val === pinFirstEntry) {
+  buildPad('confirmPad','confirmDots',(val,reset)=>{
+    if (val===pinFirstEntry) {
       localStorage.setItem(pinKey(currentUser.id), val);
       accessGranted();
     } else {
-      const err = document.getElementById('confirmErr');
-      err.textContent = 'Les PIN ne correspondent pas. Recommence.';
-      err.style.display = 'block';
-      reset(true);
-      pinFirstEntry = '';
-      setTimeout(() => { showOverlay('overlayCreatePin'); setupCreatePin(); }, 800);
+      const err=document.getElementById('confirmErr');
+      err.textContent='PIN non identique. Recommence.';err.style.display='block';
+      reset(true);pinFirstEntry='';
+      setTimeout(()=>{showOverlay('overlayCreatePin');setupCreatePin();},800);
     }
-  }, 'confirmErr');
+  },'confirmErr');
 }
 
-// Saisir PIN
 let pinAttempts = 0;
 function setupEnterPin() {
   pinAttempts = 0;
-  buildPad('enterPad', 'enterDots', (val, reset) => {
+  buildPad('enterPad','enterDots',(val,reset)=>{
     const stored = localStorage.getItem(pinKey(currentUser.id));
-    if (val === stored) {
-      pinAttempts = 0;
-      accessGranted();
-    } else {
+    if (val===stored) { pinAttempts=0; accessGranted(); }
+    else {
       pinAttempts++;
-      const err = document.getElementById('enterErr');
-      if (pinAttempts >= 5) {
-        err.textContent = 'Trop de tentatives. Reconnexion requise.';
-        err.style.display = 'block';
-        setTimeout(() => resetPin(), 2000);
+      const err=document.getElementById('enterErr');
+      if (pinAttempts>=5) {
+        err.textContent='Trop de tentatives.';err.style.display='block';
+        setTimeout(()=>resetPin(),2000);
       } else {
-        err.textContent = `PIN incorrect (${5 - pinAttempts} essai${5-pinAttempts>1?'s':''} restant${5-pinAttempts>1?'s':''})`;
-        err.style.display = 'block';
-        reset(true);
+        err.textContent=`PIN incorrect (${5-pinAttempts} essai${5-pinAttempts>1?'s':''} restant${5-pinAttempts>1?'s':''})`;
+        err.style.display='block';reset(true);
       }
     }
-  }, 'enterErr');
+  },'enterErr');
 }
 
-// Réinitialiser — repart de zéro (Google + nouveau PIN)
 async function resetPin() {
-  if (currentUser) {
-    localStorage.removeItem(pinKey(currentUser.id));
-    await sb.auth.signOut();
-    currentUser = null;
-  }
-  showOverlay('overlayGoogle');
+  currentUser = null;
+  showOverlay('overlayEmail');
+  document.getElementById('authEmail').value='';
+  document.getElementById('emailErr').style.display='none';
 }
 
-// Accès accordé — on charge les données
 async function accessGranted() {
+  // Re-signin pour avoir une vraie session et pouvoir lire Supabase
+  const pwd = document.getElementById('authPwd').value;
+  const { data } = await sb.auth.signInWithPassword({ email: _authEmail, password: pwd });
+  if (data?.user) currentUser = data.user;
   showOverlay(null);
   await pullFromCloud();
 }
 
+function changePinFlow() {
+  if (!currentUser) return;
+  localStorage.removeItem(pinKey(currentUser.id));
+  pinFirstEntry='';
+  showOverlay('overlayCreatePin');
+  setupCreatePin();
+}
+
 // ══ SYNC ══
 function showSync(msg, color='#6b7a99') {
-  const el = document.getElementById('syncStatus');
-  el.textContent = msg;
-  el.style.color = color;
-  el.style.display = 'block';
+  const el=document.getElementById('syncStatus');
+  el.textContent=msg;el.style.color=color;el.style.display='block';
   clearTimeout(syncTimeout);
-  syncTimeout = setTimeout(() => el.style.display = 'none', 3000);
+  syncTimeout=setTimeout(()=>el.style.display='none',3000);
 }
 
 async function pushToCloud() {
   if (!currentUser) return;
   try {
-    const data = {
-      user_id: currentUser.id,
-      trades: APP.trades,
-      lists: APP.lists,
-      next_id: APP.nextId,
-      capital: localStorage.getItem('tj_capital'),
-      risk: localStorage.getItem('tj_risk'),
-      smart_risk: localStorage.getItem('tj_smart_risk'),
-      risk_max: localStorage.getItem('tj_risk_max'),
-      updated_at: new Date().toISOString()
-    };
-    const { error } = await sb.from('journal_data').upsert(data, { onConflict: 'user_id' });
-    if (error) { showSync('⚠ Erreur sync', '#ef4444'); return; }
-    showSync('✓ Synchronisé', '#22c55e');
-  } catch(e) { showSync('⚠ Hors ligne', '#f59e0b'); }
+    const data={user_id:currentUser.id,trades:APP.trades,lists:APP.lists,next_id:APP.nextId,
+      capital:localStorage.getItem('tj_capital'),risk:localStorage.getItem('tj_risk'),
+      smart_risk:localStorage.getItem('tj_smart_risk'),risk_max:localStorage.getItem('tj_risk_max'),
+      updated_at:new Date().toISOString()};
+    const{error}=await sb.from('journal_data').upsert(data,{onConflict:'user_id'});
+    if(error){showSync('⚠ Erreur sync','#ef4444');return;}
+    showSync('✓ Synchronisé','#22c55e');
+  } catch(e){showSync('⚠ Hors ligne','#f59e0b');}
 }
 
 async function pullFromCloud() {
   if (!currentUser) return;
   try {
-    const { data, error } = await sb.from('journal_data').select('*').eq('user_id', currentUser.id).single();
-    if (error || !data) return;
-    APP.trades = data.trades || [];
-    APP.lists = data.lists || APP.lists;
-    APP.nextId = data.next_id || APP.nextId;
-    if (data.capital) localStorage.setItem('tj_capital', data.capital);
-    if (data.risk) localStorage.setItem('tj_risk', data.risk);
-    if (data.smart_risk) localStorage.setItem('tj_smart_risk', data.smart_risk);
-    if (data.risk_max) localStorage.setItem('tj_risk_max', data.risk_max);
-    saveState();
-    renderTable();
-    updateNavBadges();
-    showSync('✓ Données chargées', '#22c55e');
-  } catch(e) { showSync('⚠ Hors ligne', '#f59e0b'); }
+    const{data,error}=await sb.from('journal_data').select('*').eq('user_id',currentUser.id).single();
+    if(error||!data)return;
+    APP.trades=data.trades||[];APP.lists=data.lists||APP.lists;APP.nextId=data.next_id||APP.nextId;
+    if(data.capital)localStorage.setItem('tj_capital',data.capital);
+    if(data.risk)localStorage.setItem('tj_risk',data.risk);
+    if(data.smart_risk)localStorage.setItem('tj_smart_risk',data.smart_risk);
+    if(data.risk_max)localStorage.setItem('tj_risk_max',data.risk_max);
+    saveState();renderTable();updateNavBadges();
+    showSync('✓ Données chargées','#22c55e');
+  } catch(e){showSync('⚠ Hors ligne','#f59e0b');}
 }
 
-// Surcharge saveState pour syncer automatiquement
-const _origSaveState = saveState;
-window.saveState = function() {
+const _origSaveState=saveState;
+window.saveState=function(){
   _origSaveState();
-  if (currentUser) {
-    clearTimeout(window._pushTimer);
-    window._pushTimer = setTimeout(pushToCloud, 1500);
+  if(currentUser){clearTimeout(window._pushTimer);window._pushTimer=setTimeout(pushToCloud,1500);}
+};
+
+// Déconnexion + sauvegarde à la fermeture
+window.addEventListener('beforeunload',()=>{
+  if(currentUser){pushToCloud();sb.auth.signOut();}
+});
+
+// ══ STAR PICKER ══
+function initStarPicker(pickerId, hiddenId, val) {
+  const picker = document.getElementById(pickerId);
+  if (!picker) return;
+  const hidden = document.getElementById(hiddenId);
+  const stars = picker.querySelectorAll('.star-pick');
+  function setVal(v) {
+    hidden.value = v;
+    picker.dataset.val = v;
+    stars.forEach((s,i) => s.classList.toggle('on', i < v));
+  }
+  setVal(parseFloat(val)||0);
+  stars.forEach((s,i) => {
+    s.addEventListener('click', () => setVal(i+1));
+    s.addEventListener('mouseover', () => stars.forEach((x,j) => x.classList.toggle('on', j<=i)));
+    s.addEventListener('mouseout', () => setVal(parseFloat(hidden.value)||0));
+  });
+}
+
+// ══ IMAGES FORMULAIRE ══
+window._formImages = [];
+function addFormImage() {
+  const inp = document.getElementById('f-img-input');
+  if (!inp||!inp.files||!inp.files.length) return;
+  Array.from(inp.files).forEach(file => {
+    const reader = new FileReader();
+    reader.onload = e => {
+      window._formImages.push(e.target.result);
+      renderFormImages();
+    };
+    reader.readAsDataURL(file);
+  });
+  inp.value='';
+}
+function renderFormImages() {
+  const wrap = document.getElementById('f-images-wrap');
+  if (!wrap) return;
+  wrap.innerHTML = (window._formImages||[]).map((src,i) => `
+    <div style="position:relative;display:inline-block;margin:2px;">
+      <img src="${src}" style="width:72px;height:54px;object-fit:cover;border-radius:6px;border:1px solid #4f8ef7;">
+      <button onclick="removeFormImg(${i})" style="position:absolute;top:2px;right:2px;background:#ef4444;color:#fff;border:none;border-radius:3px;padding:1px 4px;cursor:pointer;font-size:9px;">×</button>
+    </div>`).join('');
+}
+function removeFormImg(i) { window._formImages.splice(i,1); renderFormImages(); }
+
+// ══ INIT ══
+document.addEventListener('DOMContentLoaded', () => {
+  showOverlay('overlayEmail');
+
+  // Star pickers
+  initStarPicker('f-stars-picker','f-stars',0);
+  initStarPicker('e-stars-picker','e-stars',0);
+
+  // Boutons menu mobile
+  const mobileMenu = document.querySelector('.mobile-menu');
+  if (mobileMenu) {
+    const logoutBtn = document.createElement('button');
+    logoutBtn.className='nav-tab';
+    logoutBtn.style.cssText='font-size:14px;padding:14px 16px;border:1px solid #ef4444;border-radius:6px;text-align:left;color:#ef4444;background:none;cursor:pointer;font-family:var(--mono);';
+    logoutBtn.textContent='⏻ DÉCONNEXION';
+    logoutBtn.onclick=()=>{closeMobileMenu();resetPin();};
+    mobileMenu.appendChild(logoutBtn);
+  }
+
+  // Entrer avec Enter sur les champs auth
+  document.getElementById('authEmail').addEventListener('keydown',e=>{if(e.key==='Enter')submitEmail();});
+  document.getElementById('authPwd').addEventListener('keydown',e=>{if(e.key==='Enter')submitPassword();});
+});
+
+// Re-init star picker à l'ouverture du modal edit
+const _origOpenEdit = openEditTrade;
+window.openEditTrade = function(id) {
+  _origOpenEdit(id);
+  const t = APP.trades.find(x=>x.id===id);
+  setTimeout(()=>initStarPicker('e-stars-picker','e-stars',t?t.stars||0:0),50);
+};
+
+// Surcharge addTrade pour inclure les images du formulaire
+const _origAddTrade = addTrade;
+window.addTrade = function() {
+  // Récupérer les images avant l'appel original
+  const imgs = [...(window._formImages||[])];
+  _origAddTrade();
+  // Ajouter les images au trade qui vient d'être créé
+  if(imgs.length && APP.trades.length) {
+    APP.trades[0].images = imgs;
+    window._formImages = [];
+    renderFormImages();
+    saveState();
+    renderTable();
   }
 };
 
-// ══ DÉCONNEXION AUTO À LA FERMETURE ══
-window.addEventListener('beforeunload', async () => {
-  if (currentUser) {
-    // Sauvegarde synchrone puis déconnexion Google
-    await pushToCloud();
-    await sb.auth.signOut();
-  }
-});
-
-// ══ INIT ══
-async function initAuth() {
-  const { data: { session } } = await sb.auth.getSession();
-
-  sb.auth.onAuthStateChange(async (event, session) => {
-    if (event === 'SIGNED_IN' && session) {
-      currentUser = session.user;
-      const pin = localStorage.getItem(pinKey(currentUser.id));
-      if (pin) {
-        // PIN déjà défini → demander le PIN
-        showOverlay('overlayEnterPin');
-        document.getElementById('enterPinSub').textContent = `Bonjour ! Saisis ton PIN`;
-        setupEnterPin();
-      } else {
-        // 1ère fois → créer le PIN
-        showOverlay('overlayCreatePin');
-        setupCreatePin();
-      }
-    } else if (event === 'SIGNED_OUT') {
-      currentUser = null;
-      showOverlay('overlayGoogle');
-    }
-  });
-
-  if (session) {
-    currentUser = session.user;
-    const pin = localStorage.getItem(pinKey(currentUser.id));
-    if (pin) {
-      showOverlay('overlayEnterPin');
-      setupEnterPin();
-    } else {
-      showOverlay('overlayCreatePin');
-      setupCreatePin();
-    }
-  } else {
-    showOverlay('overlayGoogle');
-  }
-}
-
 // Animation shake
-const shakeStyle = document.createElement('style');
-shakeStyle.textContent = '@keyframes shake{0%,100%{transform:translateX(0)}25%{transform:translateX(-6px)}75%{transform:translateX(6px)}}';
+const shakeStyle=document.createElement('style');
+shakeStyle.textContent='@keyframes shake{0%,100%{transform:translateX(0)}25%{transform:translateX(-6px)}75%{transform:translateX(6px)}}';
 document.head.appendChild(shakeStyle);
-
-// Ajouter bouton changer PIN dans le menu mobile
-document.addEventListener('DOMContentLoaded', () => {
-  const mobileMenu = document.querySelector('.mobile-menu');
-  if (mobileMenu) {
-    const pinBtn = document.createElement('button');
-    pinBtn.className = 'nav-tab';
-    pinBtn.style.cssText = 'font-size:14px;padding:14px 16px;border:1px solid #4f8ef7;border-radius:6px;text-align:left;color:#4f8ef7;background:none;cursor:pointer;font-family:var(--mono);';
-    pinBtn.textContent = '🔑 CHANGER MON PIN';
-    pinBtn.onclick = () => { closeMobileMenu(); changePinFlow(); };
-    mobileMenu.appendChild(pinBtn);
-
-    const logoutBtn = document.createElement('button');
-    logoutBtn.className = 'nav-tab';
-    logoutBtn.style.cssText = 'font-size:14px;padding:14px 16px;border:1px solid #ef4444;border-radius:6px;text-align:left;color:#ef4444;background:none;cursor:pointer;font-family:var(--mono);';
-    logoutBtn.textContent = '⏻ DÉCONNEXION';
-    logoutBtn.onclick = () => { closeMobileMenu(); resetPin(); };
-    mobileMenu.appendChild(logoutBtn);
-  }
-  initAuth();
-});
-
-// Changer PIN depuis le menu
-function changePinFlow() {
-  if (!currentUser) return;
-  localStorage.removeItem(pinKey(currentUser.id));
-  pinFirstEntry = '';
-  showOverlay('overlayCreatePin');
-  setupCreatePin();
-}
 </script>
 </body>
 </html>
