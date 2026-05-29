@@ -1688,7 +1688,17 @@ function saveEditTrade(){
   <div class="auth-err" id="googleErr"></div>
 </div>
 
-<!-- ÉTAPE 2 : PIN (connexions suivantes) -->
+<!-- ÉTAPE 2 : Email (connexions suivantes) -->
+<div id="overlayEmailPin" class="auth-overlay">
+  <div class="auth-title">TRADING JOURNAL PRO</div>
+  <div class="auth-sub">Saisis ton adresse email pour accéder</div>
+  <input id="returnEmail" type="email" placeholder="ton@email.com" style="background:#111827;border:1px solid #1e2d45;border-radius:8px;color:#e2e8f0;font-family:'DM Sans',sans-serif;font-size:15px;padding:12px 16px;width:260px;outline:none;">
+  <button onclick="submitReturnEmail()" style="background:#4f8ef7;color:#fff;border:none;border-radius:8px;padding:12px 24px;font-size:15px;font-weight:600;cursor:pointer;font-family:'DM Sans',sans-serif;width:260px;">Continuer →</button>
+  <div class="auth-err" id="returnEmailErr"></div>
+  <button class="change-pin-btn" onclick="showOverlay('overlayGoogle')">Nouvelle connexion Google</button>
+</div>
+
+<!-- ÉTAPE 3 : PIN (après email reconnu) -->
 <div id="overlayEnterPin" class="auth-overlay">
   <div class="auth-title">TRADING JOURNAL PRO</div>
   <div class="auth-sub" id="enterPinSub">Saisis ton PIN</div>
@@ -1697,10 +1707,10 @@ function saveEditTrade(){
   </div>
   <div class="auth-err" id="enterErr"></div>
   <div class="pin-pad" id="enterPad"></div>
-  <button class="change-pin-btn" onclick="resetPin()">Changer de compte</button>
+  <button class="change-pin-btn" onclick="showOverlay('overlayEmailPin')">← Changer d'email</button>
 </div>
 
-<!-- ÉTAPE 3 : Créer PIN (1ère fois) -->
+<!-- ÉTAPE 4 : Créer PIN (1ère fois) -->
 <div id="overlayCreatePin" class="auth-overlay">
   <div class="auth-title">CRÉER TON PIN</div>
   <div class="auth-sub">Choisis un code PIN à 4 chiffres</div>
@@ -1711,7 +1721,7 @@ function saveEditTrade(){
   <div class="pin-pad" id="createPad"></div>
 </div>
 
-<!-- ÉTAPE 4 : Confirmer PIN (1ère fois) -->
+<!-- ÉTAPE 5 : Confirmer PIN (1ère fois) -->
 <div id="overlayConfirmPin" class="auth-overlay">
   <div class="auth-title">CONFIRMER PIN</div>
   <div class="auth-sub">Saisis à nouveau ton PIN</div>
@@ -1857,17 +1867,33 @@ function changePinFlow() {
   setupCreatePin();
 }
 
+// Email saisi à la 2ème connexion → retrouver le PIN associé
+async function submitReturnEmail() {
+  const email = document.getElementById('returnEmail').value.trim().toLowerCase();
+  const err = document.getElementById('returnEmailErr');
+  err.style.display = 'none';
+  if (!email || !email.includes('@')) { err.textContent = 'Email invalide.'; err.style.display = 'block'; return; }
+  const uid = localStorage.getItem(uidByEmailKey(email));
+  if (!uid || !localStorage.getItem(pinKey(uid))) {
+    err.textContent = 'Compte introuvable. Connecte-toi avec Google.';
+    err.style.display = 'block'; return;
+  }
+  currentUser = { id: uid, email: email };
+  document.getElementById('enterPinSub').textContent = email;
+  showOverlay('overlayEnterPin');
+  setupEnterPin();
+}
+
 // ══ AUTH INIT ══
-// Après redirect Google, Supabase a une session → on récupère l'user, on déco, on demande le PIN
 async function initAuth() {
   const { data: { session } } = await sb.auth.getSession();
 
   if (session && session.user) {
+    // Retour après redirect Google (1ère connexion ou changement de compte)
     currentUser = session.user;
-    // Sauvegarder l'association email ↔ uid
     localStorage.setItem(emailKey(currentUser.id), currentUser.email);
-    localStorage.setItem(uidByEmailKey(currentUser.email), currentUser.id);
-    // Déconnexion Supabase immédiate
+    localStorage.setItem(uidByEmailKey(currentUser.email.toLowerCase()), currentUser.id);
+    localStorage.setItem('tjp_last_uid', currentUser.id);
     await sb.auth.signOut();
 
     const pin = localStorage.getItem(pinKey(currentUser.id));
@@ -1880,14 +1906,13 @@ async function initAuth() {
       setupCreatePin();
     }
   } else {
-    // Pas de session → vérifier si on connaît déjà un user (reconnexion PIN directe)
-    // On cherche le dernier uid connu
+    // Pas de session Google → connexions suivantes
     const lastUid = localStorage.getItem('tjp_last_uid');
     if (lastUid && localStorage.getItem(pinKey(lastUid))) {
-      currentUser = { id: lastUid, email: localStorage.getItem(emailKey(lastUid)) };
-      document.getElementById('enterPinSub').textContent = currentUser.email || 'Saisis ton PIN';
-      showOverlay('overlayEnterPin');
-      setupEnterPin();
+      // On connaît un compte → demander email pour identifier
+      showOverlay('overlayEmailPin');
+      const inp = document.getElementById('returnEmail');
+      if (inp) inp.addEventListener('keydown', e => { if(e.key==='Enter') submitReturnEmail(); });
     } else {
       showOverlay('overlayGoogle');
     }
