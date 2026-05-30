@@ -1601,7 +1601,7 @@ let _editId = null;
 function openEditTrade(id){
   id = parseInt(id, 10);
   const t = APP.trades.find(x=>x.id===id);
-  if(!t) return;
+  if(!t){console.warn('Trade non trouvé:',id, APP.trades.map(x=>x.id));return;}
   _editId = id;
   document.getElementById('e-date').value = t.date||'';
   document.getElementById('e-heure').value = t.heure||'';
@@ -1672,6 +1672,11 @@ function closeEditTrade(){
   document.getElementById('editModal').classList.remove('open');
   _editId=null;
 }
+// Exposer sur window pour les onclick inline dans renderTable
+window.openEditTrade = openEditTrade;
+window.deleteTrade = deleteTrade;
+window.viewTradeImages = viewTradeImages;
+window.deleteTradeImage = deleteTradeImage;
 function saveEditTrade(){
   const t = APP.trades.find(x=>x.id===_editId);
   if(!t){closeEditTrade();return;}
@@ -1711,8 +1716,8 @@ function saveEditTrade(){
 </div>
 
 <!-- EDIT TRADE MODAL -->
-<div class="cp-overlay" id="editModal">
-  <div class="cp-modal" style="width:420px;max-height:90vh;overflow-y:auto;">
+<div class="cp-overlay" id="editModal" style="z-index:10000;">
+  <div class="cp-modal" style="width:420px;max-height:90vh;overflow-y:auto;position:relative;z-index:10001;">
     <div class="cp-title">MODIFIER LE TRADE</div>
     <div class="form-grid" style="margin-bottom:10px;">
       <div class="fg"><label>Date</label><input type="date" id="e-date"></div>
