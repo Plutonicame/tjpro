@@ -1607,7 +1607,6 @@ function openEditTrade(id){
   document.getElementById('e-heure').value = t.heure||'';
   document.getElementById('e-res').value = t.res||'';
   document.getElementById('e-rrcible').value = t.rrCible||'';
-  document.getElementById('e-notes').value = t.notes||'';
   [['e-paire',APP.lists.paires],['e-session',APP.lists.sessions],
    ['e-mgmt',APP.lists.mgmt_opts],['e-reprend',APP.lists.reprend_opts]].forEach(([elId,items])=>{
     const s=document.getElementById(elId);
