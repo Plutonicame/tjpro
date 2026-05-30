@@ -948,7 +948,7 @@ function addTrade(){
   APP.trades.unshift(t);saveState();renderTable();updateNavBadges();
   document.getElementById('alertSaved').classList.add('show');setTimeout(()=>document.getElementById('alertSaved').classList.remove('show'),2200);resetForm();
 }
-function deleteTrade(id){APP.trades=APP.trades.filter(t=>t.id!==id);saveState();renderTable();updateNavBadges();}
+function deleteTrade(id){APP.trades=APP.trades.filter(t=>t.id!==parseInt(id,10));saveState();renderTable();updateNavBadges();}
 function resetForm(){['f-date','f-heure','f-paire','f-session','f-dir','f-rrcible','f-res','f-mgmt','f-reprend','f-notes'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});document.querySelectorAll('#tf-wrap .chip,#conf-wrap .chip').forEach(c=>c.classList.remove('sel'));document.getElementById('f-date').value=new Date().toISOString().split('T')[0];initStarPicker('f-stars-picker','f-stars',0);window._formImages=[];renderFormImages();}
 function tagD(v){return v==='LONG'?'<span class="tag tag-long">LONG</span>':v==='SHORT'?'<span class="tag tag-short">SHORT</span>':v||'—';}
 function tagO(v){const m={Oui:'oui',Non:'non','Peut-être':'peut','N/A':'na'};return v?`<span class="tag tag-${m[v]||'na'}">${v}</span>`:'—';}
@@ -969,6 +969,7 @@ function imgEyeHtml(t){
   return`<span onclick="viewTradeImages(${t.id})" style="cursor:pointer;position:relative;display:inline-block;font-size:16px;" title="Voir ${imgs.length} image(s)">👁<sup style="font-size:9px;color:#4f8ef7;font-family:var(--mono)">${imgs.length}</sup></span>`;
 }
 function viewTradeImages(id){
+  id = parseInt(id, 10);
   const t=APP.trades.find(x=>x.id===id);
   if(!t||!t.images||!t.images.length)return;
   const modal=document.getElementById('imgViewModal');
@@ -1598,6 +1599,7 @@ document.addEventListener('DOMContentLoaded',function(){
 // ── EDIT TRADE ──
 let _editId = null;
 function openEditTrade(id){
+  id = parseInt(id, 10);
   const t = APP.trades.find(x=>x.id===id);
   if(!t) return;
   _editId = id;
