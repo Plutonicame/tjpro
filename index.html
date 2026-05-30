@@ -2108,8 +2108,10 @@ async function pullFromCloud() {
 const _origSaveState = saveState;
 window.saveState = function() {
   _origSaveState();
-  if (currentUser) { clearTimeout(window._pushTimer); window._pushTimer = setTimeout(pushToCloud, 1500); }
+  if (currentUser) { clearTimeout(window._pushTimer); window._pushTimer = setTimeout(pushToCloud, 0); }
 };
+// Remplacer la référence globale pour que l'app utilise la version avec sync
+window.addEventListener('load', () => { if (typeof saveState === 'function') { const orig = saveState; saveState = window.saveState; } });
 
 window.addEventListener('beforeunload', () => { if (currentUser) pushToCloud(); });
 
