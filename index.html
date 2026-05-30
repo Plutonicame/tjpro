@@ -44,7 +44,7 @@
   --comp-pos:rgba(0,229,160,.8);--comp-neg:rgba(239,68,68,.8);--comp-bg:#161d2e;--comp-axis:#64748b;--comp-grid:rgba(100,116,139,.1);
   --conf-pos:rgba(0,229,160,.8);--conf-neg:rgba(239,68,68,.8);
   --cal-pos-bg:rgba(0,229,160,.16);--cal-neg-bg:rgba(239,68,68,.16);--cal-pos-bd:#00e5a0;--cal-neg-bd:#ef4444;--cal-bg:#161d2e;
-  --btn-p-bg:#00e5a0;--btn-p-tx:#0b0f1a;--btn-g-bg:#0F3460;--btn-g-tx:#e2e8f0;--btn-g-bd:#1e2d45;--btn-img-bg:#7c3aed;--btn-pin-bg:#f59e0b;
+  --btn-p-bg:#00e5a0;--btn-p-tx:#0b0f1a;--btn-g-bg:#0F3460;--btn-g-tx:#e2e8f0;--btn-g-bd:#1e2d45;--btn-img-bg:#7c3aed;--btn-pin-bg:#f59e0b;--btn-deco-bg:transparent;--btn-deco-bd:#ef4444;--btn-deco-tx:#ef4444;
   --tag-long-bg:rgba(0,229,160,.15);--tag-long-tx:#00e5a0;--tag-long-bd:transparent;
   --tag-short-bg:rgba(239,68,68,.15);--tag-short-tx:#ef4444;--tag-short-bd:transparent;
   --tag-oui-bg:rgba(0,229,160,.12);--tag-oui-tx:#00e5a0;--tag-oui-bd:transparent;
@@ -423,7 +423,7 @@ tbody td{padding:6px 8px;vertical-align:middle;white-space:nowrap;}
       <div class="nbadge nb-t" id="navTrades">—</div>
       <div class="nbadge nb-p" id="navPnl">P&L —</div>
       <div class="nbadge nb-r" id="navRisk">Risk —</div>
-      <button onclick="resetPin()" style="background:none;border:1px solid #ef444460;border-radius:5px;color:#ef4444;font-family:var(--mono);font-size:10px;padding:4px 10px;cursor:pointer;margin-left:6px;" title="Déconnexion">⏻</button>
+      <button onclick="resetPin()" style="background:var(--btn-deco-bg);border:1px solid var(--btn-deco-bd);border-radius:5px;color:var(--btn-deco-tx);font-family:var(--mono);font-size:10px;padding:4px 10px;cursor:pointer;margin-left:6px;" title="Déconnexion">⏻</button>
     </div>
   </div>
 
@@ -547,7 +547,7 @@ tbody td{padding:6px 8px;vertical-align:middle;white-space:nowrap;}
         <div class="fg spanall"><label data-editable>Images du trade</label>
           <div id="f-images-wrap" style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:8px;"></div>
           <input type="file" id="f-img-input" accept="image/*" multiple style="display:none" onchange="addFormImage()">
-          <button class="btn" style="font-size:11px;padding:6px 12px;background:var(--btn-img-bg);color:#fff;border:none;border-radius:6px;cursor:pointer;" onclick="document.getElementById('f-img-input').click()">📷 Ajouter image(s)</button>
+          <button class="btn" style="font-size:11px;padding:6px 12px;background:var(--btn-img-bg);color:#fff;border:2px solid var(--btn-img-bg);border-radius:6px;cursor:pointer;" onclick="document.getElementById('f-img-input').click()">📷 Ajouter image(s)</button>
         </div>
       </div>
       <button class="btn btn-p" onclick="addTrade()">＋ Ajouter le Trade</button>
@@ -677,34 +677,38 @@ tbody td{padding:6px 8px;vertical-align:middle;white-space:nowrap;}
           <input type="password" id="iaApiKey" placeholder="sk-ant-..." style="flex:1;font-family:var(--mono);font-size:12px;" oninput="saveIaConfig()">
           <button class="btn btn-g" style="font-size:10px;padding:5px 10px;" onclick="document.getElementById('iaApiKey').type=document.getElementById('iaApiKey').type==='password'?'text':'password'">👁</button>
         </div>
+        <div style="font-size:10px;color:var(--muted);margin-top:4px;">Les actifs analysés sont ceux de ta liste de paires (section ci-dessous).</div>
       </div>
       <div style="margin-bottom:14px;">
-        <label style="font-size:11px;color:var(--muted);font-family:var(--mono);">ACTIFS ANALYSÉS</label>
-        <div id="iaAssetsList" style="display:flex;flex-wrap:wrap;gap:6px;margin:8px 0;"></div>
-        <div style="display:flex;gap:6px;margin-top:6px;">
-          <input type="text" id="iaNewAsset" placeholder="Ex: BTC/USD, NAS100..." style="flex:1;font-size:12px;" onkeydown="if(event.key==='Enter')addIaAsset()">
-          <button class="btn btn-p" style="font-size:11px;padding:5px 12px;" onclick="addIaAsset()">+ Ajouter</button>
+        <label style="font-size:11px;color:var(--muted);font-family:var(--mono);">HORIZON D'ANALYSE</label>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-top:8px;">
+          <label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer;"><input type="checkbox" id="ia_h_scalping" onchange="saveIaConfig()"> Scalping</label>
+          <label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer;"><input type="checkbox" id="ia_h_intraday" checked onchange="saveIaConfig()"> Intraday</label>
+          <label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer;"><input type="checkbox" id="ia_h_court" onchange="saveIaConfig()"> Court terme</label>
+          <label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer;"><input type="checkbox" id="ia_h_moyen" onchange="saveIaConfig()"> Moyen terme</label>
+          <label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer;"><input type="checkbox" id="ia_h_long" onchange="saveIaConfig()"> Long terme</label>
+          <label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer;"><input type="checkbox" id="ia_h_invest" onchange="saveIaConfig()"> Investissement</label>
         </div>
-      </div>
-      <div class="fg" style="margin-bottom:14px;">
-        <label>Horizon d'analyse</label>
-        <select id="iaHorizon" onchange="saveIaConfig()">
-          <option value="scalping">Scalping</option>
-          <option value="intraday" selected>Intraday</option>
-          <option value="court">Court terme</option>
-          <option value="moyen">Moyen terme</option>
-          <option value="long">Long terme</option>
-        </select>
       </div>
       <div style="margin-bottom:14px;">
         <label style="font-size:11px;color:var(--muted);font-family:var(--mono);">TYPES D'ANALYSE</label>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:8px;">
           <label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer;"><input type="checkbox" id="ia_tech" checked onchange="saveIaConfig()"> Technique</label>
           <label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer;"><input type="checkbox" id="ia_fund" checked onchange="saveIaConfig()"> Fondamental</label>
-          <label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer;"><input type="checkbox" id="ia_macro" checked onchange="saveIaConfig()"> Macro</label>
-          <label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer;"><input type="checkbox" id="ia_sentiment" checked onchange="saveIaConfig()"> Sentiment</label>
+          <label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer;"><input type="checkbox" id="ia_macro" checked onchange="saveIaConfig()"> Macroéconomique</label>
+          <label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer;"><input type="checkbox" id="ia_micro" onchange="saveIaConfig()"> Microéconomique</label>
+          <label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer;"><input type="checkbox" id="ia_sentiment" checked onchange="saveIaConfig()"> Sentiment de marché</label>
           <label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer;"><input type="checkbox" id="ia_flux" checked onchange="saveIaConfig()"> Flux institutionnels</label>
-          <label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer;"><input type="checkbox" id="ia_inter" checked onchange="saveIaConfig()"> Intermarket</label>
+          <label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer;"><input type="checkbox" id="ia_inter" checked onchange="saveIaConfig()"> Corrélations intermarket</label>
+          <label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer;"><input type="checkbox" id="ia_geo" onchange="saveIaConfig()"> Géopolitique</label>
+          <label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer;"><input type="checkbox" id="ia_banques" checked onchange="saveIaConfig()"> Banques centrales</label>
+          <label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer;"><input type="checkbox" id="ia_oblig" onchange="saveIaConfig()"> Marchés obligataires</label>
+          <label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer;"><input type="checkbox" id="ia_crypto" onchange="saveIaConfig()"> Crypto</label>
+          <label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer;"><input type="checkbox" id="ia_commo" onchange="saveIaConfig()"> Matières premières</label>
+          <label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer;"><input type="checkbox" id="ia_indices" onchange="saveIaConfig()"> Indices mondiaux</label>
+          <label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer;"><input type="checkbox" id="ia_liquidite" onchange="saveIaConfig()"> Liquidité globale</label>
+          <label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer;"><input type="checkbox" id="ia_saisonnalite" onchange="saveIaConfig()"> Saisonnalité</label>
+          <label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer;"><input type="checkbox" id="ia_orderflow" onchange="saveIaConfig()"> Order flow / COT</label>
         </div>
       </div>
       <div class="fg">
@@ -941,7 +945,7 @@ function addTrade(){
   document.getElementById('alertSaved').classList.add('show');setTimeout(()=>document.getElementById('alertSaved').classList.remove('show'),2200);resetForm();
 }
 function deleteTrade(id){APP.trades=APP.trades.filter(t=>t.id!==id);saveState();renderTable();updateNavBadges();}
-function resetForm(){['f-date','f-heure','f-paire','f-session','f-dir','f-rrcible','f-res','f-mgmt','f-reprend','f-notes'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});document.querySelectorAll('#tf-wrap .chip,#conf-wrap .chip').forEach(c=>c.classList.remove('sel'));document.getElementById('f-date').value=new Date().toISOString().split('T')[0];}
+function resetForm(){['f-date','f-heure','f-paire','f-session','f-dir','f-rrcible','f-res','f-mgmt','f-reprend','f-notes'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});document.querySelectorAll('#tf-wrap .chip,#conf-wrap .chip').forEach(c=>c.classList.remove('sel'));document.getElementById('f-date').value=new Date().toISOString().split('T')[0];initStarPicker('f-stars-picker','f-stars',0);window._formImages=[];renderFormImages();}
 function tagD(v){return v==='LONG'?'<span class="tag tag-long">LONG</span>':v==='SHORT'?'<span class="tag tag-short">SHORT</span>':v||'—';}
 function tagO(v){const m={Oui:'oui',Non:'non','Peut-être':'peut','N/A':'na'};return v?`<span class="tag tag-${m[v]||'na'}">${v}</span>`:'—';}
 function fmtR(v){if(v===''||v==null)return'—';return`<span class="${v>=0?'rp':'rn'}">${v>=0?'+':''}${Number(v).toLocaleString('fr-FR')}€</span>`;}
@@ -1517,7 +1521,7 @@ const TV=[
   {v:'--badge-p-bg',l:'Badge P&L fond',g:'Navigation'},{v:'--badge-p-bd',l:'Badge P&L bord',g:'Navigation'},{v:'--badge-p-tx',l:'Badge P&L texte',g:'Navigation'},
   {v:'--badge-r-bg',l:'Badge Risk fond',g:'Navigation'},{v:'--badge-r-bd',l:'Badge Risk bord',g:'Navigation'},{v:'--badge-r-tx',l:'Badge Risk texte',g:'Navigation'},
   {v:'--kpi1',l:'Barre KPI 1',g:'KPI'},{v:'--kpi2',l:'Barre KPI 2',g:'KPI'},{v:'--kpi3',l:'Barre KPI 3',g:'KPI'},{v:'--kpi4',l:'Barre KPI 4',g:'KPI'},{v:'--kpi5',l:'Barre KPI 5',g:'KPI'},{v:'--kpi6',l:'Barre KPI 6',g:'KPI'},{v:'--kpi7',l:'Barre KPI 7',g:'KPI'},{v:'--kpi8',l:'Barre KPI 8',g:'KPI'},{v:'--kpi9',l:'Barre KPI 9',g:'KPI'},
-  {v:'--btn-p-bg',l:'Bouton fond',g:'Boutons'},{v:'--btn-p-tx',l:'Bouton texte',g:'Boutons'},{v:'--btn-g-bg',l:'Ghost fond',g:'Boutons'},{v:'--btn-g-bd',l:'Ghost bordure',g:'Boutons'},{v:'--btn-img-bg',l:'Bouton Image',g:'Boutons'},{v:'--btn-pin-bg',l:'Bouton PIN',g:'Boutons'},
+  {v:'--btn-p-bg',l:'Bouton fond',g:'Boutons'},{v:'--btn-p-tx',l:'Bouton texte',g:'Boutons'},{v:'--btn-g-bg',l:'Ghost fond',g:'Boutons'},{v:'--btn-g-bd',l:'Ghost bordure',g:'Boutons'},{v:'--btn-img-bg',l:'Bouton Image',g:'Boutons'},{v:'--btn-pin-bg',l:'Bouton PIN',g:'Boutons'},{v:'--btn-deco-bg',l:'Déco fond',g:'Boutons'},{v:'--btn-deco-bd',l:'Déco bordure',g:'Boutons'},{v:'--btn-deco-tx',l:'Déco texte',g:'Boutons'},
   {v:'--tgl-off',l:'Toggle off',g:'Boutons'},{v:'--tgl-on',l:'Toggle on',g:'Boutons'},{v:'--tgl-thumb',l:'Toggle rond',g:'Boutons'},
   {v:'--tag-long-bg',l:'LONG fond',g:'Tags'},{v:'--tag-long-tx',l:'LONG texte',g:'Tags'},{v:'--tag-long-bd',l:'LONG bordure',g:'Tags'},
   {v:'--tag-short-bg',l:'SHORT fond',g:'Tags'},{v:'--tag-short-tx',l:'SHORT texte',g:'Tags'},{v:'--tag-short-bd',l:'SHORT bordure',g:'Tags'},
@@ -1727,7 +1731,7 @@ function saveEditTrade(){
       <div class="fg spanall"><label>Images du trade</label>
         <div id="e-images-wrap" style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:8px;"></div>
         <input type="file" id="e-img-input" accept="image/*" multiple style="display:none" onchange="addEditImage()">
-        <button class="btn" style="font-size:11px;padding:6px 12px;background:var(--btn-img-bg);color:#fff;border:none;border-radius:6px;cursor:pointer;" onclick="document.getElementById('e-img-input').click()">📷 Ajouter image(s)</button>
+        <button class="btn" style="font-size:11px;padding:6px 12px;background:var(--btn-img-bg);color:#fff;border:2px solid var(--btn-img-bg);border-radius:6px;cursor:pointer;" onclick="document.getElementById('e-img-input').click()">📷 Ajouter image(s)</button>
       </div>
     </div>
     <div style="display:flex;gap:8px;justify-content:flex-end;">
@@ -2153,87 +2157,58 @@ window.addTrade = function() {
 // AGENT IA — RÉCAP MARCHÉS
 // ══════════════════════════════════════════
 
-// Config par défaut
-const IA_DEFAULT_ASSETS = ['XAU/USD','EUR/USD','S&P 500','GBP/USD','USD/JPY','BTC/USD','NAS100','Pétrole WTI'];
-
 function getIaConfig() {
   const raw = localStorage.getItem('tjp_ia_config');
-  if (raw) return JSON.parse(raw);
-  return {
-    apiKey: '',
-    assets: [...IA_DEFAULT_ASSETS],
-    horizon: 'intraday',
-    model: 'claude-sonnet-4-6',
-    types: { tech:true, fund:true, macro:true, sentiment:true, flux:true, inter:true }
+  const def = {
+    apiKey:'', horizon:{intraday:true}, model:'claude-sonnet-4-6',
+    types:{tech:true,fund:true,macro:true,micro:false,sentiment:true,flux:true,inter:true,geo:false,banques:true,oblig:false,crypto:false,commo:false,indices:false,liquidite:false,saisonnalite:false,orderflow:false}
   };
+  if (!raw) return def;
+  const parsed = JSON.parse(raw);
+  return {...def, ...parsed, types:{...def.types,...(parsed.types||{})}, horizon:{...def.horizon,...(parsed.horizon||{})}};
 }
 
 function saveIaConfig() {
-  const cfg = {
-    apiKey: document.getElementById('iaApiKey')?.value || '',
-    assets: getIaConfig().assets,
-    horizon: document.getElementById('iaHorizon')?.value || 'intraday',
-    model: document.getElementById('iaModel')?.value || 'claude-sonnet-4-6',
-    types: {
-      tech: document.getElementById('ia_tech')?.checked ?? true,
-      fund: document.getElementById('ia_fund')?.checked ?? true,
-      macro: document.getElementById('ia_macro')?.checked ?? true,
-      sentiment: document.getElementById('ia_sentiment')?.checked ?? true,
-      flux: document.getElementById('ia_flux')?.checked ?? true,
-      inter: document.getElementById('ia_inter')?.checked ?? true,
-    }
-  };
+  const cfg = getIaConfig();
+  cfg.apiKey = document.getElementById('iaApiKey')?.value || cfg.apiKey;
+  cfg.model = document.getElementById('iaModel')?.value || cfg.model;
+  // Horizon cases à cocher
+  ['scalping','intraday','court','moyen','long','invest'].forEach(h => {
+    const el = document.getElementById('ia_h_'+h); if(el) cfg.horizon[h] = el.checked;
+  });
+  // Types
+  ['tech','fund','macro','micro','sentiment','flux','inter','geo','banques','oblig','crypto','commo','indices','liquidite','saisonnalite','orderflow'].forEach(t => {
+    const el = document.getElementById('ia_'+t); if(el) cfg.types[t] = el.checked;
+  });
   localStorage.setItem('tjp_ia_config', JSON.stringify(cfg));
-  renderIaAssets();
   renderRecapTabs();
 }
 
 function loadIaConfigUI() {
   const cfg = getIaConfig();
-  const k = document.getElementById('iaApiKey'); if(k) k.value = cfg.apiKey || '';
-  const h = document.getElementById('iaHorizon'); if(h) h.value = cfg.horizon || 'intraday';
-  const m = document.getElementById('iaModel'); if(m) m.value = cfg.model || 'claude-sonnet-4-6';
-  ['tech','fund','macro','sentiment','flux','inter'].forEach(t => {
-    const el = document.getElementById('ia_'+t); if(el) el.checked = cfg.types?.[t] ?? true;
+  const k = document.getElementById('iaApiKey'); if(k) k.value = cfg.apiKey||'';
+  const m = document.getElementById('iaModel'); if(m) m.value = cfg.model||'claude-sonnet-4-6';
+  ['scalping','intraday','court','moyen','long','invest'].forEach(h => {
+    const el = document.getElementById('ia_h_'+h); if(el) el.checked = cfg.horizon?.[h]||false;
   });
-  renderIaAssets();
+  ['tech','fund','macro','micro','sentiment','flux','inter','geo','banques','oblig','crypto','commo','indices','liquidite','saisonnalite','orderflow'].forEach(t => {
+    const el = document.getElementById('ia_'+t); if(el) el.checked = cfg.types?.[t]??false;
+  });
   renderRecapTabs();
-}
-
-function renderIaAssets() {
-  const cfg = getIaConfig();
-  const wrap = document.getElementById('iaAssetsList'); if(!wrap) return;
-  wrap.innerHTML = cfg.assets.map((a,i) => `
-    <span style="display:inline-flex;align-items:center;gap:4px;background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:4px 8px;font-size:11px;font-family:var(--mono);">
-      ${a}
-      <button onclick="removeIaAsset(${i})" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:12px;padding:0 2px;">×</button>
-    </span>`).join('');
-}
-
-function addIaAsset() {
-  const inp = document.getElementById('iaNewAsset'); if(!inp) return;
-  const val = inp.value.trim().toUpperCase(); if(!val) return;
-  const cfg = getIaConfig();
-  if (!cfg.assets.includes(val)) { cfg.assets.push(val); localStorage.setItem('tjp_ia_config', JSON.stringify(cfg)); }
-  inp.value = '';
-  renderIaAssets(); renderRecapTabs();
-}
-
-function removeIaAsset(i) {
-  const cfg = getIaConfig();
-  cfg.assets.splice(i,1);
-  localStorage.setItem('tjp_ia_config', JSON.stringify(cfg));
-  renderIaAssets(); renderRecapTabs();
 }
 
 // ── Onglets actifs dans la page Récap ──
 let currentRecapAsset = 0;
 let currentRecapData = null;
 
+function getRecapAssets() {
+  return (APP && APP.lists && APP.lists.paires) ? APP.lists.paires : ['XAUUSD','EURUSD','NAS100'];
+}
+
 function renderRecapTabs() {
-  const cfg = getIaConfig();
+  const assets = getRecapAssets();
   const wrap = document.getElementById('recapAssetTabs'); if(!wrap) return;
-  wrap.innerHTML = cfg.assets.map((a,i) => `
+  wrap.innerHTML = assets.map((a,i) => `
     <button onclick="selectRecapAsset(${i})" id="rtab_${i}"
       style="font-family:var(--mono);font-size:10px;padding:5px 10px;border-radius:4px;cursor:pointer;
       background:${i===currentRecapAsset?'var(--btn-p-bg)':'var(--surface)'};
@@ -2251,14 +2226,25 @@ function selectRecapAsset(i) {
 
 function renderRecapPage(i) {
   const wrap = document.getElementById('recapAssetPages'); if(!wrap) return;
-  const cfg = getIaConfig();
-  const asset = cfg.assets[i];
+  const assets = getRecapAssets();
+  const asset = assets[i];
   const data = currentRecapData?.[asset];
-  if (!data) { wrap.innerHTML = `<div style="color:var(--muted);font-size:13px;padding:20px;">Génère un récap pour voir l'analyse de ${asset}.</div>`; return; }
+  if (!data) {
+    wrap.innerHTML = `<div style="color:var(--muted);font-size:13px;padding:20px;text-align:center;">
+      Clique sur <strong>🤖 Générer le récap</strong> pour analyser ${asset}.<br>
+      <span style="font-size:11px;">Assure-toi d'avoir configuré ta clé API dans Modifications → Agent IA.</span>
+    </div>`;
+    return;
+  }
+  // Formatter le markdown basique
+  const formatted = data
+    .replace(/^## (.+)$/gm, '<h3 style="color:var(--blue);font-family:var(--mono);font-size:13px;margin:16px 0 8px;border-bottom:1px solid var(--border);padding-bottom:4px;">$1</h3>')
+    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+    .replace(/\n/g, '<br>');
   wrap.innerHTML = `
     <div class="card">
       <div class="card-header"><div class="card-title">${asset} — ANALYSE COMPLÈTE</div></div>
-      <div class="card-body" style="white-space:pre-wrap;font-size:13px;line-height:1.7;color:var(--text);">${data}</div>
+      <div class="card-body" style="font-size:13px;line-height:1.8;color:var(--text);">${formatted}</div>
     </div>`;
 }
 
@@ -2266,110 +2252,106 @@ function renderRecapPage(i) {
 async function generateRecap() {
   const cfg = getIaConfig();
   if (!cfg.apiKey || !cfg.apiKey.startsWith('sk-ant-')) {
-    showRecapStatus('⚠ Clé API invalide. Va dans Modifications → Agent IA pour la configurer.', '#ef4444');
+    showRecapStatus('⚠ Clé API manquante. Va dans Modifications → Agent IA pour la configurer.', '#ef4444');
     return;
   }
-  if (!cfg.assets.length) {
-    showRecapStatus('⚠ Aucun actif configuré. Va dans Modifications → Agent IA.', '#ef4444');
-    return;
-  }
+  const assets = getRecapAssets();
+  if (!assets.length) { showRecapStatus('⚠ Aucune paire dans ta liste. Ajoute des paires dans Modifications.', '#ef4444'); return; }
 
   const btn = document.getElementById('recapGenBtn');
-  btn.disabled = true; btn.textContent = '⏳ Génération...';
+  btn.disabled = true; btn.textContent = '⏳ Analyse...';
   document.getElementById('recapContent').style.display = 'none';
-  showRecapStatus('🔄 Analyse en cours... (peut prendre 30-60 secondes)', 'var(--muted)');
+  showRecapStatus('🔄 Connexion à l\'IA...', 'var(--muted)');
 
-  const types = [];
-  if(cfg.types.tech) types.push('technique');
-  if(cfg.types.fund) types.push('fondamentale');
-  if(cfg.types.macro) types.push('macroéconomique');
-  if(cfg.types.sentiment) types.push('sentiment de marché');
-  if(cfg.types.flux) types.push('flux institutionnels');
-  if(cfg.types.inter) types.push('corrélations intermarket');
+  // Types actifs
+  const typeLabels = {
+    tech:'analyse technique',fund:'analyse fondamentale',macro:'macroéconomie',micro:'microéconomie',
+    sentiment:'sentiment de marché',flux:'flux institutionnels',inter:'corrélations intermarket',
+    geo:'contexte géopolitique',banques:'politique des banques centrales',oblig:'marchés obligataires',
+    crypto:'dynamique crypto',commo:'matières premières',indices:'indices mondiaux',
+    liquidite:'liquidité globale',saisonnalite:'saisonnalité',orderflow:'order flow et COT'
+  };
+  const types = Object.entries(cfg.types).filter(([,v])=>v).map(([k])=>typeLabels[k]||k);
+  const horizons = Object.entries(cfg.horizon||{}).filter(([,v])=>v).map(([k])=>k).join(', ') || 'intraday';
 
   const now = new Date();
-  const dateStr = now.toLocaleDateString('fr-FR', {weekday:'long',year:'numeric',month:'long',day:'numeric'});
+  const dateStr = now.toLocaleDateString('fr-FR',{weekday:'long',year:'numeric',month:'long',day:'numeric'});
   const timeStr = now.toLocaleTimeString('fr-FR');
 
   currentRecapData = {};
-
   let errors = 0;
-  for (let i = 0; i < cfg.assets.length; i++) {
-    const asset = cfg.assets[i];
-    showRecapStatus(`🔄 Analyse de ${asset}... (${i+1}/${cfg.assets.length})`, 'var(--muted)');
+
+  for (let i = 0; i < assets.length; i++) {
+    const asset = assets[i];
+    showRecapStatus(`🔄 Analyse ${asset}... (${i+1}/${assets.length})`, 'var(--muted)');
     try {
-      const prompt = `Tu es un analyste financier institutionnel de niveau senior. 
-Date et heure : ${dateStr} à ${timeStr} (heure française).
-Actif analysé : ${asset}
-Horizon : ${cfg.horizon}
-Types d'analyse requis : ${types.join(', ')}
+      const prompt = `Tu es un analyste financier institutionnel senior.
+Date : ${dateStr} à ${timeStr} (heure française).
+Actif : ${asset} | Horizon : ${horizons}
+Types d'analyse : ${types.join(', ')}
 
-Génère une analyse complète et institutionnelle de ${asset} pour un trader professionnel.
-Structure ton analyse avec ces sections clairement séparées :
+Génère une analyse institutionnelle complète et structurée de ${asset}.
+Utilise des données réelles et actuelles via tes outils de recherche.
+Structure exacte requise :
 
-## 📊 CONTEXTE MACRO
-[Analyse macroéconomique liée à cet actif : banques centrales, taux, inflation, politiques monétaires]
+## 📊 CONTEXTE MACRO & BANQUES CENTRALES
+[Politique monétaire, taux directeurs, inflation, Fed/BCE/BOJ/BOE selon pertinence pour cet actif]
 
-## 🔗 CORRÉLATIONS INTERMARKET  
-[Corrélations avec d'autres actifs : DXY, taux obligataires, indices, matières premières selon pertinence]
+## 🔗 CORRÉLATIONS INTERMARKET
+[DXY, taux US10Y, or, pétrole, indices, selon l'actif analysé - interconnexions clés]
 
-## 📈 ANALYSE TECHNIQUE
-[Structure de marché actuelle, niveaux clés (support/résistance), tendance, momentum]
+## 📈 STRUCTURE TECHNIQUE
+[Tendance actuelle, niveaux clés support/résistance, momentum, volumes, patterns]
 
 ## 🏦 FLUX INSTITUTIONNELS & SENTIMENT
-[Positionnement COT si disponible, sentiment retail vs institutionnel, flux ETF/options]
+[COT report, positionnement net, sentiment retail vs smart money, options flow]
 
-## 📅 ÉVÉNEMENTS CLÉS À SURVEILLER
-[Prochains catalyseurs macro : NFP, CPI, décisions de taux, discours banquiers centraux]
+## 🌍 GÉOPOLITIQUE & ÉVÉNEMENTS
+[Risques géopolitiques actifs, agenda économique proche, catalyseurs potentiels]
 
-## 🎯 SCÉNARIOS & BIAIS
-[Scénario haussier (probabilité), scénario baissier (probabilité), niveaux invalidation]
+## 🎯 SCÉNARIOS PROBABILISTES
+**Scénario haussier (%)** : [conditions, cibles]
+**Scénario baissier (%)** : [conditions, cibles]
+**Biais du moment** : [HAUSSIER/BAISSIER/NEUTRE] — [invalidation]
 
-Sois précis, factuel et institutionnel. Base-toi sur le contexte macroéconomique actuel de 2026.
-Ne génère pas de données inventées. Si tu n'as pas de données précises sur un point, indique-le clairement.`;
+Sois précis, factuel, institutionnel. Indique clairement si une donnée n'est pas disponible.`;
 
       const response = await fetch('https://api.anthropic.com/v1/messages', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'x-api-key': cfg.apiKey, 'anthropic-version': '2023-06-01', 'anthropic-dangerous-direct-browser-access': 'true' },
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': cfg.apiKey,
+          'anthropic-version': '2023-06-01',
+          'anthropic-dangerous-direct-browser-access': 'true'
+        },
         body: JSON.stringify({
           model: cfg.model,
-          max_tokens: 2000,
+          max_tokens: 2500,
           tools: [{ type: 'web_search_20250305', name: 'web_search' }],
           messages: [{ role: 'user', content: prompt }]
         })
       });
 
       if (!response.ok) {
-        const err = await response.json();
-        throw new Error(err.error?.message || `HTTP ${response.status}`);
+        const err = await response.json().catch(()=>({error:{message:`HTTP ${response.status}`}}));
+        throw new Error(err.error?.message || `Erreur HTTP ${response.status}`);
       }
 
       const data = await response.json();
-      // Assembler la réponse (texte + résultats de recherche web)
-      const text = data.content
-        .filter(b => b.type === 'text')
-        .map(b => b.text)
-        .join('\n');
-      currentRecapData[asset] = text;
+      const text = data.content.filter(b=>b.type==='text').map(b=>b.text).join('\n');
+      currentRecapData[asset] = text || '⚠ Réponse vide de l\'IA.';
 
     } catch(e) {
-      currentRecapData[asset] = `⚠ Erreur lors de l'analyse : ${e.message}`;
+      currentRecapData[asset] = `⚠ Erreur : ${e.message}`;
       errors++;
     }
   }
 
-  // Afficher le résultat
-  const ts = now.toLocaleString('fr-FR');
-  document.getElementById('recapTimestamp').textContent = `Généré le ${ts}`;
+  document.getElementById('recapTimestamp').textContent = `Généré le ${now.toLocaleString('fr-FR')}`;
   document.getElementById('recapContent').style.display = 'block';
   renderRecapPage(currentRecapAsset);
-
-  if (errors === 0) showRecapStatus(`✓ Récap généré avec succès — ${cfg.assets.length} actifs analysés`, '#22c55e');
-  else showRecapStatus(`⚠ Généré avec ${errors} erreur(s)`, '#f59e0b');
-
+  showRecapStatus(errors===0 ? `✓ ${assets.length} actifs analysés avec succès` : `⚠ Terminé avec ${errors} erreur(s)`, errors===0?'#22c55e':'#f59e0b');
   btn.disabled = false; btn.textContent = '🤖 Générer le récap';
-
-  // Auto-sauvegarde
   saveRecapToHistory(true);
 }
 
