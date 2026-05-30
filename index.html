@@ -1613,14 +1613,16 @@ function openEditTrade(id){
   [['e-paire',APP.lists.paires],['e-session',APP.lists.sessions],
    ['e-mgmt',APP.lists.mgmt_opts],['e-reprend',APP.lists.reprend_opts]].forEach(([elId,items])=>{
     const s=document.getElementById(elId);
+    if(!s)return;
     s.innerHTML='<option value="">—</option>'+(items||[]).map(i=>`<option>${i}</option>`).join('');
   });
-  document.getElementById('e-dir').value = t.dir||'';
-  document.getElementById('e-session').value = t.session||'';
-  document.getElementById('e-paire').value = t.paire||'';
-  document.getElementById('e-mgmt').value = t.mgmt||'';
-  document.getElementById('e-reprend').value = t.reprend||'';
-  document.getElementById('e-stars').value = t.stars||0;
+  const sv2 = (id, val) => { const el = document.getElementById(id); if(el) el.value = val||''; };
+  sv2('e-dir', t.dir);
+  sv2('e-session', t.session);
+  sv2('e-paire', t.paire);
+  sv2('e-mgmt', t.mgmt);
+  sv2('e-reprend', t.reprend);
+  sv2('e-stars', t.stars||0);
   window._editImages=[];
   renderEditImages(t.images||[]);
   const selTf  = (t.tf||'').split(',').map(s=>s.trim()).filter(Boolean);
