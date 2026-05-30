@@ -1603,10 +1603,13 @@ function openEditTrade(id){
   const t = APP.trades.find(x=>x.id===id);
   if(!t){console.warn('Trade non trouvé:',id, APP.trades.map(x=>x.id));return;}
   _editId = id;
-  document.getElementById('e-date').value = t.date||'';
-  document.getElementById('e-heure').value = t.heure||'';
-  document.getElementById('e-res').value = t.res||'';
-  document.getElementById('e-rrcible').value = t.rrCible||'';
+  const sv = (id, val) => { const el = document.getElementById(id); if(el) el.value = val||''; };
+  sv('e-date', t.date);
+  sv('e-heure', t.heure);
+  sv('e-res', t.res);
+  sv('e-rrcible', t.rrCible);
+  sv('e-notes', t.notes);
+  sv('e-stars', t.stars);
   [['e-paire',APP.lists.paires],['e-session',APP.lists.sessions],
    ['e-mgmt',APP.lists.mgmt_opts],['e-reprend',APP.lists.reprend_opts]].forEach(([elId,items])=>{
     const s=document.getElementById(elId);
