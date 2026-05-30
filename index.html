@@ -38,7 +38,7 @@
   --badge-r-bg:rgba(245,158,11,.1);--badge-r-bd:rgba(245,158,11,.3);--badge-r-tx:#f59e0b;
   --eq-line:#00e5a0;--eq-fill-top:rgba(0,229,160,.32);--eq-fill-bot:rgba(0,229,160,0);--eq-bg:#161d2e;--eq-axis:#64748b;--eq-grid:rgba(100,116,139,.1);
   --pnl-line-pos:#3b82f6;--pnl-line-neg:#ef4444;--pnl-fill-pos-top:rgba(59,130,246,.35);--pnl-fill-pos-bot:rgba(59,130,246,0);--pnl-fill-neg-top:rgba(239,68,68,0);--pnl-fill-neg-bot:rgba(239,68,68,.35);--pnl-bg:#161d2e;--pnl-axis:#64748b;--pnl-grid:rgba(100,116,139,.1);
-  --risk-line:#f59e0b;--risk-fill-top:rgba(245,158,11,.25);--risk-fill-bot:rgba(245,158,11,0);--risk-base:rgba(100,116,139,.5);--risk-bg:#161d2e;--risk-axis:#f59e0b;--risk-grid:rgba(100,116,139,.1);
+  --risk-line:#f59e0b;--risk-fill-top:rgba(245,158,11,.25);--risk-fill-bot:rgba(245,158,11,0);--risk-base:rgba(100,116,139,.5);--risk-bg:#161d2e;--risk-axis:#f59e0b;--risk-grid:rgba(100,116,139,.1);--risk-euro-tx:#3b82f6;
   --pie-win:rgba(0,229,160,.85);--pie-lose:rgba(239,68,68,.85);--pie-neutral:rgba(100,116,139,.6);
   --mgmt-bg:#161d2e;--mgmt-yes:#00e5a0;--mgmt-no:#ef4444;--mgmt-yes-alpha:rgba(0,229,160,.35);--mgmt-no-alpha:rgba(239,68,68,.35);--mgmt-yes-bd:#00e5a0;--mgmt-no-bd:#ef4444;--mgmt-axis:#64748b;--mgmt-grid:rgba(100,116,139,.1);
   --comp-pos:rgba(0,229,160,.8);--comp-neg:rgba(239,68,68,.8);--comp-bg:#161d2e;--comp-axis:#64748b;--comp-grid:rgba(100,116,139,.1);
@@ -532,23 +532,23 @@ tbody td{padding:6px 8px;vertical-align:middle;white-space:nowrap;}
         <div class="fg"><label data-editable>Management</label><select id="f-mgmt"></select></div>
         <div class="fg"><label data-editable>Reprendrais-tu ?</label><select id="f-reprend"></select></div>
         <div class="fg spanall"><label data-editable>Note ⭐</label>
-          <div class="star-picker" id="f-stars-picker" data-val="0">
-            <span class="star-pick" data-v="1">★</span>
-            <span class="star-pick" data-v="2">★</span>
-            <span class="star-pick" data-v="3">★</span>
-            <span class="star-pick" data-v="4">★</span>
-            <span class="star-pick" data-v="5">★</span>
+          <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
+            <div class="star-picker" id="f-stars-picker" data-val="0">
+              <span class="star-pick" data-v="1">★</span>
+              <span class="star-pick" data-v="2">★</span>
+              <span class="star-pick" data-v="3">★</span>
+              <span class="star-pick" data-v="4">★</span>
+              <span class="star-pick" data-v="5">★</span>
+            </div>
+            <input type="hidden" id="f-stars" value="0">
+            <input type="file" id="f-img-input" accept="image/*" multiple style="display:none" onchange="addFormImage()">
+            <button class="btn" style="font-size:11px;padding:5px 12px;background:var(--btn-img-bg);color:var(--btn-img-tx);border:2px solid var(--btn-img-bd);border-radius:6px;cursor:pointer;" onclick="document.getElementById('f-img-input').click()">Ajouter image(s)</button>
           </div>
-          <input type="hidden" id="f-stars" value="0">
+          <div id="f-images-wrap" style="display:flex;flex-wrap:wrap;gap:4px;margin-top:6px;"></div>
         </div>
         <div class="fg span2"><label data-editable>Timeframes</label><div class="chip-wrap" id="tf-wrap"></div></div>
         <div class="fg spanall"><label data-editable>Confluences</label><div class="chip-wrap" id="conf-wrap"></div></div>
         <div class="fg spanall"><label data-editable>Notes</label><textarea id="f-notes" placeholder="Setup, émotions..."></textarea></div>
-        <div class="fg spanall"><label data-editable>Images du trade</label>
-          <div id="f-images-wrap" style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:8px;"></div>
-          <input type="file" id="f-img-input" accept="image/*" multiple style="display:none" onchange="addFormImage()">
-          <button class="btn" style="font-size:11px;padding:6px 12px;background:var(--btn-img-bg);color:var(--btn-img-tx);border:2px solid var(--btn-img-bd);border-radius:6px;cursor:pointer;" onclick="document.getElementById('f-img-input').click()">📷 Ajouter image(s)</button>
-        </div>
       </div>
       <button class="btn btn-p" onclick="addTrade()">＋ Ajouter le Trade</button>
     </div>
@@ -650,7 +650,7 @@ tbody td{padding:6px 8px;vertical-align:middle;white-space:nowrap;}
         <div style="display:flex;gap:10px;flex-wrap:wrap;">
           <div class="mod-state-item"><div class="mod-state-label" style="font-size:9px;color:var(--muted)" data-editable>Capital actuel</div><div class="mod-state-value" style="font-family:var(--mono);font-size:15px;color:var(--state-capital)" id="disp0">—</div></div>
           <div class="mod-state-item"><div class="mod-state-label" style="font-size:9px;color:var(--muted)" data-editable>Risk %</div><div class="mod-state-value" style="font-family:var(--mono);font-size:15px;color:var(--gold)" id="disp1">—</div></div>
-          <div class="mod-state-item"><div class="mod-state-label" style="font-size:9px;color:var(--muted)" data-editable>Risk €/trade</div><div class="mod-state-value" style="font-family:var(--mono);font-size:15px;color:var(--text-blue)" id="disp2">—</div></div>
+          <div class="mod-state-item"><div class="mod-state-label" style="font-size:9px;color:var(--muted)" data-editable>Risk €/trade</div><div class="mod-state-value" style="font-family:var(--mono);font-size:15px;color:var(--risk-euro-tx)" id="disp2">—</div></div>
           <div class="mod-state-item"><div class="mod-state-label" style="font-size:9px;color:var(--muted)" data-editable>Série gain</div><div class="mod-state-value" style="font-family:var(--mono);font-size:15px;color:var(--state-winstreak)" id="disp3">—</div></div>
           <div class="mod-state-item"><div class="mod-state-label" style="font-size:9px;color:var(--muted)" data-editable>Série perte</div><div class="mod-state-value" style="font-family:var(--mono);font-size:15px;color:var(--red)" id="disp4">—</div></div>
         </div>
@@ -1538,7 +1538,7 @@ const TV=[
   {v:'--text',l:'Texte principal',g:'Texte'},{v:'--muted',l:'Texte secondaire',g:'Texte'},
   {v:'--green',l:'Vert accent',g:'Texte'},{v:'--red',l:'Rouge accent',g:'Texte'},{v:'--gold',l:'Or',g:'Texte'},{v:'--purple',l:'Violet',g:'Texte'},
   // Couleurs indépendantes pour résultats journal
-  {v:'--result-pos',l:'Résultats positifs (journal)',g:'Texte'},{v:'--result-neg',l:'Résultats négatifs (journal)',g:'Texte'},{v:'--state-capital',l:'Capital actuel (modif.)',g:'État actuel'},{v:'--state-winstreak',l:'Win streak (modif.)',g:'État actuel'},{v:'--state-tf',l:'Timeframes (journal)',g:'État actuel'},
+  {v:'--result-pos',l:'Résultats positifs (journal)',g:'Texte'},{v:'--result-neg',l:'Résultats négatifs (journal)',g:'Texte'},{v:'--state-capital',l:'Capital actuel (modif.)',g:'État actuel'},{v:'--state-winstreak',l:'Win streak (modif.)',g:'État actuel'},{v:'--state-tf',l:'Timeframes (journal)',g:'État actuel'},{v:'--risk-euro-tx',l:'Risk €/trade couleur',g:'État actuel'},
   {v:'--eq-bg',l:'Fond',g:'Équity'},{v:'--eq-line',l:'Courbe',g:'Équity'},{v:'--eq-fill-top',l:'Dégradé haut',g:'Équity'},{v:'--eq-fill-bot',l:'Dégradé bas',g:'Équity'},{v:'--eq-axis',l:'Axes',g:'Équity'},{v:'--eq-grid',l:'Grille',g:'Équity'},
   {v:'--pnl-bg',l:'Fond',g:'P&L'},{v:'--pnl-line-pos',l:'Courbe positive',g:'P&L'},{v:'--pnl-line-neg',l:'Courbe négative',g:'P&L'},
   {v:'--pnl-fill-pos-top',l:'Dégradé positif haut',g:'P&L'},{v:'--pnl-fill-pos-bot',l:'Dégradé positif bas',g:'P&L'},
@@ -1626,6 +1626,8 @@ function openEditTrade(id){
   document.getElementById('e-conf-wrap').innerHTML =
     (APP.lists.confluences||[]).map(c=>`<div class="chip${selConf.includes(c)?' sel':''}" data-v="${c}" onclick="this.classList.toggle('sel')">${c}</div>`).join('');
   document.getElementById('editModal').classList.add('open');
+  // Init étoiles après ouverture du modal
+  setTimeout(()=>initStarPicker('e-stars-picker','e-stars',t.stars||0),60);
 }
 function renderEditImages(existing){
   const wrap=document.getElementById('e-images-wrap');
@@ -2193,18 +2195,8 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 });
 
-// Re-init star picker à l'ouverture du modal edit — intégré directement
+// Patch addTrade pour les images (appliqué après chargement)
 document.addEventListener('DOMContentLoaded', () => {
-  // Patch openEditTrade pour les étoiles
-  if (typeof openEditTrade === 'function') {
-    const _orig = openEditTrade;
-    window.openEditTrade = function(id) {
-      _orig(id);
-      const t = APP.trades.find(x=>x.id===id);
-      setTimeout(()=>initStarPicker('e-stars-picker','e-stars',t?t.stars||0:0),80);
-    };
-  }
-  // Patch addTrade pour les images
   if (typeof addTrade === 'function') {
     const _origA = addTrade;
     window.addTrade = function() {
