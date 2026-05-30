@@ -44,7 +44,7 @@
   --comp-pos:rgba(0,229,160,.8);--comp-neg:rgba(239,68,68,.8);--comp-bg:#161d2e;--comp-axis:#64748b;--comp-grid:rgba(100,116,139,.1);
   --conf-pos:rgba(0,229,160,.8);--conf-neg:rgba(239,68,68,.8);
   --cal-pos-bg:rgba(0,229,160,.16);--cal-neg-bg:rgba(239,68,68,.16);--cal-pos-bd:#00e5a0;--cal-neg-bd:#ef4444;--cal-bg:#161d2e;
-  --btn-p-bg:#00e5a0;--btn-p-tx:#0b0f1a;--btn-g-bg:#0F3460;--btn-g-tx:#e2e8f0;--btn-g-bd:#1e2d45;--btn-img-bg:#7c3aed;--btn-pin-bg:#f59e0b;--btn-deco-bg:transparent;--btn-deco-bd:#ef4444;--btn-deco-tx:#ef4444;
+  --btn-p-bg:#00e5a0;--btn-p-tx:#0b0f1a;--btn-g-bg:#0F3460;--btn-g-tx:#e2e8f0;--btn-g-bd:#1e2d45;--btn-img-bg:#7c3aed;--btn-img-bd:#a78bfa;--btn-img-tx:#ffffff;--btn-pin-bg:#f59e0b;--btn-pin-bd:#f59e0b;--btn-pin-tx:#000000;--btn-deco-bg:transparent;--btn-deco-bd:#ef4444;--btn-deco-tx:#ef4444;
   --tag-long-bg:rgba(0,229,160,.15);--tag-long-tx:#00e5a0;--tag-long-bd:transparent;
   --tag-short-bg:rgba(239,68,68,.15);--tag-short-tx:#ef4444;--tag-short-bd:transparent;
   --tag-oui-bg:rgba(0,229,160,.12);--tag-oui-tx:#00e5a0;--tag-oui-bd:transparent;
@@ -547,7 +547,7 @@ tbody td{padding:6px 8px;vertical-align:middle;white-space:nowrap;}
         <div class="fg spanall"><label data-editable>Images du trade</label>
           <div id="f-images-wrap" style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:8px;"></div>
           <input type="file" id="f-img-input" accept="image/*" multiple style="display:none" onchange="addFormImage()">
-          <button class="btn" style="font-size:11px;padding:6px 12px;background:var(--btn-img-bg);color:#fff;border:2px solid #fff4;border-radius:6px;cursor:pointer;outline:2px solid var(--btn-img-bg);outline-offset:2px;" onclick="document.getElementById('f-img-input').click()">📷 Ajouter image(s)</button>
+          <button class="btn" style="font-size:11px;padding:6px 12px;background:var(--btn-img-bg);color:var(--btn-img-tx);border:2px solid var(--btn-img-bd);border-radius:6px;cursor:pointer;" onclick="document.getElementById('f-img-input').click()">📷 Ajouter image(s)</button>
         </div>
       </div>
       <button class="btn btn-p" onclick="addTrade()">＋ Ajouter le Trade</button>
@@ -663,7 +663,7 @@ tbody td{padding:6px 8px;vertical-align:middle;white-space:nowrap;}
       <div class="card-title" data-editable>SÉCURITÉ</div>
     </div>
     <div class="card-body">
-      <button class="btn" onclick="changePinFlow()" style="font-size:12px;background:var(--btn-pin-bg);color:#000;border:2px solid var(--btn-pin-bg);border-radius:6px;padding:8px 16px;cursor:pointer;">Changer mon code PIN</button>
+      <button class="btn" onclick="changePinFlow()" style="font-size:12px;background:var(--btn-pin-bg);color:var(--btn-pin-tx);border:2px solid var(--btn-pin-bd);border-radius:6px;padding:8px 16px;cursor:pointer;">Changer mon code PIN</button>
     </div>
   </div>
 
@@ -1525,7 +1525,7 @@ const TV=[
   {v:'--badge-p-bg',l:'Badge P&L fond',g:'Navigation'},{v:'--badge-p-bd',l:'Badge P&L bord',g:'Navigation'},{v:'--badge-p-tx',l:'Badge P&L texte',g:'Navigation'},
   {v:'--badge-r-bg',l:'Badge Risk fond',g:'Navigation'},{v:'--badge-r-bd',l:'Badge Risk bord',g:'Navigation'},{v:'--badge-r-tx',l:'Badge Risk texte',g:'Navigation'},
   {v:'--kpi1',l:'Barre KPI 1',g:'KPI'},{v:'--kpi2',l:'Barre KPI 2',g:'KPI'},{v:'--kpi3',l:'Barre KPI 3',g:'KPI'},{v:'--kpi4',l:'Barre KPI 4',g:'KPI'},{v:'--kpi5',l:'Barre KPI 5',g:'KPI'},{v:'--kpi6',l:'Barre KPI 6',g:'KPI'},{v:'--kpi7',l:'Barre KPI 7',g:'KPI'},{v:'--kpi8',l:'Barre KPI 8',g:'KPI'},{v:'--kpi9',l:'Barre KPI 9',g:'KPI'},
-  {v:'--btn-p-bg',l:'Bouton fond',g:'Boutons'},{v:'--btn-p-tx',l:'Bouton texte',g:'Boutons'},{v:'--btn-g-bg',l:'Ghost fond',g:'Boutons'},{v:'--btn-g-bd',l:'Ghost bordure',g:'Boutons'},{v:'--btn-img-bg',l:'Bouton Image',g:'Boutons'},{v:'--btn-pin-bg',l:'Bouton PIN',g:'Boutons'},{v:'--btn-deco-bg',l:'Déco fond',g:'Boutons'},{v:'--btn-deco-bd',l:'Déco bordure',g:'Boutons'},{v:'--btn-deco-tx',l:'Déco texte',g:'Boutons'},
+  {v:'--btn-p-bg',l:'Bouton fond',g:'Boutons'},{v:'--btn-p-tx',l:'Bouton texte',g:'Boutons'},{v:'--btn-g-bg',l:'Ghost fond',g:'Boutons'},{v:'--btn-g-bd',l:'Ghost bordure',g:'Boutons'},{v:'--btn-img-bg',l:'Image fond',g:'Boutons'},{v:'--btn-img-bd',l:'Image bordure',g:'Boutons'},{v:'--btn-img-tx',l:'Image texte',g:'Boutons'},{v:'--btn-pin-bg',l:'PIN fond',g:'Boutons'},{v:'--btn-pin-bd',l:'PIN bordure',g:'Boutons'},{v:'--btn-pin-tx',l:'PIN texte',g:'Boutons'},{v:'--btn-deco-bg',l:'Déco fond',g:'Boutons'},{v:'--btn-deco-bd',l:'Déco bordure',g:'Boutons'},{v:'--btn-deco-tx',l:'Déco texte',g:'Boutons'},
   {v:'--tgl-off',l:'Toggle off',g:'Boutons'},{v:'--tgl-on',l:'Toggle on',g:'Boutons'},{v:'--tgl-thumb',l:'Toggle rond',g:'Boutons'},
   {v:'--tag-long-bg',l:'LONG fond',g:'Tags'},{v:'--tag-long-tx',l:'LONG texte',g:'Tags'},{v:'--tag-long-bd',l:'LONG bordure',g:'Tags'},
   {v:'--tag-short-bg',l:'SHORT fond',g:'Tags'},{v:'--tag-short-tx',l:'SHORT texte',g:'Tags'},{v:'--tag-short-bd',l:'SHORT bordure',g:'Tags'},
@@ -1563,7 +1563,7 @@ function renderTE(){
   </div>`).join('');
 }
 function teOCP(v,l){const prev=teVals[v]||'#000000';openCP(l,prev.trim().startsWith('#')?prev.trim():'#000000',hex=>{teHist.push({...teVals});teVals[v]=hex;renderTE();});}
-function applyTheme(){Object.entries(teVals).forEach(([v,c])=>document.documentElement.style.setProperty(v,c));lss('tj_theme_vars',teVals);refreshAllCharts();}
+function applyTheme(){Object.entries(teVals).forEach(([v,c])=>document.documentElement.style.setProperty(v,c));lss('tj_theme_vars',teVals);refreshAllCharts();if(currentUser){clearTimeout(window._pushTimer);window._pushTimer=setTimeout(pushToCloud,1500);}}
 function undoTheme(){if(!teHist.length)return;teVals=teHist.pop();renderTE();applyTheme();}
 function askResetTheme(){showConfirm('Réinitialiser','Supprimer toutes les personnalisations ?',()=>{teVals={};lss('tj_theme_vars',{});document.documentElement.removeAttribute('style');renderTE();refreshAllCharts();});}
 function loadSavedTheme(){const s=ls('tj_theme_vars',null);if(s){Object.entries(s).forEach(([v,c])=>document.documentElement.style.setProperty(v,c));teVals=s;}}
@@ -1735,7 +1735,7 @@ function saveEditTrade(){
       <div class="fg spanall"><label>Images du trade</label>
         <div id="e-images-wrap" style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:8px;"></div>
         <input type="file" id="e-img-input" accept="image/*" multiple style="display:none" onchange="addEditImage()">
-        <button class="btn" style="font-size:11px;padding:6px 12px;background:var(--btn-img-bg);color:#fff;border:2px solid #fff4;border-radius:6px;cursor:pointer;outline:2px solid var(--btn-img-bg);outline-offset:2px;" onclick="document.getElementById('e-img-input').click()">📷 Ajouter image(s)</button>
+        <button class="btn" style="font-size:11px;padding:6px 12px;background:var(--btn-img-bg);color:var(--btn-img-tx);border:2px solid var(--btn-img-bd);border-radius:6px;cursor:pointer;" onclick="document.getElementById('e-img-input').click()">📷 Ajouter image(s)</button>
       </div>
     </div>
     <div style="display:flex;gap:8px;justify-content:flex-end;">
@@ -2035,12 +2035,20 @@ async function pushToCloud() {
   if (!currentUser) return;
   try {
     const data = {
-      user_id: currentUser.id, trades: APP.trades, lists: APP.lists, next_id: APP.nextId,
-      capital: localStorage.getItem('tj_capital'), risk: localStorage.getItem('tj_risk'),
-      smart_risk: localStorage.getItem('tj_smart_risk'), risk_max: localStorage.getItem('tj_risk_max'),
-      theme: localStorage.getItem('tj_theme'),
+      user_id: currentUser.id,
+      trades: APP.trades,
+      lists: APP.lists,
+      next_id: APP.nextId,
+      capital: localStorage.getItem('tj_capital'),
+      risk: localStorage.getItem('tj_risk'),
+      smart_risk: localStorage.getItem('tj_smart_risk'),
+      risk_max: localStorage.getItem('tj_risk_max'),
+      risk_decimal: localStorage.getItem('tj_risk_decimal'),
+      theme: localStorage.getItem('tj_theme_vars'),
       pencil_edits: localStorage.getItem('tj_pencil_edits'),
       ia_config: localStorage.getItem('tjp_ia_config'),
+      recap_history: localStorage.getItem('tjp_recap_history'),
+      payouts: localStorage.getItem('tj_payouts'),
       updated_at: new Date().toISOString()
     };
     const { error } = await sb.from('journal_data').upsert(data, { onConflict: 'user_id' });
@@ -2054,18 +2062,42 @@ async function pullFromCloud() {
   try {
     const { data, error } = await sb.from('journal_data').select('*').eq('user_id', currentUser.id).single();
     if (error || !data) return;
-    APP.trades = data.trades || []; APP.lists = data.lists || APP.lists; APP.nextId = data.next_id || APP.nextId;
+    // Données de trading
+    APP.trades = data.trades || [];
+    APP.lists = data.lists || APP.lists;
+    APP.nextId = data.next_id || APP.nextId;
+    // Paramètres
     if (data.capital) localStorage.setItem('tj_capital', data.capital);
     if (data.risk) localStorage.setItem('tj_risk', data.risk);
-    if (data.smart_risk) localStorage.setItem('tj_smart_risk', data.smart_risk);
+    if (data.smart_risk != null) localStorage.setItem('tj_smart_risk', data.smart_risk);
     if (data.risk_max) localStorage.setItem('tj_risk_max', data.risk_max);
-    // Thème et config IA — ne pas écraser si déjà local
-    if (data.theme) localStorage.setItem('tj_theme', data.theme);
-    if (data.pencil_edits) localStorage.setItem('tj_pencil_edits', data.pencil_edits);
+    if (data.risk_decimal != null) localStorage.setItem('tj_risk_decimal', data.risk_decimal);
+    if (data.payouts) localStorage.setItem('tj_payouts', data.payouts);
+    // Thème
+    if (data.theme) {
+      localStorage.setItem('tj_theme_vars', data.theme);
+      try {
+        const vars = JSON.parse(data.theme);
+        Object.entries(vars).forEach(([v,c]) => document.documentElement.style.setProperty(v,c));
+      } catch(e) {}
+    }
+    // Pencil edits
+    if (data.pencil_edits) {
+      localStorage.setItem('tj_pencil_edits', data.pencil_edits);
+      try {
+        const edits = JSON.parse(data.pencil_edits);
+        document.querySelectorAll('[data-editable]').forEach(el => {
+          const ek = el.dataset.ek || (el.tagName+el.className+(el.textContent||'').replace(/\s+/g,' ').trim()).substring(0,60);
+          if (edits[ek]) { el.textContent = edits[ek]; el.dataset.ek = ek; }
+        });
+      } catch(e) {}
+    }
+    // Config IA
     if (data.ia_config) localStorage.setItem('tjp_ia_config', data.ia_config);
+    // Historique récaps
+    if (data.recap_history) localStorage.setItem('tjp_recap_history', data.recap_history);
+
     saveState(); renderTable(); updateNavBadges();
-    // Réappliquer le thème
-    if (data.theme) { try { applyThemeFromStorage(); } catch(e){} }
     localStorage.setItem('tjp_last_uid', currentUser.id);
     showSync('✓ Données chargées', '#22c55e');
   } catch(e) { showSync('⚠ Hors ligne', '#f59e0b'); }
@@ -2083,10 +2115,15 @@ window.addEventListener('beforeunload', () => { if (currentUser) pushToCloud(); 
 function initStarPicker(pickerId, hiddenId, val) {
   const picker = document.getElementById(pickerId); if (!picker) return;
   const hidden = document.getElementById(hiddenId);
+  // Cloner les étoiles pour supprimer les anciens listeners
+  picker.querySelectorAll('.star-pick').forEach(s => {
+    const clone = s.cloneNode(true);
+    s.parentNode.replaceChild(clone, s);
+  });
   const stars = picker.querySelectorAll('.star-pick');
 
   function setVal(v) {
-    hidden.value = v;
+    if (hidden) hidden.value = v;
     picker.dataset.val = v;
     stars.forEach((s, i) => {
       s.classList.remove('on','half');
@@ -2099,29 +2136,25 @@ function initStarPicker(pickerId, hiddenId, val) {
 
   stars.forEach((s, i) => {
     s.addEventListener('click', e => {
-      // Clic gauche de l'étoile → demi, clic droit → pleine
       const rect = s.getBoundingClientRect();
-      const x = e.clientX - rect.left;
-      const isLeft = x < rect.width / 2;
+      const isLeft = (e.clientX - rect.left) < rect.width / 2;
       const newVal = isLeft ? i + 0.5 : i + 1;
-      // Toggle : si déjà cette valeur, remettre à 0
-      const cur = parseFloat(hidden.value)||0;
+      const cur = parseFloat(hidden?.value)||0;
       setVal(cur === newVal ? 0 : newVal);
     });
     s.addEventListener('mousemove', e => {
       const rect = s.getBoundingClientRect();
-      const x = e.clientX - rect.left;
-      const isLeft = x < rect.width / 2;
-      const hoverVal = isLeft ? i + 0.5 : i + 1;
+      const isLeft = (e.clientX - rect.left) < rect.width / 2;
+      const hv = isLeft ? i + 0.5 : i + 1;
       stars.forEach((x2, j) => {
         x2.classList.remove('on','half');
-        if (hoverVal >= j+1) x2.classList.add('on');
-        else if (hoverVal >= j+0.5) x2.classList.add('half');
+        if (hv >= j+1) x2.classList.add('on');
+        else if (hv >= j+0.5) x2.classList.add('half');
       });
     });
-    s.addEventListener('mouseleave', () => setVal(parseFloat(hidden.value)||0));
+    s.addEventListener('mouseleave', () => setVal(parseFloat(hidden?.value)||0));
   });
-  picker.addEventListener('mouseleave', () => setVal(parseFloat(hidden.value)||0));
+  picker.addEventListener('mouseleave', () => setVal(parseFloat(hidden?.value)||0));
 }
 
 // ══ IMAGES FORMULAIRE ══
@@ -2160,23 +2193,31 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 });
 
-const _origOpenEdit = openEditTrade;
-window.openEditTrade = function(id) {
-  _origOpenEdit(id);
-  const t = APP.trades.find(x=>x.id===id);
-  setTimeout(()=>initStarPicker('e-stars-picker','e-stars',t?t.stars||0:0),50);
-};
-
-const _origAddTrade = addTrade;
-window.addTrade = function() {
-  const imgs = [...(window._formImages||[])];
-  _origAddTrade();
-  if (imgs.length && APP.trades.length) {
-    APP.trades[0].images = imgs;
-    window._formImages = []; renderFormImages();
-    saveState(); renderTable();
+// Re-init star picker à l'ouverture du modal edit — intégré directement
+document.addEventListener('DOMContentLoaded', () => {
+  // Patch openEditTrade pour les étoiles
+  if (typeof openEditTrade === 'function') {
+    const _orig = openEditTrade;
+    window.openEditTrade = function(id) {
+      _orig(id);
+      const t = APP.trades.find(x=>x.id===id);
+      setTimeout(()=>initStarPicker('e-stars-picker','e-stars',t?t.stars||0:0),80);
+    };
   }
-};
+  // Patch addTrade pour les images
+  if (typeof addTrade === 'function') {
+    const _origA = addTrade;
+    window.addTrade = function() {
+      const imgs = [...(window._formImages||[])];
+      _origA();
+      if (imgs.length && APP.trades.length) {
+        APP.trades[0].images = imgs;
+        window._formImages = []; renderFormImages();
+        saveState(); renderTable();
+      }
+    };
+  }
+});
 
 // ══════════════════════════════════════════
 // AGENT IA — RÉCAP MARCHÉS
@@ -2207,6 +2248,7 @@ function saveIaConfig() {
   });
   localStorage.setItem('tjp_ia_config', JSON.stringify(cfg));
   renderRecapTabs();
+  if(currentUser){clearTimeout(window._pushTimer);window._pushTimer=setTimeout(pushToCloud,1500);}
 }
 
 function loadIaConfigUI() {
