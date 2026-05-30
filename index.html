@@ -547,7 +547,7 @@ tbody td{padding:6px 8px;vertical-align:middle;white-space:nowrap;}
         <div class="fg spanall"><label data-editable>Images du trade</label>
           <div id="f-images-wrap" style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:8px;"></div>
           <input type="file" id="f-img-input" accept="image/*" multiple style="display:none" onchange="addFormImage()">
-          <button class="btn" style="font-size:11px;padding:6px 12px;background:var(--btn-img-bg);color:#fff;border:2px solid var(--btn-img-bg);border-radius:6px;cursor:pointer;" onclick="document.getElementById('f-img-input').click()">📷 Ajouter image(s)</button>
+          <button class="btn" style="font-size:11px;padding:6px 12px;background:var(--btn-img-bg);color:#fff;border:2px solid #fff4;border-radius:6px;cursor:pointer;outline:2px solid var(--btn-img-bg);outline-offset:2px;" onclick="document.getElementById('f-img-input').click()">📷 Ajouter image(s)</button>
         </div>
       </div>
       <button class="btn btn-p" onclick="addTrade()">＋ Ajouter le Trade</button>
@@ -663,7 +663,7 @@ tbody td{padding:6px 8px;vertical-align:middle;white-space:nowrap;}
       <div class="card-title" data-editable>SÉCURITÉ</div>
     </div>
     <div class="card-body">
-      <button class="btn" onclick="changePinFlow()" style="font-size:12px;background:var(--btn-pin-bg);color:#000;border:none;border-radius:6px;padding:8px 16px;cursor:pointer;">🔑 Changer mon code PIN</button>
+      <button class="btn" onclick="changePinFlow()" style="font-size:12px;background:var(--btn-pin-bg);color:#000;border:2px solid var(--btn-pin-bg);border-radius:6px;padding:8px 16px;cursor:pointer;">Changer mon code PIN</button>
     </div>
   </div>
 
@@ -679,36 +679,40 @@ tbody td{padding:6px 8px;vertical-align:middle;white-space:nowrap;}
         </div>
         <div style="font-size:10px;color:var(--muted);margin-top:4px;">Les actifs analysés sont ceux de ta liste de paires (section ci-dessous).</div>
       </div>
-      <div style="margin-bottom:14px;">
-        <label style="font-size:11px;color:var(--muted);font-family:var(--mono);">HORIZON D'ANALYSE</label>
-        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-top:8px;">
-          <label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer;"><input type="checkbox" id="ia_h_scalping" onchange="saveIaConfig()"> Scalping</label>
-          <label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer;"><input type="checkbox" id="ia_h_intraday" checked onchange="saveIaConfig()"> Intraday</label>
-          <label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer;"><input type="checkbox" id="ia_h_court" onchange="saveIaConfig()"> Court terme</label>
-          <label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer;"><input type="checkbox" id="ia_h_moyen" onchange="saveIaConfig()"> Moyen terme</label>
-          <label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer;"><input type="checkbox" id="ia_h_long" onchange="saveIaConfig()"> Long terme</label>
-          <label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer;"><input type="checkbox" id="ia_h_invest" onchange="saveIaConfig()"> Investissement</label>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px;">
+        <!-- Surface Horizon -->
+        <div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:12px;">
+          <div style="font-family:var(--mono);font-size:9px;color:var(--muted);margin-bottom:10px;letter-spacing:1px;">HORIZON D'ANALYSE</div>
+          <div style="display:flex;flex-direction:column;gap:7px;">
+            <label style="display:flex;align-items:center;gap:7px;font-size:12px;cursor:pointer;"><input type="checkbox" id="ia_h_scalping" onchange="saveIaConfig()"> Scalping</label>
+            <label style="display:flex;align-items:center;gap:7px;font-size:12px;cursor:pointer;"><input type="checkbox" id="ia_h_intraday" checked onchange="saveIaConfig()"> Intraday</label>
+            <label style="display:flex;align-items:center;gap:7px;font-size:12px;cursor:pointer;"><input type="checkbox" id="ia_h_court" onchange="saveIaConfig()"> Court terme</label>
+            <label style="display:flex;align-items:center;gap:7px;font-size:12px;cursor:pointer;"><input type="checkbox" id="ia_h_moyen" onchange="saveIaConfig()"> Moyen terme</label>
+            <label style="display:flex;align-items:center;gap:7px;font-size:12px;cursor:pointer;"><input type="checkbox" id="ia_h_long" onchange="saveIaConfig()"> Long terme</label>
+            <label style="display:flex;align-items:center;gap:7px;font-size:12px;cursor:pointer;"><input type="checkbox" id="ia_h_invest" onchange="saveIaConfig()"> Investissement</label>
+          </div>
         </div>
-      </div>
-      <div style="margin-bottom:14px;">
-        <label style="font-size:11px;color:var(--muted);font-family:var(--mono);">TYPES D'ANALYSE</label>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:8px;">
-          <label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer;"><input type="checkbox" id="ia_tech" checked onchange="saveIaConfig()"> Technique</label>
-          <label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer;"><input type="checkbox" id="ia_fund" checked onchange="saveIaConfig()"> Fondamental</label>
-          <label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer;"><input type="checkbox" id="ia_macro" checked onchange="saveIaConfig()"> Macroéconomique</label>
-          <label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer;"><input type="checkbox" id="ia_micro" onchange="saveIaConfig()"> Microéconomique</label>
-          <label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer;"><input type="checkbox" id="ia_sentiment" checked onchange="saveIaConfig()"> Sentiment de marché</label>
-          <label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer;"><input type="checkbox" id="ia_flux" checked onchange="saveIaConfig()"> Flux institutionnels</label>
-          <label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer;"><input type="checkbox" id="ia_inter" checked onchange="saveIaConfig()"> Corrélations intermarket</label>
-          <label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer;"><input type="checkbox" id="ia_geo" onchange="saveIaConfig()"> Géopolitique</label>
-          <label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer;"><input type="checkbox" id="ia_banques" checked onchange="saveIaConfig()"> Banques centrales</label>
-          <label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer;"><input type="checkbox" id="ia_oblig" onchange="saveIaConfig()"> Marchés obligataires</label>
-          <label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer;"><input type="checkbox" id="ia_crypto" onchange="saveIaConfig()"> Crypto</label>
-          <label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer;"><input type="checkbox" id="ia_commo" onchange="saveIaConfig()"> Matières premières</label>
-          <label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer;"><input type="checkbox" id="ia_indices" onchange="saveIaConfig()"> Indices mondiaux</label>
-          <label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer;"><input type="checkbox" id="ia_liquidite" onchange="saveIaConfig()"> Liquidité globale</label>
-          <label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer;"><input type="checkbox" id="ia_saisonnalite" onchange="saveIaConfig()"> Saisonnalité</label>
-          <label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer;"><input type="checkbox" id="ia_orderflow" onchange="saveIaConfig()"> Order flow / COT</label>
+        <!-- Surface Types -->
+        <div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:12px;">
+          <div style="font-family:var(--mono);font-size:9px;color:var(--muted);margin-bottom:10px;letter-spacing:1px;">TYPES D'ANALYSE</div>
+          <div style="display:flex;flex-direction:column;gap:7px;">
+            <label style="display:flex;align-items:center;gap:7px;font-size:12px;cursor:pointer;"><input type="checkbox" id="ia_tech" checked onchange="saveIaConfig()"> Technique</label>
+            <label style="display:flex;align-items:center;gap:7px;font-size:12px;cursor:pointer;"><input type="checkbox" id="ia_fund" checked onchange="saveIaConfig()"> Fondamental</label>
+            <label style="display:flex;align-items:center;gap:7px;font-size:12px;cursor:pointer;"><input type="checkbox" id="ia_macro" checked onchange="saveIaConfig()"> Macroéconomique</label>
+            <label style="display:flex;align-items:center;gap:7px;font-size:12px;cursor:pointer;"><input type="checkbox" id="ia_micro" onchange="saveIaConfig()"> Microéconomique</label>
+            <label style="display:flex;align-items:center;gap:7px;font-size:12px;cursor:pointer;"><input type="checkbox" id="ia_sentiment" checked onchange="saveIaConfig()"> Sentiment</label>
+            <label style="display:flex;align-items:center;gap:7px;font-size:12px;cursor:pointer;"><input type="checkbox" id="ia_flux" checked onchange="saveIaConfig()"> Flux institutionnels</label>
+            <label style="display:flex;align-items:center;gap:7px;font-size:12px;cursor:pointer;"><input type="checkbox" id="ia_inter" checked onchange="saveIaConfig()"> Intermarket</label>
+            <label style="display:flex;align-items:center;gap:7px;font-size:12px;cursor:pointer;"><input type="checkbox" id="ia_geo" onchange="saveIaConfig()"> Géopolitique</label>
+            <label style="display:flex;align-items:center;gap:7px;font-size:12px;cursor:pointer;"><input type="checkbox" id="ia_banques" checked onchange="saveIaConfig()"> Banques centrales</label>
+            <label style="display:flex;align-items:center;gap:7px;font-size:12px;cursor:pointer;"><input type="checkbox" id="ia_oblig" onchange="saveIaConfig()"> Obligataire</label>
+            <label style="display:flex;align-items:center;gap:7px;font-size:12px;cursor:pointer;"><input type="checkbox" id="ia_crypto" onchange="saveIaConfig()"> Crypto</label>
+            <label style="display:flex;align-items:center;gap:7px;font-size:12px;cursor:pointer;"><input type="checkbox" id="ia_commo" onchange="saveIaConfig()"> Matières premières</label>
+            <label style="display:flex;align-items:center;gap:7px;font-size:12px;cursor:pointer;"><input type="checkbox" id="ia_indices" onchange="saveIaConfig()"> Indices mondiaux</label>
+            <label style="display:flex;align-items:center;gap:7px;font-size:12px;cursor:pointer;"><input type="checkbox" id="ia_liquidite" onchange="saveIaConfig()"> Liquidité globale</label>
+            <label style="display:flex;align-items:center;gap:7px;font-size:12px;cursor:pointer;"><input type="checkbox" id="ia_saisonnalite" onchange="saveIaConfig()"> Saisonnalité</label>
+            <label style="display:flex;align-items:center;gap:7px;font-size:12px;cursor:pointer;"><input type="checkbox" id="ia_orderflow" onchange="saveIaConfig()"> Order flow / COT</label>
+          </div>
         </div>
       </div>
       <div class="fg">
@@ -1731,7 +1735,7 @@ function saveEditTrade(){
       <div class="fg spanall"><label>Images du trade</label>
         <div id="e-images-wrap" style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:8px;"></div>
         <input type="file" id="e-img-input" accept="image/*" multiple style="display:none" onchange="addEditImage()">
-        <button class="btn" style="font-size:11px;padding:6px 12px;background:var(--btn-img-bg);color:#fff;border:2px solid var(--btn-img-bg);border-radius:6px;cursor:pointer;" onclick="document.getElementById('e-img-input').click()">📷 Ajouter image(s)</button>
+        <button class="btn" style="font-size:11px;padding:6px 12px;background:var(--btn-img-bg);color:#fff;border:2px solid #fff4;border-radius:6px;cursor:pointer;outline:2px solid var(--btn-img-bg);outline-offset:2px;" onclick="document.getElementById('e-img-input').click()">📷 Ajouter image(s)</button>
       </div>
     </div>
     <div style="display:flex;gap:8px;justify-content:flex-end;">
@@ -2015,14 +2019,30 @@ function showSync(msg, color='#6b7a99') {
   syncTimeout = setTimeout(() => el.style.display = 'none', 3000);
 }
 
+// ══ MIGRATION TABLE SUPABASE (colonnes thème/ia) ══
+async function migrateSupabaseTable() {
+  // Tenter d'ajouter les colonnes si elles n'existent pas — silencieux si déjà présentes
+  try {
+    await sb.from('journal_data').select('theme').limit(1);
+  } catch(e) {
+    // Colonne manquante — on ne peut pas ALTER TABLE depuis le client
+    // L'utilisateur devra lancer le SQL manuellement si besoin
+    console.warn('Colonnes thème/ia manquantes dans Supabase. Lance le SQL de migration.');
+  }
+}
+
 async function pushToCloud() {
   if (!currentUser) return;
-  // Re-signin temporaire pour écrire
   try {
-    const data = { user_id: currentUser.id, trades: APP.trades, lists: APP.lists, next_id: APP.nextId,
+    const data = {
+      user_id: currentUser.id, trades: APP.trades, lists: APP.lists, next_id: APP.nextId,
       capital: localStorage.getItem('tj_capital'), risk: localStorage.getItem('tj_risk'),
       smart_risk: localStorage.getItem('tj_smart_risk'), risk_max: localStorage.getItem('tj_risk_max'),
-      updated_at: new Date().toISOString() };
+      theme: localStorage.getItem('tj_theme'),
+      pencil_edits: localStorage.getItem('tj_pencil_edits'),
+      ia_config: localStorage.getItem('tjp_ia_config'),
+      updated_at: new Date().toISOString()
+    };
     const { error } = await sb.from('journal_data').upsert(data, { onConflict: 'user_id' });
     if (error) { showSync('⚠ Erreur sync', '#ef4444'); return; }
     showSync('✓ Synchronisé', '#22c55e');
@@ -2039,8 +2059,13 @@ async function pullFromCloud() {
     if (data.risk) localStorage.setItem('tj_risk', data.risk);
     if (data.smart_risk) localStorage.setItem('tj_smart_risk', data.smart_risk);
     if (data.risk_max) localStorage.setItem('tj_risk_max', data.risk_max);
+    // Thème et config IA — ne pas écraser si déjà local
+    if (data.theme) localStorage.setItem('tj_theme', data.theme);
+    if (data.pencil_edits) localStorage.setItem('tj_pencil_edits', data.pencil_edits);
+    if (data.ia_config) localStorage.setItem('tjp_ia_config', data.ia_config);
     saveState(); renderTable(); updateNavBadges();
-    // Sauvegarder le dernier uid connu
+    // Réappliquer le thème
+    if (data.theme) { try { applyThemeFromStorage(); } catch(e){} }
     localStorage.setItem('tjp_last_uid', currentUser.id);
     showSync('✓ Données chargées', '#22c55e');
   } catch(e) { showSync('⚠ Hors ligne', '#f59e0b'); }
