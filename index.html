@@ -2157,19 +2157,20 @@ function applyCloudData(data) {
 let _realtimeChannel = null;
 function startRealtime() {
   if (!currentUser || _realtimeChannel) return;
-  _realtimeChannel = sb.channel('tjp_'+currentUser.id)
+  _realtimeChannel = sb.channel('tjp_changes_'+currentUser.id)
     .on('postgres_changes', {
-      event: '*', schema: 'public', table: 'journal_data',
-      filter: 'user_id=eq.'+currentUser.id
+      event: '*', schema: 'public', table: 'journal_data'
     }, payload => {
-      if (_isSyncing) return; // on vient de pusher nous-mêmes, ignorer
-      if (payload.new) {
-        _isSyncing = true;
-        applyCloudData(payload.new);
-        setTimeout(() => _isSyncing = false, 1000);
-        showSync('✓ Sync', '#22c55e');
-      }
-    }).subscribe();
+      // Filtrer côté client — ignorer si ce n'est pas notre user
+      if (!payload.new || payload.new.user_id !== currentUser.id) return;
+      if (_isSyncing) return;
+      _isSyncing = true;
+      applyCloudData(payload.new);
+      setTimeout(() => _isSyncing = false, 1000);
+      showSync('✓ Sync', '#22c55e');
+    }).subscribe(status => {
+      if (status === 'SUBSCRIBED') showSync('✓ Temps réel actif', '#22c55e');
+    });
 }
 function stopRealtime() {
   if (_realtimeChannel) { sb.removeChannel(_realtimeChannel); _realtimeChannel = null; }
