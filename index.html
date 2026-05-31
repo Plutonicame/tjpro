@@ -44,7 +44,7 @@
   --comp-pos:rgba(0,229,160,.8);--comp-neg:rgba(239,68,68,.8);--comp-bg:#161d2e;--comp-axis:#64748b;--comp-grid:rgba(100,116,139,.1);
   --conf-pos:rgba(0,229,160,.8);--conf-neg:rgba(239,68,68,.8);
   --cal-pos-bg:rgba(0,229,160,.16);--cal-neg-bg:rgba(239,68,68,.16);--cal-pos-bd:#00e5a0;--cal-neg-bd:#ef4444;--cal-bg:#161d2e;
-  --auth-bg:#0b0f1a;--auth-title:#4f8ef7;--auth-sub:#6b7a99;--btn-p-tx:#0b0f1a;--btn-g-bg:#0F3460;--btn-g-tx:#e2e8f0;--btn-g-bd:#1e2d45;--btn-img-bg:#7c3aed;--btn-img-bd:#a78bfa;--btn-img-tx:#ffffff;--btn-pin-bg:#f59e0b;--btn-pin-bd:#f59e0b;--btn-pin-tx:#000000;--btn-deco-bg:transparent;--btn-deco-bd:#ef4444;--btn-deco-tx:#ef4444;
+  --auth-bg:#0b0f1a;--auth-title:#4f8ef7;--auth-sub:#6b7a99;--auth-btn-bg:#4f8ef7;--auth-btn-tx:#fff;--auth-input-bg:#111827;--auth-input-bd:#1e2d45;--pin-btn-bg:#111827;--pin-btn-bd:#1e2d45;--pin-btn-tx:#e2e8f0;--pin-dot-off:#2a3a5c;--pin-dot-on:#4f8ef7;--btn-p-tx:#0b0f1a;--btn-g-bg:#0F3460;--btn-g-tx:#e2e8f0;--btn-g-bd:#1e2d45;--btn-img-bg:#7c3aed;--btn-img-bd:#a78bfa;--btn-img-tx:#ffffff;--btn-pin-bg:#f59e0b;--btn-pin-bd:#f59e0b;--btn-pin-tx:#000000;--btn-deco-bg:transparent;--btn-deco-bd:#ef4444;--btn-deco-tx:#ef4444;
   --tag-long-bg:rgba(0,229,160,.15);--tag-long-tx:#00e5a0;--tag-long-bd:transparent;
   --tag-short-bg:rgba(239,68,68,.15);--tag-short-tx:#ef4444;--tag-short-bd:transparent;
   --tag-oui-bg:rgba(0,229,160,.12);--tag-oui-tx:#00e5a0;--tag-oui-bd:transparent;
@@ -1526,7 +1526,7 @@ const TV=[
   {v:'--badge-p-bg',l:'Badge P&L fond',g:'Navigation'},{v:'--badge-p-bd',l:'Badge P&L bord',g:'Navigation'},{v:'--badge-p-tx',l:'Badge P&L texte',g:'Navigation'},
   {v:'--badge-r-bg',l:'Badge Risk fond',g:'Navigation'},{v:'--badge-r-bd',l:'Badge Risk bord',g:'Navigation'},{v:'--badge-r-tx',l:'Badge Risk texte',g:'Navigation'},
   {v:'--kpi1',l:'Barre KPI 1',g:'KPI'},{v:'--kpi2',l:'Barre KPI 2',g:'KPI'},{v:'--kpi3',l:'Barre KPI 3',g:'KPI'},{v:'--kpi4',l:'Barre KPI 4',g:'KPI'},{v:'--kpi5',l:'Barre KPI 5',g:'KPI'},{v:'--kpi6',l:'Barre KPI 6',g:'KPI'},{v:'--kpi7',l:'Barre KPI 7',g:'KPI'},{v:'--kpi8',l:'Barre KPI 8',g:'KPI'},{v:'--kpi9',l:'Barre KPI 9',g:'KPI'},
-  {v:'--auth-bg',l:'Connexion fond',g:'Connexion'},{v:'--auth-title',l:'Connexion titre',g:'Connexion'},{v:'--auth-sub',l:'Connexion sous-titre',g:'Connexion'},{v:'--btn-p-tx',l:'Bouton texte',g:'Boutons'},{v:'--btn-g-bg',l:'Ghost fond',g:'Boutons'},{v:'--btn-g-bd',l:'Ghost bordure',g:'Boutons'},{v:'--btn-img-bg',l:'Image fond',g:'Boutons'},{v:'--btn-img-bd',l:'Image bordure',g:'Boutons'},{v:'--btn-img-tx',l:'Image texte',g:'Boutons'},{v:'--btn-pin-bg',l:'PIN fond',g:'Boutons'},{v:'--btn-pin-bd',l:'PIN bordure',g:'Boutons'},{v:'--btn-pin-tx',l:'PIN texte',g:'Boutons'},{v:'--btn-deco-bg',l:'Déco fond',g:'Boutons'},{v:'--btn-deco-bd',l:'Déco bordure',g:'Boutons'},{v:'--btn-deco-tx',l:'Déco texte',g:'Boutons'},
+  {v:'--auth-bg',l:'Connexion fond',g:'Connexion'},{v:'--auth-title',l:'Connexion titre',g:'Connexion'},{v:'--auth-sub',l:'Connexion sous-titre',g:'Connexion'},{v:'--auth-btn-bg',l:'Bouton continuer fond',g:'Connexion'},{v:'--auth-btn-tx',l:'Bouton continuer texte',g:'Connexion'},{v:'--auth-input-bg',l:'Champ email fond',g:'Connexion'},{v:'--auth-input-bd',l:'Champ email bordure',g:'Connexion'},{v:'--pin-btn-bg',l:'Touche PIN fond',g:'Connexion'},{v:'--pin-btn-bd',l:'Touche PIN bordure',g:'Connexion'},{v:'--pin-btn-tx',l:'Touche PIN texte',g:'Connexion'},{v:'--pin-dot-off',l:'Point PIN inactif',g:'Connexion'},{v:'--pin-dot-on',l:'Point PIN actif',g:'Connexion'},{v:'--btn-p-tx',l:'Bouton texte',g:'Boutons'},{v:'--btn-g-bg',l:'Ghost fond',g:'Boutons'},{v:'--btn-g-bd',l:'Ghost bordure',g:'Boutons'},{v:'--btn-img-bg',l:'Image fond',g:'Boutons'},{v:'--btn-img-bd',l:'Image bordure',g:'Boutons'},{v:'--btn-img-tx',l:'Image texte',g:'Boutons'},{v:'--btn-pin-bg',l:'PIN fond',g:'Boutons'},{v:'--btn-pin-bd',l:'PIN bordure',g:'Boutons'},{v:'--btn-pin-tx',l:'PIN texte',g:'Boutons'},{v:'--btn-deco-bg',l:'Déco fond',g:'Boutons'},{v:'--btn-deco-bd',l:'Déco bordure',g:'Boutons'},{v:'--btn-deco-tx',l:'Déco texte',g:'Boutons'},
   {v:'--tgl-off',l:'Toggle off',g:'Boutons'},{v:'--tgl-on',l:'Toggle on',g:'Boutons'},{v:'--tgl-thumb',l:'Toggle rond',g:'Boutons'},
   {v:'--tag-long-bg',l:'LONG fond',g:'Tags'},{v:'--tag-long-tx',l:'LONG texte',g:'Tags'},{v:'--tag-long-bd',l:'LONG bordure',g:'Tags'},
   {v:'--tag-short-bg',l:'SHORT fond',g:'Tags'},{v:'--tag-short-tx',l:'SHORT texte',g:'Tags'},{v:'--tag-short-bd',l:'SHORT bordure',g:'Tags'},
@@ -1771,12 +1771,12 @@ function saveEditTrade(){
 .auth-sub{font-family:'DM Sans',sans-serif;font-size:14px;color:var(--auth-sub,#6b7a99);text-align:center;max-width:280px;}
 .auth-err{font-size:12px;color:#ef4444;display:none;min-height:16px;}
 .pin-dots{display:flex;gap:14px;margin:8px 0;}
-.pin-dot{width:18px;height:18px;border-radius:50%;border:2px solid #2a3a5c;background:transparent;transition:all .15s;}
-.pin-dot.filled{background:#4f8ef7;border-color:#4f8ef7;}
+.pin-dot{width:18px;height:18px;border-radius:50%;border:2px solid var(--pin-dot-off,#2a3a5c);background:transparent;transition:all .15s;}
+.pin-dot.filled{background:var(--pin-dot-on,#4f8ef7);border-color:var(--pin-dot-on,#4f8ef7);}
 .pin-pad{display:grid;grid-template-columns:repeat(3,72px);gap:10px;}
-.pin-btn{height:72px;border-radius:12px;border:1px solid #1e2d45;background:#111827;color:#e2e8f0;font-family:'Space Mono',monospace;font-size:22px;cursor:pointer;transition:all .1s;}
-.pin-btn:active{background:#1e2d45;transform:scale(.95);}
-.pin-btn.del{font-size:16px;color:#6b7a99;}
+.pin-btn{height:72px;border-radius:12px;border:1px solid var(--pin-btn-bd,#1e2d45);background:var(--pin-btn-bg,#111827);color:var(--pin-btn-tx,#e2e8f0);font-family:'Space Mono',monospace;font-size:22px;cursor:pointer;transition:all .1s;}
+.pin-btn:active{background:var(--pin-btn-bd,#1e2d45);transform:scale(.95);}
+.pin-btn.del{font-size:16px;color:var(--pin-btn-tx,#e2e8f0);opacity:.7;}
 .pin-btn.empty{visibility:hidden;}
 .google-btn{display:flex;align-items:center;gap:12px;background:#fff;color:#1a1a1a;border:none;border-radius:8px;padding:12px 24px;font-size:15px;font-weight:600;cursor:pointer;font-family:'DM Sans',sans-serif;}
 .google-btn:disabled{opacity:.6;cursor:not-allowed;}
@@ -1798,8 +1798,8 @@ function saveEditTrade(){
 <div id="overlayEmailPin" class="auth-overlay">
   <div class="auth-title">TRADING JOURNAL PRO</div>
   <div class="auth-sub">Saisis ton adresse email pour accéder</div>
-  <input id="returnEmail" type="email" placeholder="ton@email.com" style="background:#111827;border:1px solid #1e2d45;border-radius:8px;color:#e2e8f0;font-family:'DM Sans',sans-serif;font-size:15px;padding:12px 16px;width:260px;outline:none;">
-  <button onclick="submitReturnEmail()" style="background:#4f8ef7;color:#fff;border:none;border-radius:8px;padding:12px 24px;font-size:15px;font-weight:600;cursor:pointer;font-family:'DM Sans',sans-serif;width:260px;">Continuer →</button>
+  <input id="returnEmail" type="email" placeholder="ton@email.com" style="background:var(--auth-input-bg);border:1px solid var(--auth-input-bd);border-radius:8px;color:#e2e8f0;font-family:'DM Sans',sans-serif;font-size:15px;padding:12px 16px;width:260px;outline:none;">
+  <button onclick="submitReturnEmail()" style="background:var(--auth-btn-bg);color:var(--auth-btn-tx);border:none;border-radius:8px;padding:12px 24px;font-size:15px;font-weight:600;cursor:pointer;font-family:'DM Sans',sans-serif;width:260px;">Continuer →</button>
   <div class="auth-err" id="returnEmailErr"></div>
   <button class="change-pin-btn" onclick="showOverlay('overlayGoogle')">Nouvelle connexion Google</button>
 </div>
@@ -1958,7 +1958,9 @@ async function afterPinValidated() {
 }
 
 async function resetPin() {
+  stopRealtime();
   currentUser = null;
+  localStorage.removeItem('tjp_last_uid');
   await sb.auth.signOut();
   showOverlay('overlayGoogle');
 }
@@ -1982,7 +1984,13 @@ async function submitReturnEmail() {
     err.textContent = 'Compte introuvable. Connecte-toi avec Google.';
     err.style.display = 'block'; return;
   }
-  currentUser = { id: uid, email: email };
+  // Tenter de restaurer la session Supabase
+  const { data: refreshData } = await sb.auth.refreshSession();
+  if (refreshData?.user && refreshData.user.id === uid) {
+    currentUser = refreshData.user;
+  } else {
+    currentUser = { id: uid, email: email };
+  }
   document.getElementById('enterPinSub').textContent = email;
   showOverlay('overlayEnterPin');
   setupEnterPin();
@@ -1993,12 +2001,12 @@ async function initAuth() {
   const { data: { session } } = await sb.auth.getSession();
 
   if (session && session.user) {
-    // Retour après redirect Google (1ère connexion ou changement de compte)
+    // Retour après redirect Google
     currentUser = session.user;
     localStorage.setItem(emailKey(currentUser.id), currentUser.email);
     localStorage.setItem(uidByEmailKey(currentUser.email.toLowerCase()), currentUser.id);
     localStorage.setItem('tjp_last_uid', currentUser.id);
-    await sb.auth.signOut();
+    // NE PAS signOut — on garde la session pour que Supabase accepte les requêtes
 
     const pin = localStorage.getItem(pinKey(currentUser.id));
     if (pin) {
@@ -2010,10 +2018,16 @@ async function initAuth() {
       setupCreatePin();
     }
   } else {
-    // Pas de session Google → connexions suivantes
+    // Vérifier s'il y a une session Supabase existante (refresh token)
     const lastUid = localStorage.getItem('tjp_last_uid');
     if (lastUid && localStorage.getItem(pinKey(lastUid))) {
-      // On connaît un compte → demander email pour identifier
+      // Tenter de restaurer la session Supabase silencieusement
+      const { data: refreshData } = await sb.auth.refreshSession();
+      if (refreshData?.user) {
+        currentUser = refreshData.user;
+      } else {
+        currentUser = { id: lastUid, email: localStorage.getItem(emailKey(lastUid)) };
+      }
       showOverlay('overlayEmailPin');
       const inp = document.getElementById('returnEmail');
       if (inp) inp.addEventListener('keydown', e => { if(e.key==='Enter') submitReturnEmail(); });
