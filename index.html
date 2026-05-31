@@ -795,7 +795,7 @@ function loadState(){return{trades:ls('tj_trades',ALL_S),lists:ls('tj_lists',DEF
 function saveState(){lss('tj_trades',APP.trades);lss('tj_lists',APP.lists);lss('tj_nextId',APP.nextId);}
 const APP=loadState();
 ['confluences','mgmt_opts','reprend_opts'].forEach(k=>{if(!APP.lists[k])APP.lists[k]=DEF[k];});
-const CAPITAL=()=>parseInt(ls('tj_capital','10000'));
+const CAPITAL=()=>parseFloat(ls('tj_capital','10000'));
 const RBASE=()=>parseFloat(ls('tj_risk','1'));
 const RDEC=()=>ls('tj_risk_decimal',false);
 const SMART=()=>ls('tj_smart_risk',true);
@@ -1030,7 +1030,7 @@ function updateNavBadges(){
 function toggleDecimal(){const c=RDEC();lss('tj_risk_decimal',!c);document.getElementById('tglDec').classList.toggle('on',!c);renderModifs();updateNavBadges();}
 function toggleSmartRisk(){const c=SMART();lss('tj_smart_risk',!c);document.getElementById('tglSmart').classList.toggle('on',!c);document.getElementById('smartLbl').textContent=!c?'Activé':'Désactivé';document.getElementById('riskCard').style.display=!c?'':'none';renderModifs();updateNavBadges();refreshAllCharts();}
 function saveCapitalRisk(){
-  lss('tj_capital',parseInt(document.getElementById('capInput').value)||10000);
+  lss('tj_capital',parseFloat(document.getElementById('capInput').value)||10000);
   lss('tj_risk',parseFloat(document.getElementById('riskInput').value)||1);
   const rm=parseFloat(document.getElementById('riskMaxInput').value)||10;
   lss('tj_risk_max',rm);
@@ -1952,10 +1952,9 @@ function setupEnterPin() {
 }
 
 async function afterPinValidated() {
-  // Déconnexion Supabase (session gérée par PIN)
-  await sb.auth.signOut();
   showOverlay(null);
   await pullFromCloud();
+  startRealtime();
 }
 
 async function resetPin() {
@@ -2065,7 +2064,7 @@ async function pushToCloud() {
       updated_at: new Date().toISOString()
     };
     const { error } = await sb.from('journal_data').upsert(data, { onConflict: 'user_id' });
-    if (error) { showSync('⚠ Erreur sync', '#ef4444'); return; }
+    if (error) { showSync('⚠ Erreur sync: '+error.message, '#ef4444'); return; }
     showSync('✓ Synchronisé', '#22c55e');
   } catch(e) { showSync('⚠ Hors ligne', '#f59e0b'); }
 }
@@ -2074,46 +2073,53 @@ async function pullFromCloud() {
   if (!currentUser) return;
   try {
     const { data, error } = await sb.from('journal_data').select('*').eq('user_id', currentUser.id).single();
-    if (error || !data) return;
-    // Données de trading
-    APP.trades = data.trades || [];
-    APP.lists = data.lists || APP.lists;
-    APP.nextId = data.next_id || APP.nextId;
-    // Paramètres
-    if (data.capital) localStorage.setItem('tj_capital', data.capital);
-    if (data.risk) localStorage.setItem('tj_risk', data.risk);
-    if (data.smart_risk != null) localStorage.setItem('tj_smart_risk', data.smart_risk);
-    if (data.risk_max) localStorage.setItem('tj_risk_max', data.risk_max);
-    if (data.risk_decimal != null) localStorage.setItem('tj_risk_decimal', data.risk_decimal);
-    if (data.payouts) localStorage.setItem('tj_payouts', data.payouts);
-    // Thème
-    if (data.theme) {
-      localStorage.setItem('tj_theme_vars', data.theme);
-      try {
-        const vars = JSON.parse(data.theme);
-        Object.entries(vars).forEach(([v,c]) => document.documentElement.style.setProperty(v,c));
-      } catch(e) {}
-    }
-    // Pencil edits
-    if (data.pencil_edits) {
-      localStorage.setItem('tj_pencil_edits', data.pencil_edits);
-      try {
-        const edits = JSON.parse(data.pencil_edits);
-        document.querySelectorAll('[data-editable]').forEach(el => {
-          const ek = el.dataset.ek || (el.tagName+el.className+(el.textContent||'').replace(/\s+/g,' ').trim()).substring(0,60);
-          if (edits[ek]) { el.textContent = edits[ek]; el.dataset.ek = ek; }
-        });
-      } catch(e) {}
-    }
-    // Config IA
-    if (data.ia_config) localStorage.setItem('tjp_ia_config', data.ia_config);
-    // Historique récaps
-    if (data.recap_history) localStorage.setItem('tjp_recap_history', data.recap_history);
-
-    saveState(); renderTable(); updateNavBadges();
-    localStorage.setItem('tjp_last_uid', currentUser.id);
+    if (error || !data) { if(error) showSync('⚠ Pull: '+error.message,'#ef4444'); return; }
+    applyCloudData(data);
     showSync('✓ Données chargées', '#22c55e');
   } catch(e) { showSync('⚠ Hors ligne', '#f59e0b'); }
+}
+
+function applyCloudData(data) {
+  APP.trades = data.trades || [];
+  APP.lists = data.lists || APP.lists;
+  APP.nextId = data.next_id || APP.nextId;
+  if (data.capital) localStorage.setItem('tj_capital', data.capital);
+  if (data.risk) localStorage.setItem('tj_risk', data.risk);
+  if (data.smart_risk != null) localStorage.setItem('tj_smart_risk', data.smart_risk);
+  if (data.risk_max) localStorage.setItem('tj_risk_max', data.risk_max);
+  if (data.risk_decimal != null) localStorage.setItem('tj_risk_decimal', data.risk_decimal);
+  if (data.payouts) localStorage.setItem('tj_payouts', data.payouts);
+  if (data.theme) {
+    localStorage.setItem('tj_theme_vars', data.theme);
+    try { const v=JSON.parse(data.theme); Object.entries(v).forEach(([k,c])=>document.documentElement.style.setProperty(k,c)); } catch(e){}
+  }
+  if (data.pencil_edits) localStorage.setItem('tj_pencil_edits', data.pencil_edits);
+  if (data.ia_config) localStorage.setItem('tjp_ia_config', data.ia_config);
+  if (data.recap_history) localStorage.setItem('tjp_recap_history', data.recap_history);
+  saveState(); renderTable(); updateNavBadges();
+  localStorage.setItem('tjp_last_uid', currentUser.id);
+}
+
+// ══ TEMPS RÉEL — écoute les changements depuis l'autre appareil ══
+let _realtimeChannel = null;
+function startRealtime() {
+  if (!currentUser || _realtimeChannel) return;
+  _realtimeChannel = sb.channel('journal_'+currentUser.id)
+    .on('postgres_changes', {
+      event: 'UPDATE',
+      schema: 'public',
+      table: 'journal_data',
+      filter: 'user_id=eq.'+currentUser.id
+    }, payload => {
+      if (payload.new) {
+        applyCloudData(payload.new);
+        showSync('✓ Sync temps réel', '#22c55e');
+      }
+    })
+    .subscribe();
+}
+function stopRealtime() {
+  if (_realtimeChannel) { sb.removeChannel(_realtimeChannel); _realtimeChannel = null; }
 }
 
 const _origSaveState = saveState;
