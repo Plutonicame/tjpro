@@ -804,12 +804,13 @@ function saveState(){
   lss('tj_trades',APP.trades);
   lss('tj_lists',APP.lists);
   lss('tj_nextId',APP.nextId);
-  // Push cloud immédiat si connecté
-  if(typeof currentUser !== 'undefined' && currentUser && typeof _isSyncing !== 'undefined' && !_isSyncing) {
+  if(typeof currentUser !== 'undefined' && currentUser && typeof _isSyncing !== 'undefined' && !_isSyncing && window._userActionHappened) {
     clearTimeout(window._pushTimer);
     window._pushTimer = setTimeout(function(){ if(typeof pushToCloud==='function') pushToCloud(); }, 300);
   }
 }
+// Marquer qu'une action utilisateur a eu lieu (pour éviter push au démarrage)
+function markUserAction(){ window._userActionHappened = true; }
 const APP=loadState();
 ['confluences','mgmt_opts','reprend_opts'].forEach(k=>{if(!APP.lists[k])APP.lists[k]=DEF[k];});
 const CAPITAL=()=>parseFloat(ls('tj_capital','10000'));
@@ -957,7 +958,7 @@ function populateSelects(){
   const cw=document.getElementById('conf-wrap');
   if(cw){const sel=Array.from(cw.querySelectorAll('.chip.sel')).map(c=>c.dataset.v);cw.innerHTML=APP.lists.confluences.map(c=>`<div class="chip${sel.includes(c)?' sel':''}" data-v="${c}" onclick="this.classList.toggle('sel')">${c}</div>`).join('');}
 }
-function addTrade(){
+function addTrade(){markUserAction();
   const g=id=>(document.getElementById(id)||{}).value||'';
   const tfs=Array.from(document.querySelectorAll('#tf-wrap .chip.sel')).map(c=>c.dataset.v).join(',');
   const confs=Array.from(document.querySelectorAll('#conf-wrap .chip.sel')).map(c=>c.dataset.v).join(',');
@@ -966,7 +967,7 @@ function addTrade(){
   APP.trades.unshift(t);saveState();renderTable();updateNavBadges();
   document.getElementById('alertSaved').classList.add('show');setTimeout(()=>document.getElementById('alertSaved').classList.remove('show'),2200);resetForm();
 }
-function deleteTrade(id){APP.trades=APP.trades.filter(t=>t.id!==parseInt(id,10));saveState();renderTable();updateNavBadges();}
+function deleteTrade(id){markUserAction();APP.trades=APP.trades.filter(t=>t.id!==parseInt(id,10));saveState();renderTable();updateNavBadges();}
 function resetForm(){['f-date','f-heure','f-paire','f-session','f-dir','f-rrcible','f-res','f-mgmt','f-reprend','f-notes'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});document.querySelectorAll('#tf-wrap .chip,#conf-wrap .chip').forEach(c=>c.classList.remove('sel'));document.getElementById('f-date').value=new Date().toISOString().split('T')[0];initStarPicker('f-stars-picker','f-stars',0);window._formImages=[];renderFormImages();}
 function tagD(v){return v==='LONG'?'<span class="tag tag-long">LONG</span>':v==='SHORT'?'<span class="tag tag-short">SHORT</span>':v||'—';}
 function tagO(v){const m={Oui:'oui',Non:'non','Peut-être':'peut','N/A':'na'};return v?`<span class="tag tag-${m[v]||'na'}">${v}</span>`:'—';}
@@ -1111,8 +1112,8 @@ function applyMobileModState(){
     });
   }
 }
-function addListItem(key){const inp=document.getElementById('ma-'+key);const v=inp.value.trim();if(!v||(APP.lists[key]||[]).includes(v))return;if(!APP.lists[key])APP.lists[key]=[];APP.lists[key].push(v);saveState();populateSelects();renderModifs();inp.value='';if(currentUser&&!_isSyncing){clearTimeout(window._pushTimer);window._pushTimer=setTimeout(pushToCloud,300);}}
-function removeListItem(key,idx){if(!APP.lists[key])return;APP.lists[key].splice(idx,1);saveState();populateSelects();renderModifs();if(currentUser&&!_isSyncing){clearTimeout(window._pushTimer);window._pushTimer=setTimeout(pushToCloud,300);}}
+function addListItem(key){markUserAction();const inp=document.getElementById('ma-'+key);const v=inp.value.trim();if(!v||(APP.lists[key]||[]).includes(v))return;if(!APP.lists[key])APP.lists[key]=[];APP.lists[key].push(v);saveState();populateSelects();renderModifs();inp.value='';if(currentUser&&!_isSyncing){clearTimeout(window._pushTimer);window._pushTimer=setTimeout(pushToCloud,300);}}
+function removeListItem(key,idx){markUserAction();if(!APP.lists[key])return;APP.lists[key].splice(idx,1);saveState();populateSelects();renderModifs();if(currentUser&&!_isSyncing){clearTimeout(window._pushTimer);window._pushTimer=setTimeout(pushToCloud,300);}}
 
 // ══ CALENDRIER ══
 let calD=new Date();calD.setDate(1);
@@ -1700,7 +1701,7 @@ window.openEditTrade = openEditTrade;
 window.deleteTrade = deleteTrade;
 window.viewTradeImages = viewTradeImages;
 window.deleteTradeImage = deleteTradeImage;
-function saveEditTrade(){
+function saveEditTrade(){markUserAction();
   const t = APP.trades.find(x=>x.id===_editId);
   if(!t){closeEditTrade();return;}
   t.date     = document.getElementById('e-date').value;
@@ -2089,12 +2090,14 @@ async function pushToCloud() {
       recap_history: localStorage.getItem('tjp_recap_history'), payouts: localStorage.getItem('tj_payouts'),
       updated_at: new Date().toISOString()
     };
+    _lastPushTimestamp = data.updated_at;
     const { error } = await sb.from('journal_data').upsert(data, { onConflict: 'user_id' });
     if (error) { showSync('⚠ '+error.message, '#ef4444'); }
     else { showSync('✓ Sauvegardé', '#22c55e'); }
   } catch(e) { showSync('⚠ Réseau', '#f59e0b'); }
-  setTimeout(() => _isPushing = false, 500);
+  setTimeout(() => { _isPushing = false; }, 500);
 }
+let _lastPushTimestamp = null;
 
 async function pullFromCloud() {
   if (!currentUser || !currentUser.id) return;
@@ -2164,7 +2167,8 @@ function startRealtime() {
       event: '*', schema: 'public', table: 'journal_data'
     }, payload => {
       if (!payload.new || payload.new.user_id !== currentUser.id) return;
-      if (_isPushing) return; // c'est notre propre push qui revient, ignorer
+      // Vérifier que ce n'est pas nos propres données (même timestamp)
+      if (_lastPushTimestamp && payload.new.updated_at === _lastPushTimestamp) return;
       _isSyncing = true;
       applyCloudData(payload.new);
       setTimeout(() => _isSyncing = false, 500);
