@@ -44,7 +44,7 @@
   --comp-pos:rgba(0,229,160,.8);--comp-neg:rgba(239,68,68,.8);--comp-bg:#161d2e;--comp-axis:#64748b;--comp-grid:rgba(100,116,139,.1);
   --conf-pos:rgba(0,229,160,.8);--conf-neg:rgba(239,68,68,.8);
   --cal-pos-bg:rgba(0,229,160,.16);--cal-neg-bg:rgba(239,68,68,.16);--cal-pos-bd:#00e5a0;--cal-neg-bd:#ef4444;--cal-bg:#161d2e;
-  --btn-p-bg:#00e5a0;--btn-p-tx:#0b0f1a;--btn-g-bg:#0F3460;--btn-g-tx:#e2e8f0;--btn-g-bd:#1e2d45;--btn-img-bg:#7c3aed;--btn-img-bd:#a78bfa;--btn-img-tx:#ffffff;--btn-pin-bg:#f59e0b;--btn-pin-bd:#f59e0b;--btn-pin-tx:#000000;--btn-deco-bg:transparent;--btn-deco-bd:#ef4444;--btn-deco-tx:#ef4444;
+  --auth-bg:#0b0f1a;--auth-title:#4f8ef7;--auth-sub:#6b7a99;--btn-p-tx:#0b0f1a;--btn-g-bg:#0F3460;--btn-g-tx:#e2e8f0;--btn-g-bd:#1e2d45;--btn-img-bg:#7c3aed;--btn-img-bd:#a78bfa;--btn-img-tx:#ffffff;--btn-pin-bg:#f59e0b;--btn-pin-bd:#f59e0b;--btn-pin-tx:#000000;--btn-deco-bg:transparent;--btn-deco-bd:#ef4444;--btn-deco-tx:#ef4444;
   --tag-long-bg:rgba(0,229,160,.15);--tag-long-tx:#00e5a0;--tag-long-bd:transparent;
   --tag-short-bg:rgba(239,68,68,.15);--tag-short-tx:#ef4444;--tag-short-bd:transparent;
   --tag-oui-bg:rgba(0,229,160,.12);--tag-oui-tx:#00e5a0;--tag-oui-bd:transparent;
@@ -1526,7 +1526,7 @@ const TV=[
   {v:'--badge-p-bg',l:'Badge P&L fond',g:'Navigation'},{v:'--badge-p-bd',l:'Badge P&L bord',g:'Navigation'},{v:'--badge-p-tx',l:'Badge P&L texte',g:'Navigation'},
   {v:'--badge-r-bg',l:'Badge Risk fond',g:'Navigation'},{v:'--badge-r-bd',l:'Badge Risk bord',g:'Navigation'},{v:'--badge-r-tx',l:'Badge Risk texte',g:'Navigation'},
   {v:'--kpi1',l:'Barre KPI 1',g:'KPI'},{v:'--kpi2',l:'Barre KPI 2',g:'KPI'},{v:'--kpi3',l:'Barre KPI 3',g:'KPI'},{v:'--kpi4',l:'Barre KPI 4',g:'KPI'},{v:'--kpi5',l:'Barre KPI 5',g:'KPI'},{v:'--kpi6',l:'Barre KPI 6',g:'KPI'},{v:'--kpi7',l:'Barre KPI 7',g:'KPI'},{v:'--kpi8',l:'Barre KPI 8',g:'KPI'},{v:'--kpi9',l:'Barre KPI 9',g:'KPI'},
-  {v:'--btn-p-bg',l:'Bouton fond',g:'Boutons'},{v:'--btn-p-tx',l:'Bouton texte',g:'Boutons'},{v:'--btn-g-bg',l:'Ghost fond',g:'Boutons'},{v:'--btn-g-bd',l:'Ghost bordure',g:'Boutons'},{v:'--btn-img-bg',l:'Image fond',g:'Boutons'},{v:'--btn-img-bd',l:'Image bordure',g:'Boutons'},{v:'--btn-img-tx',l:'Image texte',g:'Boutons'},{v:'--btn-pin-bg',l:'PIN fond',g:'Boutons'},{v:'--btn-pin-bd',l:'PIN bordure',g:'Boutons'},{v:'--btn-pin-tx',l:'PIN texte',g:'Boutons'},{v:'--btn-deco-bg',l:'Déco fond',g:'Boutons'},{v:'--btn-deco-bd',l:'Déco bordure',g:'Boutons'},{v:'--btn-deco-tx',l:'Déco texte',g:'Boutons'},
+  {v:'--auth-bg',l:'Connexion fond',g:'Connexion'},{v:'--auth-title',l:'Connexion titre',g:'Connexion'},{v:'--auth-sub',l:'Connexion sous-titre',g:'Connexion'},{v:'--btn-p-tx',l:'Bouton texte',g:'Boutons'},{v:'--btn-g-bg',l:'Ghost fond',g:'Boutons'},{v:'--btn-g-bd',l:'Ghost bordure',g:'Boutons'},{v:'--btn-img-bg',l:'Image fond',g:'Boutons'},{v:'--btn-img-bd',l:'Image bordure',g:'Boutons'},{v:'--btn-img-tx',l:'Image texte',g:'Boutons'},{v:'--btn-pin-bg',l:'PIN fond',g:'Boutons'},{v:'--btn-pin-bd',l:'PIN bordure',g:'Boutons'},{v:'--btn-pin-tx',l:'PIN texte',g:'Boutons'},{v:'--btn-deco-bg',l:'Déco fond',g:'Boutons'},{v:'--btn-deco-bd',l:'Déco bordure',g:'Boutons'},{v:'--btn-deco-tx',l:'Déco texte',g:'Boutons'},
   {v:'--tgl-off',l:'Toggle off',g:'Boutons'},{v:'--tgl-on',l:'Toggle on',g:'Boutons'},{v:'--tgl-thumb',l:'Toggle rond',g:'Boutons'},
   {v:'--tag-long-bg',l:'LONG fond',g:'Tags'},{v:'--tag-long-tx',l:'LONG texte',g:'Tags'},{v:'--tag-long-bd',l:'LONG bordure',g:'Tags'},
   {v:'--tag-short-bg',l:'SHORT fond',g:'Tags'},{v:'--tag-short-tx',l:'SHORT texte',g:'Tags'},{v:'--tag-short-bd',l:'SHORT bordure',g:'Tags'},
@@ -1759,7 +1759,7 @@ function saveEditTrade(){
 </div>
 <!-- ══ OVERLAYS AUTH ══ -->
 <style>
-.auth-overlay{display:none;position:fixed;inset:0;background:#0b0f1a;z-index:9999;flex-direction:column;align-items:center;justify-content:center;gap:20px;}
+.auth-overlay{display:none;position:fixed;inset:0;background:var(--auth-bg,#0b0f1a);z-index:9999;flex-direction:column;align-items:center;justify-content:center;gap:20px;}
 .auth-overlay.active{display:flex;}
 /* ── Star picker ── */
 .star-picker{display:flex;gap:0;margin-top:4px;}
@@ -1767,8 +1767,8 @@ function saveEditTrade(){
 .star-pick.half{background:linear-gradient(to right,#f59e0b 50%,#2a3a5c 50%);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;}
 .star-pick.on{color:#f59e0b;-webkit-text-fill-color:#f59e0b;}
 .star-pick:not(.on):not(.half){color:#2a3a5c;-webkit-text-fill-color:#2a3a5c;}
-.auth-title{font-family:'Space Mono',monospace;font-size:22px;color:#4f8ef7;letter-spacing:3px;font-weight:700;}
-.auth-sub{font-family:'DM Sans',sans-serif;font-size:14px;color:#6b7a99;text-align:center;max-width:280px;}
+.auth-title{font-family:'Space Mono',monospace;font-size:22px;color:var(--auth-title,#4f8ef7);letter-spacing:3px;font-weight:700;}
+.auth-sub{font-family:'DM Sans',sans-serif;font-size:14px;color:var(--auth-sub,#6b7a99);text-align:center;max-width:280px;}
 .auth-err{font-size:12px;color:#ef4444;display:none;min-height:16px;}
 .pin-dots{display:flex;gap:14px;margin:8px 0;}
 .pin-dot{width:18px;height:18px;border-radius:50%;border:2px solid #2a3a5c;background:transparent;transition:all .15s;}
@@ -2072,9 +2072,29 @@ async function pushToCloud() {
 async function pullFromCloud() {
   if (!currentUser) return;
   try {
-    const { data, error } = await sb.from('journal_data').select('*').eq('user_id', currentUser.id).single();
-    if (error || !data) { if(error) showSync('⚠ Pull: '+error.message,'#ef4444'); return; }
-    applyCloudData(data);
+    // Prendre la ligne la plus récente si plusieurs existent
+    const { data, error } = await sb.from('journal_data')
+      .select('*')
+      .eq('user_id', currentUser.id)
+      .order('updated_at', { ascending: false })
+      .limit(1);
+    
+    if (error) { showSync('⚠ Pull: '+error.message,'#ef4444'); return; }
+    if (!data || !data.length) return;
+    
+    // Si doublons, nettoyer — garder seulement la plus récente
+    const { count } = await sb.from('journal_data')
+      .select('*', { count: 'exact', head: true })
+      .eq('user_id', currentUser.id);
+    if (count > 1) {
+      // Supprimer les anciennes lignes
+      await sb.from('journal_data')
+        .delete()
+        .eq('user_id', currentUser.id)
+        .neq('updated_at', data[0].updated_at);
+    }
+    
+    applyCloudData(data[0]);
     showSync('✓ Données chargées', '#22c55e');
   } catch(e) { showSync('⚠ Hors ligne', '#f59e0b'); }
 }
