@@ -1085,7 +1085,7 @@ function renderModifs(){
       <div class="mod-list" id="ml-${key}">${(APP.lists[key]||[]).map((item,i)=>`<div class="mod-item"><span class="drag-h">⣿</span><span class="item-tx">${item}</span><button class="del-item" onclick="removeListItem('${key}',${i})">×</button></div>`).join('')}</div>
       <div class="mod-add"><input type="text" id="ma-${key}" placeholder="Ajouter..." onkeydown="if(event.key==='Enter')addListItem('${key}')"><button onclick="addListItem('${key}')">+</button></div>
     </div>`).join('');
-  MK.forEach(({key})=>{const el=document.getElementById('ml-'+key);if(el&&window.Sortable){new Sortable(el,{animation:120,handle:'.drag-h',onEnd:evt=>{const list=APP.lists[key];const[m]=list.splice(evt.oldIndex,1);list.splice(evt.newIndex,0,m);saveState();populateSelects();}});}});
+  MK.forEach(({key})=>{const el=document.getElementById('ml-'+key);if(el&&window.Sortable){new Sortable(el,{animation:120,handle:'.drag-h',onEnd:evt=>{const list=APP.lists[key];const[m]=list.splice(evt.oldIndex,1);list.splice(evt.newIndex,0,m);saveState();populateSelects();if(currentUser&&!_isSyncing){clearTimeout(window._pushTimer);window._pushTimer=setTimeout(pushToCloud,300);}}});}});
   // Compact on mobile
   applyMobileModState();
 }
@@ -1100,8 +1100,8 @@ function applyMobileModState(){
     });
   }
 }
-function addListItem(key){const inp=document.getElementById('ma-'+key);const v=inp.value.trim();if(!v||(APP.lists[key]||[]).includes(v))return;if(!APP.lists[key])APP.lists[key]=[];APP.lists[key].push(v);saveState();populateSelects();renderModifs();inp.value='';}
-function removeListItem(key,idx){if(!APP.lists[key])return;APP.lists[key].splice(idx,1);saveState();populateSelects();renderModifs();}
+function addListItem(key){const inp=document.getElementById('ma-'+key);const v=inp.value.trim();if(!v||(APP.lists[key]||[]).includes(v))return;if(!APP.lists[key])APP.lists[key]=[];APP.lists[key].push(v);saveState();populateSelects();renderModifs();inp.value='';if(currentUser&&!_isSyncing){clearTimeout(window._pushTimer);window._pushTimer=setTimeout(pushToCloud,300);}}
+function removeListItem(key,idx){if(!APP.lists[key])return;APP.lists[key].splice(idx,1);saveState();populateSelects();renderModifs();if(currentUser&&!_isSyncing){clearTimeout(window._pushTimer);window._pushTimer=setTimeout(pushToCloud,300);}}
 
 // ══ CALENDRIER ══
 let calD=new Date();calD.setDate(1);
