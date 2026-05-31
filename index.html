@@ -2038,78 +2038,45 @@ async function initAuth() {
 }
 
 // ══ SYNC ══
+let _isSyncing = false;
+
 function showSync(msg, color='#6b7a99') {
   const el = document.getElementById('syncStatus');
+  if (!el) return;
   el.textContent = msg; el.style.color = color; el.style.display = 'block';
   clearTimeout(syncTimeout);
-  syncTimeout = setTimeout(() => el.style.display = 'none', 3000);
-}
-
-// ══ MIGRATION TABLE SUPABASE (colonnes thème/ia) ══
-async function migrateSupabaseTable() {
-  // Tenter d'ajouter les colonnes si elles n'existent pas — silencieux si déjà présentes
-  try {
-    await sb.from('journal_data').select('theme').limit(1);
-  } catch(e) {
-    // Colonne manquante — on ne peut pas ALTER TABLE depuis le client
-    // L'utilisateur devra lancer le SQL manuellement si besoin
-    console.warn('Colonnes thème/ia manquantes dans Supabase. Lance le SQL de migration.');
-  }
+  syncTimeout = setTimeout(() => el.style.display = 'none', 2000);
 }
 
 async function pushToCloud() {
-  if (!currentUser) return;
+  if (!currentUser || _isSyncing) return;
   try {
     const data = {
-      user_id: currentUser.id,
-      trades: APP.trades,
-      lists: APP.lists,
-      next_id: APP.nextId,
-      capital: localStorage.getItem('tj_capital'),
-      risk: localStorage.getItem('tj_risk'),
-      smart_risk: localStorage.getItem('tj_smart_risk'),
-      risk_max: localStorage.getItem('tj_risk_max'),
-      risk_decimal: localStorage.getItem('tj_risk_decimal'),
-      theme: localStorage.getItem('tj_theme_vars'),
-      pencil_edits: localStorage.getItem('tj_pencil_edits'),
-      ia_config: localStorage.getItem('tjp_ia_config'),
-      recap_history: localStorage.getItem('tjp_recap_history'),
-      payouts: localStorage.getItem('tj_payouts'),
+      user_id: currentUser.id, trades: APP.trades, lists: APP.lists, next_id: APP.nextId,
+      capital: localStorage.getItem('tj_capital'), risk: localStorage.getItem('tj_risk'),
+      smart_risk: localStorage.getItem('tj_smart_risk'), risk_max: localStorage.getItem('tj_risk_max'),
+      risk_decimal: localStorage.getItem('tj_risk_decimal'), theme: localStorage.getItem('tj_theme_vars'),
+      pencil_edits: localStorage.getItem('tj_pencil_edits'), ia_config: localStorage.getItem('tjp_ia_config'),
+      recap_history: localStorage.getItem('tjp_recap_history'), payouts: localStorage.getItem('tj_payouts'),
       updated_at: new Date().toISOString()
     };
     const { error } = await sb.from('journal_data').upsert(data, { onConflict: 'user_id' });
-    if (error) { showSync('⚠ Erreur sync: '+error.message, '#ef4444'); return; }
-    showSync('✓ Synchronisé', '#22c55e');
+    if (error) { showSync('⚠ '+error.message, '#ef4444'); return; }
+    showSync('✓ Sauvegardé', '#22c55e');
   } catch(e) { showSync('⚠ Hors ligne', '#f59e0b'); }
 }
 
 async function pullFromCloud() {
   if (!currentUser) return;
   try {
-    // Prendre la ligne la plus récente si plusieurs existent
     const { data, error } = await sb.from('journal_data')
-      .select('*')
-      .eq('user_id', currentUser.id)
-      .order('updated_at', { ascending: false })
-      .limit(1);
-    
-    if (error) { showSync('⚠ Pull: '+error.message,'#ef4444'); return; }
+      .select('*').eq('user_id', currentUser.id)
+      .order('updated_at', { ascending: false }).limit(1);
+    if (error) { showSync('⚠ '+error.message,'#ef4444'); return; }
     if (!data || !data.length) return;
-    
-    // Si doublons, nettoyer — garder seulement la plus récente
-    const { count } = await sb.from('journal_data')
-      .select('*', { count: 'exact', head: true })
-      .eq('user_id', currentUser.id);
-    if (count > 1) {
-      // Supprimer les anciennes lignes
-      await sb.from('journal_data')
-        .delete()
-        .eq('user_id', currentUser.id)
-        .neq('updated_at', data[0].updated_at);
-    }
-    
+    _isSyncing = true;
     applyCloudData(data[0]);
-    showSync('✓ Données chargées', '#22c55e');
+    setTimeout(() => _isSyncing = false, 1000);
   } catch(e) { showSync('⚠ Hors ligne', '#f59e0b'); }
 }
 
@@ -2130,27 +2097,28 @@ function applyCloudData(data) {
   if (data.pencil_edits) localStorage.setItem('tj_pencil_edits', data.pencil_edits);
   if (data.ia_config) localStorage.setItem('tjp_ia_config', data.ia_config);
   if (data.recap_history) localStorage.setItem('tjp_recap_history', data.recap_history);
-  saveState(); renderTable(); updateNavBadges();
+  const orig = _origSaveState || saveState;
+  orig(); renderTable(); updateNavBadges();
   localStorage.setItem('tjp_last_uid', currentUser.id);
 }
 
-// ══ TEMPS RÉEL — écoute les changements depuis l'autre appareil ══
+// Realtime — reçoit les changements de l'AUTRE appareil seulement
 let _realtimeChannel = null;
 function startRealtime() {
   if (!currentUser || _realtimeChannel) return;
-  _realtimeChannel = sb.channel('journal_'+currentUser.id)
+  _realtimeChannel = sb.channel('tjp_'+currentUser.id)
     .on('postgres_changes', {
-      event: 'UPDATE',
-      schema: 'public',
-      table: 'journal_data',
+      event: '*', schema: 'public', table: 'journal_data',
       filter: 'user_id=eq.'+currentUser.id
     }, payload => {
+      if (_isSyncing) return; // on vient de pusher nous-mêmes, ignorer
       if (payload.new) {
+        _isSyncing = true;
         applyCloudData(payload.new);
-        showSync('✓ Sync temps réel', '#22c55e');
+        setTimeout(() => _isSyncing = false, 1000);
+        showSync('✓ Sync', '#22c55e');
       }
-    })
-    .subscribe();
+    }).subscribe();
 }
 function stopRealtime() {
   if (_realtimeChannel) { sb.removeChannel(_realtimeChannel); _realtimeChannel = null; }
@@ -2159,12 +2127,13 @@ function stopRealtime() {
 const _origSaveState = saveState;
 window.saveState = function() {
   _origSaveState();
-  if (currentUser) { clearTimeout(window._pushTimer); window._pushTimer = setTimeout(pushToCloud, 0); }
+  if (currentUser && !_isSyncing) {
+    clearTimeout(window._pushTimer);
+    window._pushTimer = setTimeout(pushToCloud, 300);
+  }
 };
-// Remplacer la référence globale pour que l'app utilise la version avec sync
-window.addEventListener('load', () => { if (typeof saveState === 'function') { const orig = saveState; saveState = window.saveState; } });
-
-window.addEventListener('beforeunload', () => { if (currentUser) pushToCloud(); });
+window.addEventListener('load', () => { saveState = window.saveState; });
+window.addEventListener('beforeunload', () => { if (currentUser && !_isSyncing) pushToCloud(); });
 
 // ══ STAR PICKER avec demi-étoile ══
 function initStarPicker(pickerId, hiddenId, val) {
