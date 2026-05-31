@@ -1973,7 +1973,7 @@ function setupEnterPin() {
 async function afterPinValidated() {
   showOverlay(null);
   await pullFromCloud();
-  startRealtime();
+  setTimeout(startRealtime, 1200); // démarrer après que _isSyncing soit remis à false
 }
 
 async function resetPin() {
@@ -2069,7 +2069,7 @@ function showSync(msg, color='#6b7a99') {
 
 async function pushToCloud() {
   if (!currentUser || !currentUser.id) return;
-  // Si session expirée, tenter refresh silencieux
+  _isPushing = true;
   try { await sb.auth.refreshSession(); } catch(e) {}
   try {
     const data = {
@@ -2090,9 +2090,10 @@ async function pushToCloud() {
       updated_at: new Date().toISOString()
     };
     const { error } = await sb.from('journal_data').upsert(data, { onConflict: 'user_id' });
-    if (error) { showSync('⚠ '+error.message, '#ef4444'); return; }
-    showSync('✓ Sauvegardé', '#22c55e');
+    if (error) { showSync('⚠ '+error.message, '#ef4444'); }
+    else { showSync('✓ Sauvegardé', '#22c55e'); }
   } catch(e) { showSync('⚠ Réseau', '#f59e0b'); }
+  setTimeout(() => _isPushing = false, 500);
 }
 
 async function pullFromCloud() {
@@ -2155,18 +2156,18 @@ function applyCloudData(data) {
 
 // Realtime — reçoit les changements de l'AUTRE appareil seulement
 let _realtimeChannel = null;
+let _isPushing = false; // on est en train de pusher — ignorer le realtime entrant
 function startRealtime() {
   if (!currentUser || _realtimeChannel) return;
   _realtimeChannel = sb.channel('tjp_changes_'+currentUser.id)
     .on('postgres_changes', {
       event: '*', schema: 'public', table: 'journal_data'
     }, payload => {
-      // Filtrer côté client — ignorer si ce n'est pas notre user
       if (!payload.new || payload.new.user_id !== currentUser.id) return;
-      if (_isSyncing) return;
+      if (_isPushing) return; // c'est notre propre push qui revient, ignorer
       _isSyncing = true;
       applyCloudData(payload.new);
-      setTimeout(() => _isSyncing = false, 1000);
+      setTimeout(() => _isSyncing = false, 500);
       showSync('✓ Sync', '#22c55e');
     }).subscribe(status => {
       if (status === 'SUBSCRIBED') showSync('✓ Temps réel actif', '#22c55e');
