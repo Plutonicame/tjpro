@@ -800,7 +800,16 @@ const DEF={paires:["EURUSD","GBPUSD","USDJPY","XAUUSD","XAGUSD","NAS100","SPX500
 function ls(k,d){try{const v=localStorage.getItem(k);return v?JSON.parse(v):d;}catch(e){return d;}}
 function lss(k,v){localStorage.setItem(k,JSON.stringify(v));}
 function loadState(){return{trades:ls('tj_trades',ALL_S),lists:ls('tj_lists',DEF),nextId:ls('tj_nextId',9000)};}
-function saveState(){lss('tj_trades',APP.trades);lss('tj_lists',APP.lists);lss('tj_nextId',APP.nextId);}
+function saveState(){
+  lss('tj_trades',APP.trades);
+  lss('tj_lists',APP.lists);
+  lss('tj_nextId',APP.nextId);
+  // Push cloud immédiat si connecté
+  if(typeof currentUser !== 'undefined' && currentUser && typeof _isSyncing !== 'undefined' && !_isSyncing) {
+    clearTimeout(window._pushTimer);
+    window._pushTimer = setTimeout(function(){ if(typeof pushToCloud==='function') pushToCloud(); }, 300);
+  }
+}
 const APP=loadState();
 ['confluences','mgmt_opts','reprend_opts'].forEach(k=>{if(!APP.lists[k])APP.lists[k]=DEF[k];});
 const CAPITAL=()=>parseFloat(ls('tj_capital','10000'));
@@ -849,6 +858,7 @@ function togglePencil(){
       if(el.style.fontSize||el.style.color||el.innerHTML)edits[k]={html:el.innerHTML,fs:el.style.fontSize||'',col:el.style.color||''};
     });
     lss('tj_pencil_edits',edits);
+    if(typeof currentUser!=="undefined"&&currentUser&&!_isSyncing){clearTimeout(window._pushTimer);window._pushTimer=setTimeout(pushToCloud,300);}
   } else setupPencil();
 }
 function setupPencil(){
@@ -859,7 +869,7 @@ function setupPencil(){
       el.addEventListener('click',el._ph);}
   });
 }
-function saveOneEdit(el){const k=getEK(el);const edits=ls('tj_pencil_edits',{});edits[k]={html:el.innerHTML,fs:el.style.fontSize||'',col:el.style.color||''};lss('tj_pencil_edits',edits);}
+function saveOneEdit(el){const k=getEK(el);const edits=ls('tj_pencil_edits',{});edits[k]={html:el.innerHTML,fs:el.style.fontSize||'',col:el.style.color||''};lss('tj_pencil_edits',edits);if(typeof currentUser!=="undefined"&&currentUser&&!_isSyncing){clearTimeout(window._pushTimer);window._pushTimer=setTimeout(pushToCloud,300);}}
 function applyPencilEdits(){const edits=ls('tj_pencil_edits',{});document.querySelectorAll('[data-editable]').forEach(el=>{const k=getEK(el);if(edits[k]){if(edits[k].html!==undefined&&edits[k].html!==null)el.innerHTML=edits[k].html;if(edits[k].fs)el.style.fontSize=edits[k].fs;if(edits[k].col)el.style.color=edits[k].col;}});}
 function openCPforPencil(){openCP('Couleur texte',pencilColor,hex=>{pencilColor=hex;document.getElementById('pencilColorSwatch').style.background=hex;});}
 function applyPencilStyle(){if(!currentEditEl)return;const sz=document.getElementById('pencilFontSize').value;if(sz)currentEditEl.style.fontSize=sz+'px';currentEditEl.style.color=pencilColor;saveOneEdit(currentEditEl);}
@@ -1035,13 +1045,14 @@ function updateNavBadges(){
 }
 
 // ══ MODIFS ══
-function toggleDecimal(){const c=RDEC();lss('tj_risk_decimal',!c);document.getElementById('tglDec').classList.toggle('on',!c);renderModifs();updateNavBadges();}
-function toggleSmartRisk(){const c=SMART();lss('tj_smart_risk',!c);document.getElementById('tglSmart').classList.toggle('on',!c);document.getElementById('smartLbl').textContent=!c?'Activé':'Désactivé';document.getElementById('riskCard').style.display=!c?'':'none';renderModifs();updateNavBadges();refreshAllCharts();}
+function toggleDecimal(){const c=RDEC();lss('tj_risk_decimal',!c);document.getElementById('tglDec').classList.toggle('on',!c);renderModifs();updateNavBadges();if(typeof currentUser!=="undefined"&&currentUser&&!_isSyncing){clearTimeout(window._pushTimer);window._pushTimer=setTimeout(pushToCloud,300);}}
+function toggleSmartRisk(){const c=SMART();lss('tj_smart_risk',!c);document.getElementById('tglSmart').classList.toggle('on',!c);document.getElementById('smartLbl').textContent=!c?'Activé':'Désactivé';document.getElementById('riskCard').style.display=!c?'':'none';renderModifs();updateNavBadges();refreshAllCharts();if(typeof currentUser!=="undefined"&&currentUser&&!_isSyncing){clearTimeout(window._pushTimer);window._pushTimer=setTimeout(pushToCloud,300);}}
 function saveCapitalRisk(){
   lss('tj_capital',parseFloat(document.getElementById('capInput').value)||10000);
   lss('tj_risk',parseFloat(document.getElementById('riskInput').value)||1);
   const rm=parseFloat(document.getElementById('riskMaxInput').value)||10;
   lss('tj_risk_max',rm);
+  if(typeof currentUser!=="undefined"&&currentUser&&!_isSyncing){clearTimeout(window._pushTimer);window._pushTimer=setTimeout(pushToCloud,300);}
   const lbl=document.getElementById('riskMaxLabel');if(lbl)lbl.textContent=rm;
   renderModifs();updateNavBadges();updateKPIs();refreshAllCharts();
 }
@@ -1054,7 +1065,7 @@ function addPayout(){
   document.getElementById('payoutInput').value='';
   renderPayouts();updateNavBadges();updateKPIs();refreshAllCharts();
 }
-function removePayout(i){const payouts=ls('tj_payouts',[]);payouts.splice(i,1);lss('tj_payouts',payouts);renderPayouts();updateNavBadges();updateKPIs();refreshAllCharts();}
+function removePayout(i){const payouts=ls('tj_payouts',[]);payouts.splice(i,1);lss('tj_payouts',payouts);renderPayouts();updateNavBadges();updateKPIs();refreshAllCharts();if(typeof currentUser!=="undefined"&&currentUser&&!_isSyncing){clearTimeout(window._pushTimer);window._pushTimer=setTimeout(pushToCloud,300);}}
 function renderPayouts(){
   const payouts=ls('tj_payouts',[]);
   const total=payouts.reduce((s,p)=>s+p.amount,0);
@@ -1572,9 +1583,9 @@ function renderTE(){
   </div>`).join('');
 }
 function teOCP(v,l){const prev=teVals[v]||'#000000';openCP(l,prev.trim().startsWith('#')?prev.trim():'#000000',hex=>{teHist.push({...teVals});teVals[v]=hex;renderTE();});}
-function applyTheme(){Object.entries(teVals).forEach(([v,c])=>document.documentElement.style.setProperty(v,c));lss('tj_theme_vars',teVals);refreshAllCharts();if(currentUser){clearTimeout(window._pushTimer);window._pushTimer=setTimeout(pushToCloud,1500);}}
+function applyTheme(){Object.entries(teVals).forEach(([v,c])=>document.documentElement.style.setProperty(v,c));lss('tj_theme_vars',teVals);refreshAllCharts();if(typeof currentUser!=="undefined"&&currentUser&&!_isSyncing){clearTimeout(window._pushTimer);window._pushTimer=setTimeout(pushToCloud,300);}}
 function undoTheme(){if(!teHist.length)return;teVals=teHist.pop();renderTE();applyTheme();}
-function askResetTheme(){showConfirm('Réinitialiser','Supprimer toutes les personnalisations ?',()=>{teVals={};lss('tj_theme_vars',{});document.documentElement.removeAttribute('style');renderTE();refreshAllCharts();});}
+function askResetTheme(){showConfirm('Réinitialiser','Supprimer toutes les personnalisations ?',()=>{teVals={};lss('tj_theme_vars',{});document.documentElement.removeAttribute('style');renderTE();refreshAllCharts();if(typeof currentUser!=="undefined"&&currentUser&&!_isSyncing){clearTimeout(window._pushTimer);window._pushTimer=setTimeout(pushToCloud,300);}});}
 function loadSavedTheme(){const s=ls('tj_theme_vars',null);if(s){Object.entries(s).forEach(([v,c])=>document.documentElement.style.setProperty(v,c));teVals=s;}}
 
 // ══ INIT ══
@@ -2131,10 +2142,15 @@ function applyCloudData(data) {
   }
   if (data.ia_config) localStorage.setItem('tjp_ia_config', data.ia_config);
   if (data.recap_history) localStorage.setItem('tjp_recap_history', data.recap_history);
-  const orig = _origSaveState || saveState;
-  orig(); renderTable(); updateNavBadges();
+  // Sauvegarder localement SANS déclencher un push (on reçoit du cloud)
+  _isSyncing = true;
+  lss('tj_trades', APP.trades);
+  lss('tj_lists', APP.lists);
+  lss('tj_nextId', APP.nextId);
+  renderTable(); updateNavBadges();
   setTimeout(applyPencilEdits, 100);
   localStorage.setItem('tjp_last_uid', currentUser.id);
+  setTimeout(() => { _isSyncing = false; }, 1000);
 }
 
 // Realtime — reçoit les changements de l'AUTRE appareil seulement
@@ -2159,15 +2175,6 @@ function stopRealtime() {
   if (_realtimeChannel) { sb.removeChannel(_realtimeChannel); _realtimeChannel = null; }
 }
 
-const _origSaveState = saveState;
-window.saveState = function() {
-  _origSaveState();
-  if (currentUser && !_isSyncing) {
-    clearTimeout(window._pushTimer);
-    window._pushTimer = setTimeout(pushToCloud, 300);
-  }
-};
-window.addEventListener('load', () => { saveState = window.saveState; });
 window.addEventListener('beforeunload', () => { if (currentUser && !_isSyncing) pushToCloud(); });
 
 // ══ STAR PICKER avec demi-étoile ══
@@ -2297,7 +2304,7 @@ function saveIaConfig() {
   });
   localStorage.setItem('tjp_ia_config', JSON.stringify(cfg));
   renderRecapTabs();
-  if(currentUser){clearTimeout(window._pushTimer);window._pushTimer=setTimeout(pushToCloud,1500);}
+  if(typeof currentUser!=="undefined"&&currentUser&&!_isSyncing){clearTimeout(window._pushTimer);window._pushTimer=setTimeout(pushToCloud,300);}
 }
 
 function loadIaConfigUI() {
