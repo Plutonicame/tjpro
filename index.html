@@ -324,7 +324,7 @@ tbody td{padding:6px 8px;vertical-align:middle;white-space:nowrap;}
 
 /* ══ MODE TÉLÉPHONE (≤480px) — polices adaptatives ══ */
 @media(max-width:480px){
-  /* Nav mobile : tout en vw pour s'adapter à toutes tailles */
+  /* Nav mobile */
   .nav-mobile-logo{font-size:clamp(11px, 3.5vw, 16px);}
   .nav-mobile-clocks .clock-city{font-size:clamp(7px, 1.8vw, 10px);}
   .nav-mobile-clocks .clock-time{font-size:clamp(13px, 3.8vw, 18px);}
@@ -334,27 +334,35 @@ tbody td{padding:6px 8px;vertical-align:middle;white-space:nowrap;}
   .nav-mobile-row1{padding:0 10px;min-height:44px;}
   .nav-mobile-row2{padding:4px 10px 5px;}
 
-  /* KPI cards */
-  .kpi-label{font-size:clamp(7px, 1.8vw, 9px);}
-  .kpi-value{font-size:clamp(11px, 3vw, 14px);}
-  .kpi-icon{font-size:clamp(12px, 3vw, 16px);}
+  /* KPI cards — forcer des tailles raisonnables même si pencil a mis grande taille sur PC */
+  .kpi-label{font-size:clamp(7px, 1.8vw, 9px) !important;}
+  .kpi-value{font-size:clamp(11px, 3vw, 15px) !important;}
+  .kpi-icon{font-size:clamp(12px, 3vw, 16px) !important;}
 
-  /* Table */
+  /* Titres de page */
+  .page-title{font-size:clamp(14px, 4vw, 20px) !important;}
+  .page-sub{font-size:clamp(9px, 2.5vw, 12px) !important;}
+
+  /* Table journal */
   table{font-size:clamp(8px, 2vw, 10px);}
   thead th{font-size:clamp(7px, 1.8vw, 9px);padding:4px 3px;}
   tbody td{padding:4px 3px;}
 
-  /* Titres de page */
-  .page-title{font-size:clamp(12px, 3.5vw, 16px);}
-  .page-sub{font-size:clamp(9px, 2.2vw, 11px);}
-
   /* Boutons et formulaires */
-  .btn{font-size:clamp(9px, 2.2vw, 11px);padding:6px 10px;}
-  .fg label{font-size:clamp(9px, 2.2vw, 11px);}
-  input,select,textarea{font-size:clamp(11px, 2.8vw, 13px)!important;}
+  .btn{font-size:clamp(9px, 2.5vw, 12px);padding:6px 10px;}
+  .fg label{font-size:clamp(9px, 2.5vw, 11px) !important;}
+  input,select,textarea{font-size:clamp(12px, 3vw, 14px) !important;}
 
+  /* Nav logo */
+  .nav-logo{font-size:clamp(12px, 3.5vw, 18px) !important;}
+  
   /* Charts moins hauts */
-  .chart-body{height:160px!important;}
+  .chart-body{height:160px !important;}
+  
+  /* KPI strip */
+  .kpi-strip{grid-template-columns:repeat(3,1fr);}
+  .form-grid{grid-template-columns:1fr;}
+  .fg.span2,.fg.spanall{grid-column:1/-1;}
 }
 </style>
 </head>
@@ -852,7 +860,7 @@ function setupPencil(){
   });
 }
 function saveOneEdit(el){const k=getEK(el);const edits=ls('tj_pencil_edits',{});edits[k]={html:el.innerHTML,fs:el.style.fontSize||'',col:el.style.color||''};lss('tj_pencil_edits',edits);}
-function applyPencilEdits(){const edits=ls('tj_pencil_edits',{});document.querySelectorAll('[data-editable]').forEach(el=>{const k=getEK(el);if(edits[k]){if(edits[k].html)el.innerHTML=edits[k].html;if(edits[k].fs)el.style.fontSize=edits[k].fs;if(edits[k].col)el.style.color=edits[k].col;}});}
+function applyPencilEdits(){const edits=ls('tj_pencil_edits',{});document.querySelectorAll('[data-editable]').forEach(el=>{const k=getEK(el);if(edits[k]){if(edits[k].html!==undefined&&edits[k].html!==null)el.innerHTML=edits[k].html;if(edits[k].fs)el.style.fontSize=edits[k].fs;if(edits[k].col)el.style.color=edits[k].col;}});}
 function openCPforPencil(){openCP('Couleur texte',pencilColor,hex=>{pencilColor=hex;document.getElementById('pencilColorSwatch').style.background=hex;});}
 function applyPencilStyle(){if(!currentEditEl)return;const sz=document.getElementById('pencilFontSize').value;if(sz)currentEditEl.style.fontSize=sz+'px';currentEditEl.style.color=pencilColor;saveOneEdit(currentEditEl);}
 
@@ -2056,7 +2064,18 @@ async function pushToCloud() {
       capital: localStorage.getItem('tj_capital'), risk: localStorage.getItem('tj_risk'),
       smart_risk: localStorage.getItem('tj_smart_risk'), risk_max: localStorage.getItem('tj_risk_max'),
       risk_decimal: localStorage.getItem('tj_risk_decimal'), theme: localStorage.getItem('tj_theme_vars'),
-      pencil_edits: localStorage.getItem('tj_pencil_edits'), ia_config: localStorage.getItem('tjp_ia_config'),
+      pencil_edits: (() => {
+        try {
+          const edits = JSON.parse(localStorage.getItem('tj_pencil_edits') || '{}');
+          // Envoyer seulement html et col (pas fs = font-size, qui est per-device)
+          const toSync = {};
+          Object.entries(edits).forEach(([k,v]) => {
+            toSync[k] = { html: v.html || '', col: v.col || '' };
+          });
+          return JSON.stringify(toSync);
+        } catch(e) { return localStorage.getItem('tj_pencil_edits'); }
+      })(),
+      ia_config: localStorage.getItem('tjp_ia_config'),
       recap_history: localStorage.getItem('tjp_recap_history'), payouts: localStorage.getItem('tj_payouts'),
       updated_at: new Date().toISOString()
     };
@@ -2094,11 +2113,27 @@ function applyCloudData(data) {
     localStorage.setItem('tj_theme_vars', data.theme);
     try { const v=JSON.parse(data.theme); Object.entries(v).forEach(([k,c])=>document.documentElement.style.setProperty(k,c)); } catch(e){}
   }
-  if (data.pencil_edits) localStorage.setItem('tj_pencil_edits', data.pencil_edits);
+  if (data.pencil_edits) {
+    try {
+      const remoteEdits = JSON.parse(data.pencil_edits);
+      const localEdits = JSON.parse(localStorage.getItem('tj_pencil_edits') || '{}');
+      // Fusionner : textes et couleurs viennent du cloud, font-sizes restent locaux par appareil
+      const merged = {};
+      Object.keys({...remoteEdits, ...localEdits}).forEach(k => {
+        merged[k] = {
+          html: remoteEdits[k]?.html ?? localEdits[k]?.html ?? '',
+          fs: localEdits[k]?.fs || '', // taille locale uniquement
+          col: remoteEdits[k]?.col ?? localEdits[k]?.col ?? ''
+        };
+      });
+      localStorage.setItem('tj_pencil_edits', JSON.stringify(merged));
+    } catch(e) { localStorage.setItem('tj_pencil_edits', data.pencil_edits); }
+  }
   if (data.ia_config) localStorage.setItem('tjp_ia_config', data.ia_config);
   if (data.recap_history) localStorage.setItem('tjp_recap_history', data.recap_history);
   const orig = _origSaveState || saveState;
   orig(); renderTable(); updateNavBadges();
+  setTimeout(applyPencilEdits, 100);
   localStorage.setItem('tjp_last_uid', currentUser.id);
 }
 
