@@ -2068,7 +2068,9 @@ function showSync(msg, color='#6b7a99') {
 }
 
 async function pushToCloud() {
-  if (!currentUser || _isSyncing) return;
+  if (!currentUser || !currentUser.id) return;
+  // Si session expirée, tenter refresh silencieux
+  try { await sb.auth.refreshSession(); } catch(e) {}
   try {
     const data = {
       user_id: currentUser.id, trades: APP.trades, lists: APP.lists, next_id: APP.nextId,
@@ -2078,11 +2080,8 @@ async function pushToCloud() {
       pencil_edits: (() => {
         try {
           const edits = JSON.parse(localStorage.getItem('tj_pencil_edits') || '{}');
-          // Envoyer seulement html et col (pas fs = font-size, qui est per-device)
           const toSync = {};
-          Object.entries(edits).forEach(([k,v]) => {
-            toSync[k] = { html: v.html || '', col: v.col || '' };
-          });
+          Object.entries(edits).forEach(([k,v]) => { toSync[k] = { html: v.html || '', col: v.col || '' }; });
           return JSON.stringify(toSync);
         } catch(e) { return localStorage.getItem('tj_pencil_edits'); }
       })(),
@@ -2093,21 +2092,22 @@ async function pushToCloud() {
     const { error } = await sb.from('journal_data').upsert(data, { onConflict: 'user_id' });
     if (error) { showSync('⚠ '+error.message, '#ef4444'); return; }
     showSync('✓ Sauvegardé', '#22c55e');
-  } catch(e) { showSync('⚠ Hors ligne', '#f59e0b'); }
+  } catch(e) { showSync('⚠ Réseau', '#f59e0b'); }
 }
 
 async function pullFromCloud() {
-  if (!currentUser) return;
+  if (!currentUser || !currentUser.id) return;
+  try { await sb.auth.refreshSession(); } catch(e) {}
   try {
     const { data, error } = await sb.from('journal_data')
       .select('*').eq('user_id', currentUser.id)
       .order('updated_at', { ascending: false }).limit(1);
     if (error) { showSync('⚠ '+error.message,'#ef4444'); return; }
-    if (!data || !data.length) return;
+    if (!data || !data.length) { await pushToCloud(); return; }
     _isSyncing = true;
     applyCloudData(data[0]);
     setTimeout(() => _isSyncing = false, 1000);
-  } catch(e) { showSync('⚠ Hors ligne', '#f59e0b'); }
+  } catch(e) { showSync('⚠ Réseau', '#f59e0b'); }
 }
 
 function applyCloudData(data) {
