@@ -416,11 +416,11 @@ tbody td{padding:6px 8px;vertical-align:middle;white-space:nowrap;}
 <nav class="nav">
   <div class="nav-desktop">
     <div class="nav-logo" data-editable>TJP</div>
-    <button class="nav-tab active" onclick="showPage('trackrecord',this)" data-editable><span data-editable>Track Record</span</button>
-    <button class="nav-tab" onclick="showPage('journal',this)" data-editable>Journal</button>
-    <button class="nav-tab" onclick="showPage('calendrier',this)" data-editable>Calendrier</button>
-    <button class="nav-tab" onclick="showPage('recap',this)" data-editable>Récap IA</button>
-    <button class="nav-tab" onclick="showPage('modifs',this)" data-editable>Modifications</button>
+    <button class="nav-tab active" onclick="showPage('trackrecord',this)"><span data-editable>Track Record</span</button>
+    <button class="nav-tab" onclick="showPage('journal',this)">Journal</button>
+    <button class="nav-tab" onclick="showPage('calendrier',this)">Calendrier</button>
+    <button class="nav-tab" onclick="showPage('recap',this)">Récap IA</button>
+    <button class="nav-tab" onclick="showPage('modifs',this)">Modifications</button>
     <div class="nav-clocks">
       <div class="clock-item"><span class="clock-city">NEW YORK</span><span class="clock-time" id="clkNY">--:--:--</span></div>
       <div class="clock-item"><span class="clock-city">LONDON</span><span class="clock-time" id="clkLN">--:--:--</span></div>
@@ -904,25 +904,16 @@ if(!window._pencilDelegateSet){
 }
 function saveOneEdit(el){const k=getEK(el);const edits=ls('tj_pencil_edits',{});edits[k]={html:el.innerHTML,fs:el.style.fontSize||'',col:el.style.color||''};lss('tj_pencil_edits',edits);if(typeof currentUser!=="undefined"&&currentUser&&!_isSyncing){clearTimeout(window._pushTimer);window._pushTimer=setTimeout(pushToCloud,300);}}
 function openCPforPencil(){openCP('Couleur texte',pencilColor,hex=>{pencilColor=hex;document.getElementById('pencilColorSwatch').style.background=hex;});}
-function applyPencilStyle(){
-  if(!currentEditEl) return;
-  const sz = document.getElementById('pencilFontSize').value;
-  if(sz) {
-    currentEditEl.style.setProperty('font-size', sz+'px', 'important');
-    currentEditEl.dataset.pencilFs = sz+'px';
-  }
-  currentEditEl.style.setProperty('color', pencilColor, 'important');
-  saveOneEdit(currentEditEl);
-}
+function applyPencilStyle(){if(!currentEditEl)return;const sz=document.getElementById('pencilFontSize').value;if(sz)currentEditEl.style.fontSize=sz+'px';currentEditEl.style.color=pencilColor;saveOneEdit(currentEditEl);}
 
 function applyPencilEdits(){
-  const edits = ls('tj_pencil_edits',{});
+  const edits=ls('tj_pencil_edits',{});
   document.querySelectorAll('[data-editable]').forEach(el=>{
-    const k = getEK(el);
+    const k=getEK(el);
     if(edits[k]){
-      if(edits[k].html !== undefined && edits[k].html !== null) el.innerHTML = edits[k].html;
-      if(edits[k].fs) el.style.setProperty('font-size', edits[k].fs, 'important');
-      if(edits[k].col) el.style.setProperty('color', edits[k].col, 'important');
+      if(edits[k].html!==undefined&&edits[k].html!==null)el.innerHTML=edits[k].html;
+      if(edits[k].fs)el.style.fontSize=edits[k].fs;
+      if(edits[k].col)el.style.color=edits[k].col;
     }
   });
 }
