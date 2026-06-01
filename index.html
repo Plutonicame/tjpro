@@ -405,22 +405,22 @@ tbody td{padding:6px 8px;vertical-align:middle;white-space:nowrap;}
 <!-- MOBILE MENU -->
 <div class="mobile-menu" id="mobileMenu">
   <button class="mobile-menu-close" onclick="closeMobileMenu()">✕ Fermer</button>
-  <button class="nav-tab" onclick="showPage('trackrecord');closeMobileMenu()">🏆 Track Record</button>
-  <button class="nav-tab" onclick="showPage('journal');closeMobileMenu()">📒 Journal</button>
-  <button class="nav-tab" onclick="showPage('calendrier');closeMobileMenu()">📅 Calendrier</button>
-  <button class="nav-tab" onclick="showPage('recap');closeMobileMenu()">🤖 Récap IA</button>
-  <button class="nav-tab" onclick="showPage('modifs');closeMobileMenu()">⚙️ Modifications</button>
+  <button class="nav-tab" onclick="showPage('trackrecord');closeMobileMenu()">Track Record</button>
+  <button class="nav-tab" onclick="showPage('journal');closeMobileMenu()">Journal</button>
+  <button class="nav-tab" onclick="showPage('calendrier');closeMobileMenu()">Calendrier</button>
+  <button class="nav-tab" onclick="showPage('recap');closeMobileMenu()">Récap IA</button>
+  <button class="nav-tab" onclick="showPage('modifs');closeMobileMenu()">Modifications</button>
 </div>
 
 <!-- NAV DESKTOP (une seule ligne) -->
 <nav class="nav">
   <div class="nav-desktop">
-    <div class="nav-logo" data-editable>⚡ TJP</div>
-    <button class="nav-tab active" onclick="showPage('trackrecord',this)" data-editable>🏆 Track Record</button>
-    <button class="nav-tab" onclick="showPage('journal',this)" data-editable>📒 Journal</button>
-    <button class="nav-tab" onclick="showPage('calendrier',this)" data-editable>📅 Calendrier</button>
-    <button class="nav-tab" onclick="showPage('recap',this)" data-editable>🤖 Récap IA</button>
-    <button class="nav-tab" onclick="showPage('modifs',this)" data-editable>⚙️ Modifications</button>
+    <div class="nav-logo" data-editable>TJP</div>
+    <button class="nav-tab active" onclick="showPage('trackrecord',this)" data-editable>Track Record</button>
+    <button class="nav-tab" onclick="showPage('journal',this)" data-editable>Journal</button>
+    <button class="nav-tab" onclick="showPage('calendrier',this)" data-editable>Calendrier</button>
+    <button class="nav-tab" onclick="showPage('recap',this)" data-editable>Récap IA</button>
+    <button class="nav-tab" onclick="showPage('modifs',this)" data-editable>Modifications</button>
     <div class="nav-clocks">
       <div class="clock-item"><span class="clock-city">NEW YORK</span><span class="clock-time" id="clkNY">--:--:--</span></div>
       <div class="clock-item"><span class="clock-city">LONDON</span><span class="clock-time" id="clkLN">--:--:--</span></div>
@@ -439,7 +439,7 @@ tbody td{padding:6px 8px;vertical-align:middle;white-space:nowrap;}
   <div class="nav-mobile">
     <div class="nav-mobile-row1">
       <button class="hamburger" onclick="openMobileMenu()">☰</button>
-      <div class="nav-mobile-logo" data-editable>⚡ TJP</div>
+      <div class="nav-mobile-logo" data-editable>TJP</div>
       <div class="nav-mobile-clocks">
         <div class="clock-item"><span class="clock-city">NEW YORK</span><span class="clock-time" id="clkNY2">--:--:--</span></div>
         <div class="clock-item"><span class="clock-city">LONDON</span><span class="clock-time" id="clkLN2">--:--:--</span></div>
@@ -588,7 +588,7 @@ tbody td{padding:6px 8px;vertical-align:middle;white-space:nowrap;}
   <!-- Barre d'actifs / onglets -->
   <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px;align-items:center;">
     <div id="recapAssetTabs" style="display:flex;gap:6px;flex-wrap:wrap;flex:1;"></div>
-    <button class="btn btn-p" onclick="generateRecap()" id="recapGenBtn" style="white-space:nowrap;">🤖 Générer le récap</button>
+    <button class="btn btn-p" onclick="generateRecap()" id="recapGenBtn" style="white-space:nowrap;">Générer le récap</button>
   </div>
 
   <!-- Statut -->
@@ -685,7 +685,7 @@ tbody td{padding:6px 8px;vertical-align:middle;white-space:nowrap;}
 
   <!-- AGENT IA -->
   <div class="card">
-    <div class="card-header"><div class="card-title" data-editable>🤖 AGENT IA — CONFIGURATION</div></div>
+    <div class="card-header"><div class="card-title" data-editable>AGENT IA — CONFIGURATION</div></div>
     <div class="card-body">
       <div class="fg" style="margin-bottom:14px;">
         <label>Clé API Anthropic <a href="https://console.anthropic.com" target="_blank" style="color:var(--blue);font-size:10px;">(obtenir une clé →)</a></label>
@@ -2399,7 +2399,7 @@ function renderRecapPage(i) {
   const data = currentRecapData?.[asset];
   if (!data) {
     wrap.innerHTML = `<div style="color:var(--muted);font-size:13px;padding:20px;text-align:center;">
-      Clique sur <strong>🤖 Générer le récap</strong> pour analyser ${asset}.<br>
+      Clique sur <strong>Générer le récap</strong> pour analyser ${asset}.<br>
       <span style="font-size:11px;">Assure-toi d'avoir configuré ta clé API dans Modifications → Agent IA.</span>
     </div>`;
     return;
@@ -2519,7 +2519,7 @@ Sois précis, factuel, institutionnel. Indique clairement si une donnée n'est p
   document.getElementById('recapContent').style.display = 'block';
   renderRecapPage(currentRecapAsset);
   showRecapStatus(errors===0 ? `✓ ${assets.length} actifs analysés avec succès` : `⚠ Terminé avec ${errors} erreur(s)`, errors===0?'#22c55e':'#f59e0b');
-  btn.disabled = false; btn.textContent = '🤖 Générer le récap';
+  btn.disabled = false; btn.textContent = 'Générer le récap';
   saveRecapToHistory(true);
 }
 
