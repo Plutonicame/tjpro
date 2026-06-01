@@ -416,7 +416,7 @@ tbody td{padding:6px 8px;vertical-align:middle;white-space:nowrap;}
 <nav class="nav">
   <div class="nav-desktop">
     <div class="nav-logo" data-editable>TJP</div>
-    <button class="nav-tab active" onclick="showPage('trackrecord',this)" data-editable>Track Record</button>
+    <button class="nav-tab active" onclick="showPage('trackrecord',this)" data-editable><span data-editable>Track Record</span</button>
     <button class="nav-tab" onclick="showPage('journal',this)" data-editable>Journal</button>
     <button class="nav-tab" onclick="showPage('calendrier',this)" data-editable>Calendrier</button>
     <button class="nav-tab" onclick="showPage('recap',this)" data-editable>Récap IA</button>
@@ -579,7 +579,7 @@ tbody td{padding:6px 8px;vertical-align:middle;white-space:nowrap;}
 
   <!-- Message si pas de clé API -->
   <div id="recapNoKey" style="display:none;margin-bottom:14px;padding:14px;background:var(--surface);border:1px solid var(--border);border-radius:8px;text-align:center;">
-    <div style="font-family:var(--mono);font-size:12px;color:var(--muted);margin-bottom:10px;">🔑 Clé API Anthropic requise pour générer des analyses</div>
+    <div style="font-family:var(--mono);font-size:12px;color:var(--muted);margin-bottom:10px;" data-editable>Clé API Anthropic requise pour générer des analyses</div>
     <button class="btn btn-p" style="font-size:12px;" onclick="showPage('modifs');closeMobileMenu();setTimeout(()=>document.getElementById('iaApiKey')?.focus(),300)">
       → Configurer ma clé API dans Modifications
     </button>
@@ -653,12 +653,12 @@ tbody td{padding:6px 8px;vertical-align:middle;white-space:nowrap;}
       <div class="tgl-row" style="margin-bottom:8px;">
         <span data-editable>Risk intelligent :</span>
         <div class="tgl-track" id="tglSmart" onclick="toggleSmartRisk()"><div class="tgl-thumb"></div></div>
-        <span id="smartLbl" data-editable style="color:var(--muted)">Désactivé</span>
+        <span id="smartLbl" data-editable style="color:var(--muted)"><span data-editable>Désactivé</span></span>
       </div>
       <div class="tgl-row">
         <span data-editable>Affichage risk :</span>
         <div class="tgl-track" id="tglDec" onclick="toggleDecimal()"><div class="tgl-thumb"></div></div>
-        <span data-editable>Décimales</span>
+        <span data-editable><span data-editable>Décimales</span></span>
       </div>
       <!-- ÉTAT ACTUEL: compact sur mobile, normal sur desktop -->
       <div style="background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:12px;margin-top:12px;">
@@ -688,51 +688,51 @@ tbody td{padding:6px 8px;vertical-align:middle;white-space:nowrap;}
     <div class="card-header"><div class="card-title" data-editable>AGENT IA — CONFIGURATION</div></div>
     <div class="card-body">
       <div class="fg" style="margin-bottom:14px;">
-        <label>Clé API Anthropic <a href="https://console.anthropic.com" target="_blank" style="color:var(--blue);font-size:10px;">(obtenir une clé →)</a></label>
+        <label data-editable>Clé API Anthropic </label><a href="https://console.anthropic.com" target="_blank" style="color:var(--blue);font-size:10px;">(obtenir une clé →)</a></label>
         <div style="display:flex;gap:6px;align-items:center;">
           <input type="password" id="iaApiKey" placeholder="sk-ant-..." style="flex:1;font-family:var(--mono);font-size:12px;" oninput="saveIaConfig()">
           <button class="btn btn-g" style="font-size:10px;padding:5px 10px;" onclick="document.getElementById('iaApiKey').type=document.getElementById('iaApiKey').type==='password'?'text':'password'">👁</button>
         </div>
-        <div style="font-size:10px;color:var(--muted);margin-top:4px;">Les actifs analysés sont ceux de ta liste de paires (section ci-dessous).</div>
+        <div style="font-size:10px;color:var(--muted);margin-top:4px;" data-editable>Les actifs analysés sont ceux de ta liste de paires (section ci-dessous).</div>
       </div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px;">
         <!-- Surface Horizon -->
         <div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:12px;">
           <div style="font-family:var(--mono);font-size:9px;color:var(--muted);margin-bottom:10px;letter-spacing:1px;" data-editable>HORIZON D'ANALYSE</div>
           <div style="display:flex;flex-direction:column;gap:7px;">
-            <label style="display:flex;align-items:center;gap:7px;font-size:12px;cursor:pointer;"><input type="checkbox" id="ia_h_scalping" onchange="saveIaConfig()"> Scalping</label>
-            <label style="display:flex;align-items:center;gap:7px;font-size:12px;cursor:pointer;"><input type="checkbox" id="ia_h_intraday" checked onchange="saveIaConfig()"> Intraday</label>
-            <label style="display:flex;align-items:center;gap:7px;font-size:12px;cursor:pointer;"><input type="checkbox" id="ia_h_court" onchange="saveIaConfig()"> Court terme</label>
-            <label style="display:flex;align-items:center;gap:7px;font-size:12px;cursor:pointer;"><input type="checkbox" id="ia_h_moyen" onchange="saveIaConfig()"> Moyen terme</label>
-            <label style="display:flex;align-items:center;gap:7px;font-size:12px;cursor:pointer;"><input type="checkbox" id="ia_h_long" onchange="saveIaConfig()"> Long terme</label>
-            <label style="display:flex;align-items:center;gap:7px;font-size:12px;cursor:pointer;"><input type="checkbox" id="ia_h_invest" onchange="saveIaConfig()"> Investissement</label>
+            <label style="display:flex;align-items:center;gap:7px;font-size:12px;cursor:pointer;"><input type="checkbox" id="ia_h_scalping" onchange="saveIaConfig()"> <span data-editable>Scalping</span></label>
+            <label style="display:flex;align-items:center;gap:7px;font-size:12px;cursor:pointer;"><input type="checkbox" id="ia_h_intraday" checked onchange="saveIaConfig()"> <span data-editable>Intraday</span></label>
+            <label style="display:flex;align-items:center;gap:7px;font-size:12px;cursor:pointer;"><input type="checkbox" id="ia_h_court" onchange="saveIaConfig()"> <span data-editable>Court terme</span></label>
+            <label style="display:flex;align-items:center;gap:7px;font-size:12px;cursor:pointer;"><input type="checkbox" id="ia_h_moyen" onchange="saveIaConfig()"> <span data-editable>Moyen terme</span></label>
+            <label style="display:flex;align-items:center;gap:7px;font-size:12px;cursor:pointer;"><input type="checkbox" id="ia_h_long" onchange="saveIaConfig()"> <span data-editable>Long terme</span></label>
+            <label style="display:flex;align-items:center;gap:7px;font-size:12px;cursor:pointer;"><input type="checkbox" id="ia_h_invest" onchange="saveIaConfig()"> <span data-editable>Investissement</span></label>
           </div>
         </div>
         <!-- Surface Types -->
         <div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:12px;">
           <div style="font-family:var(--mono);font-size:9px;color:var(--muted);margin-bottom:10px;letter-spacing:1px;" data-editable>TYPES D'ANALYSE</div>
           <div style="display:flex;flex-direction:column;gap:7px;">
-            <label style="display:flex;align-items:center;gap:7px;font-size:12px;cursor:pointer;"><input type="checkbox" id="ia_tech" checked onchange="saveIaConfig()"> Technique</label>
-            <label style="display:flex;align-items:center;gap:7px;font-size:12px;cursor:pointer;"><input type="checkbox" id="ia_fund" checked onchange="saveIaConfig()"> Fondamental</label>
-            <label style="display:flex;align-items:center;gap:7px;font-size:12px;cursor:pointer;"><input type="checkbox" id="ia_macro" checked onchange="saveIaConfig()"> Macroéconomique</label>
-            <label style="display:flex;align-items:center;gap:7px;font-size:12px;cursor:pointer;"><input type="checkbox" id="ia_micro" onchange="saveIaConfig()"> Microéconomique</label>
-            <label style="display:flex;align-items:center;gap:7px;font-size:12px;cursor:pointer;"><input type="checkbox" id="ia_sentiment" checked onchange="saveIaConfig()"> Sentiment</label>
-            <label style="display:flex;align-items:center;gap:7px;font-size:12px;cursor:pointer;"><input type="checkbox" id="ia_flux" checked onchange="saveIaConfig()"> Flux institutionnels</label>
-            <label style="display:flex;align-items:center;gap:7px;font-size:12px;cursor:pointer;"><input type="checkbox" id="ia_inter" checked onchange="saveIaConfig()"> Intermarket</label>
-            <label style="display:flex;align-items:center;gap:7px;font-size:12px;cursor:pointer;"><input type="checkbox" id="ia_geo" onchange="saveIaConfig()"> Géopolitique</label>
-            <label style="display:flex;align-items:center;gap:7px;font-size:12px;cursor:pointer;"><input type="checkbox" id="ia_banques" checked onchange="saveIaConfig()"> Banques centrales</label>
-            <label style="display:flex;align-items:center;gap:7px;font-size:12px;cursor:pointer;"><input type="checkbox" id="ia_oblig" onchange="saveIaConfig()"> Obligataire</label>
-            <label style="display:flex;align-items:center;gap:7px;font-size:12px;cursor:pointer;"><input type="checkbox" id="ia_crypto" onchange="saveIaConfig()"> Crypto</label>
-            <label style="display:flex;align-items:center;gap:7px;font-size:12px;cursor:pointer;"><input type="checkbox" id="ia_commo" onchange="saveIaConfig()"> Matières premières</label>
-            <label style="display:flex;align-items:center;gap:7px;font-size:12px;cursor:pointer;"><input type="checkbox" id="ia_indices" onchange="saveIaConfig()"> Indices mondiaux</label>
-            <label style="display:flex;align-items:center;gap:7px;font-size:12px;cursor:pointer;"><input type="checkbox" id="ia_liquidite" onchange="saveIaConfig()"> Liquidité globale</label>
-            <label style="display:flex;align-items:center;gap:7px;font-size:12px;cursor:pointer;"><input type="checkbox" id="ia_saisonnalite" onchange="saveIaConfig()"> Saisonnalité</label>
-            <label style="display:flex;align-items:center;gap:7px;font-size:12px;cursor:pointer;"><input type="checkbox" id="ia_orderflow" onchange="saveIaConfig()"> Order flow / COT</label>
+            <label style="display:flex;align-items:center;gap:7px;font-size:12px;cursor:pointer;"><input type="checkbox" id="ia_tech" checked onchange="saveIaConfig()"> <span data-editable>Technique</span></label>
+            <label style="display:flex;align-items:center;gap:7px;font-size:12px;cursor:pointer;"><input type="checkbox" id="ia_fund" checked onchange="saveIaConfig()"> <span data-editable>Fondamental</span></label>
+            <label style="display:flex;align-items:center;gap:7px;font-size:12px;cursor:pointer;"><input type="checkbox" id="ia_macro" checked onchange="saveIaConfig()"> <span data-editable>Macroéconomique</span></label>
+            <label style="display:flex;align-items:center;gap:7px;font-size:12px;cursor:pointer;"><input type="checkbox" id="ia_micro" onchange="saveIaConfig()"> <span data-editable>Microéconomique</span></label>
+            <label style="display:flex;align-items:center;gap:7px;font-size:12px;cursor:pointer;"><input type="checkbox" id="ia_sentiment" checked onchange="saveIaConfig()"> <span data-editable>Sentiment</span></label>
+            <label style="display:flex;align-items:center;gap:7px;font-size:12px;cursor:pointer;"><input type="checkbox" id="ia_flux" checked onchange="saveIaConfig()"> <span data-editable>Flux institutionnels</span></label>
+            <label style="display:flex;align-items:center;gap:7px;font-size:12px;cursor:pointer;"><input type="checkbox" id="ia_inter" checked onchange="saveIaConfig()"> <span data-editable>Intermarket</span></label>
+            <label style="display:flex;align-items:center;gap:7px;font-size:12px;cursor:pointer;"><input type="checkbox" id="ia_geo" onchange="saveIaConfig()"> <span data-editable>Géopolitique</span></label>
+            <label style="display:flex;align-items:center;gap:7px;font-size:12px;cursor:pointer;"><input type="checkbox" id="ia_banques" checked onchange="saveIaConfig()"> <span data-editable>Banques centrales</span></label>
+            <label style="display:flex;align-items:center;gap:7px;font-size:12px;cursor:pointer;"><input type="checkbox" id="ia_oblig" onchange="saveIaConfig()"> <span data-editable>Obligataire</span></label>
+            <label style="display:flex;align-items:center;gap:7px;font-size:12px;cursor:pointer;"><input type="checkbox" id="ia_crypto" onchange="saveIaConfig()"> <span data-editable>Crypto</span></label>
+            <label style="display:flex;align-items:center;gap:7px;font-size:12px;cursor:pointer;"><input type="checkbox" id="ia_commo" onchange="saveIaConfig()"> <span data-editable>Matières premières</span></label>
+            <label style="display:flex;align-items:center;gap:7px;font-size:12px;cursor:pointer;"><input type="checkbox" id="ia_indices" onchange="saveIaConfig()"> <span data-editable>Indices mondiaux</span></label>
+            <label style="display:flex;align-items:center;gap:7px;font-size:12px;cursor:pointer;"><input type="checkbox" id="ia_liquidite" onchange="saveIaConfig()"> <span data-editable>Liquidité globale</span></label>
+            <label style="display:flex;align-items:center;gap:7px;font-size:12px;cursor:pointer;"><input type="checkbox" id="ia_saisonnalite" onchange="saveIaConfig()"> <span data-editable>Saisonnalité</span></label>
+            <label style="display:flex;align-items:center;gap:7px;font-size:12px;cursor:pointer;"><input type="checkbox" id="ia_orderflow" onchange="saveIaConfig()"> <span data-editable>Order flow / COT</span></label>
           </div>
         </div>
       </div>
       <div class="fg">
-        <label>Modèle IA <span style="font-size:10px;color:var(--muted);">(Haiku = moins cher, Sonnet = meilleur)</span></label>
+        <label>Modèle IA <span style="font-size:10px;color:var(--muted);" data-editable>(Haiku = moins cher, Sonnet = meilleur)</span></label>
         <select id="iaModel" onchange="saveIaConfig()">
           <option value="claude-haiku-4-5-20251001">Haiku 4.5 — ~$0.02/récap</option>
           <option value="claude-sonnet-4-6" selected>Sonnet 4.6 — ~$0.10/récap</option>
@@ -903,9 +903,29 @@ if(!window._pencilDelegateSet){
   }, {capture:true, passive:false});
 }
 function saveOneEdit(el){const k=getEK(el);const edits=ls('tj_pencil_edits',{});edits[k]={html:el.innerHTML,fs:el.style.fontSize||'',col:el.style.color||''};lss('tj_pencil_edits',edits);if(typeof currentUser!=="undefined"&&currentUser&&!_isSyncing){clearTimeout(window._pushTimer);window._pushTimer=setTimeout(pushToCloud,300);}}
-function applyPencilEdits(){const edits=ls('tj_pencil_edits',{});document.querySelectorAll('[data-editable]').forEach(el=>{const k=getEK(el);if(edits[k]){if(edits[k].html!==undefined&&edits[k].html!==null)el.innerHTML=edits[k].html;if(edits[k].fs)el.style.fontSize=edits[k].fs;if(edits[k].col)el.style.color=edits[k].col;}});}
 function openCPforPencil(){openCP('Couleur texte',pencilColor,hex=>{pencilColor=hex;document.getElementById('pencilColorSwatch').style.background=hex;});}
-function applyPencilStyle(){if(!currentEditEl)return;const sz=document.getElementById('pencilFontSize').value;if(sz)currentEditEl.style.fontSize=sz+'px';currentEditEl.style.color=pencilColor;saveOneEdit(currentEditEl);}
+function applyPencilStyle(){
+  if(!currentEditEl) return;
+  const sz = document.getElementById('pencilFontSize').value;
+  if(sz) {
+    currentEditEl.style.setProperty('font-size', sz+'px', 'important');
+    currentEditEl.dataset.pencilFs = sz+'px';
+  }
+  currentEditEl.style.setProperty('color', pencilColor, 'important');
+  saveOneEdit(currentEditEl);
+}
+
+function applyPencilEdits(){
+  const edits = ls('tj_pencil_edits',{});
+  document.querySelectorAll('[data-editable]').forEach(el=>{
+    const k = getEK(el);
+    if(edits[k]){
+      if(edits[k].html !== undefined && edits[k].html !== null) el.innerHTML = edits[k].html;
+      if(edits[k].fs) el.style.setProperty('font-size', edits[k].fs, 'important');
+      if(edits[k].col) el.style.setProperty('color', edits[k].col, 'important');
+    }
+  });
+}
 
 // ══ CONFIRM ══
 let confirmCB=null;
