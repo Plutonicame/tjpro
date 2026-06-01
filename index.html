@@ -575,7 +575,15 @@ tbody td{padding:6px 8px;vertical-align:middle;white-space:nowrap;}
 
 <!-- RÉCAP IA -->
 <div class="page" id="page-recap" style="display:none">
-  <div class="page-title">Récap IA — Marchés</div>
+  <div class="page-title" data-editable>Récap IA — Marchés</div>
+
+  <!-- Message si pas de clé API -->
+  <div id="recapNoKey" style="display:none;margin-bottom:14px;padding:14px;background:var(--surface);border:1px solid var(--border);border-radius:8px;text-align:center;">
+    <div style="font-family:var(--mono);font-size:12px;color:var(--muted);margin-bottom:10px;">🔑 Clé API Anthropic requise pour générer des analyses</div>
+    <button class="btn btn-p" style="font-size:12px;" onclick="showPage('modifs');closeMobileMenu();setTimeout(()=>document.getElementById('iaApiKey')?.focus(),300)">
+      → Configurer ma clé API dans Modifications
+    </button>
+  </div>
 
   <!-- Barre d'actifs / onglets -->
   <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px;align-items:center;">
@@ -677,7 +685,7 @@ tbody td{padding:6px 8px;vertical-align:middle;white-space:nowrap;}
 
   <!-- AGENT IA -->
   <div class="card">
-    <div class="card-header"><div class="card-title">🤖 AGENT IA — CONFIGURATION</div></div>
+    <div class="card-header"><div class="card-title" data-editable>🤖 AGENT IA — CONFIGURATION</div></div>
     <div class="card-body">
       <div class="fg" style="margin-bottom:14px;">
         <label>Clé API Anthropic <a href="https://console.anthropic.com" target="_blank" style="color:var(--blue);font-size:10px;">(obtenir une clé →)</a></label>
@@ -690,7 +698,7 @@ tbody td{padding:6px 8px;vertical-align:middle;white-space:nowrap;}
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px;">
         <!-- Surface Horizon -->
         <div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:12px;">
-          <div style="font-family:var(--mono);font-size:9px;color:var(--muted);margin-bottom:10px;letter-spacing:1px;">HORIZON D'ANALYSE</div>
+          <div style="font-family:var(--mono);font-size:9px;color:var(--muted);margin-bottom:10px;letter-spacing:1px;" data-editable>HORIZON D'ANALYSE</div>
           <div style="display:flex;flex-direction:column;gap:7px;">
             <label style="display:flex;align-items:center;gap:7px;font-size:12px;cursor:pointer;"><input type="checkbox" id="ia_h_scalping" onchange="saveIaConfig()"> Scalping</label>
             <label style="display:flex;align-items:center;gap:7px;font-size:12px;cursor:pointer;"><input type="checkbox" id="ia_h_intraday" checked onchange="saveIaConfig()"> Intraday</label>
@@ -702,7 +710,7 @@ tbody td{padding:6px 8px;vertical-align:middle;white-space:nowrap;}
         </div>
         <!-- Surface Types -->
         <div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:12px;">
-          <div style="font-family:var(--mono);font-size:9px;color:var(--muted);margin-bottom:10px;letter-spacing:1px;">TYPES D'ANALYSE</div>
+          <div style="font-family:var(--mono);font-size:9px;color:var(--muted);margin-bottom:10px;letter-spacing:1px;" data-editable>TYPES D'ANALYSE</div>
           <div style="display:flex;flex-direction:column;gap:7px;">
             <label style="display:flex;align-items:center;gap:7px;font-size:12px;cursor:pointer;"><input type="checkbox" id="ia_tech" checked onchange="saveIaConfig()"> Technique</label>
             <label style="display:flex;align-items:center;gap:7px;font-size:12px;cursor:pointer;"><input type="checkbox" id="ia_fund" checked onchange="saveIaConfig()"> Fondamental</label>
@@ -863,12 +871,36 @@ function togglePencil(){
   } else setupPencil();
 }
 function setupPencil(){
+  // Ajouter listeners sur éléments existants
   document.querySelectorAll('[data-editable]').forEach(el=>{
     if(!el._ph){el._ph=function(e){if(!pencilActive)return;e.stopPropagation();e.preventDefault();
       if(currentEditEl&&currentEditEl!==el){currentEditEl.removeAttribute('contenteditable');saveOneEdit(currentEditEl);}
       currentEditEl=el;el.setAttribute('contenteditable','true');el.focus();};
-      el.addEventListener('click',el._ph);}
+      el.addEventListener('click',el._ph);
+      el.addEventListener('touchend',el._ph,{passive:false}); // support tactile téléphone
+    }
   });
+}
+
+// Délégation globale — capture les éléments data-editable même dynamiques
+if(!window._pencilDelegateSet){
+  window._pencilDelegateSet = true;
+  document.addEventListener('click', e=>{
+    if(!pencilActive) return;
+    const el = e.target.closest('[data-editable]');
+    if(!el) return;
+    e.stopPropagation(); e.preventDefault();
+    if(currentEditEl && currentEditEl!==el){currentEditEl.removeAttribute('contenteditable');saveOneEdit(currentEditEl);}
+    currentEditEl=el; el.setAttribute('contenteditable','true'); el.focus();
+  }, true);
+  document.addEventListener('touchend', e=>{
+    if(!pencilActive) return;
+    const el = e.target.closest('[data-editable]');
+    if(!el) return;
+    e.stopPropagation(); e.preventDefault();
+    if(currentEditEl && currentEditEl!==el){currentEditEl.removeAttribute('contenteditable');saveOneEdit(currentEditEl);}
+    currentEditEl=el; el.setAttribute('contenteditable','true'); el.focus();
+  }, {capture:true, passive:false});
 }
 function saveOneEdit(el){const k=getEK(el);const edits=ls('tj_pencil_edits',{});edits[k]={html:el.innerHTML,fs:el.style.fontSize||'',col:el.style.color||''};lss('tj_pencil_edits',edits);if(typeof currentUser!=="undefined"&&currentUser&&!_isSyncing){clearTimeout(window._pushTimer);window._pushTimer=setTimeout(pushToCloud,300);}}
 function applyPencilEdits(){const edits=ls('tj_pencil_edits',{});document.querySelectorAll('[data-editable]').forEach(el=>{const k=getEK(el);if(edits[k]){if(edits[k].html!==undefined&&edits[k].html!==null)el.innerHTML=edits[k].html;if(edits[k].fs)el.style.fontSize=edits[k].fs;if(edits[k].col)el.style.color=edits[k].col;}});}
@@ -947,6 +979,7 @@ function showPage(id,btn){
   if(id==='trackrecord')setTimeout(refreshAllCharts,50);
   if(id==='calendrier')renderCalendar();
   if(id==='modifs')renderModifs();
+  setTimeout(setupPencil, 50);
 }
 
 // ══ FORM ══
@@ -1093,11 +1126,12 @@ function renderModifs(){
   const MK=[{key:'paires',label:'Paires / Actifs',cv:'--mt-paires'},{key:'sessions',label:'Sessions',cv:'--mt-sessions'},{key:'confluences',label:'Confluences',cv:'--mt-confluences'},{key:'timeframes',label:'Timeframes',cv:'--mt-timeframes'},{key:'mgmt_opts',label:'Management',cv:'--mt-mgmt'},{key:'reprend_opts',label:'Reprendrais-tu ?',cv:'--mt-reprend'}];
   document.getElementById('modGrid').innerHTML=MK.map(({key,label,cv})=>`
     <div class="mod-col">
-      <div class="mod-col-hdr"><span class="mod-col-title" style="color:var(${cv})">${label}</span><span style="font-size:9px;color:var(--muted)">${(APP.lists[key]||[]).length}</span></div>
-      <div class="mod-list" id="ml-${key}">${(APP.lists[key]||[]).map((item,i)=>`<div class="mod-item"><span class="drag-h">⣿</span><span class="item-tx">${item}</span><button class="del-item" onclick="removeListItem('${key}',${i})">×</button></div>`).join('')}</div>
+      <div class="mod-col-hdr"><span class="mod-col-title" data-editable style="color:var(${cv})">${label}</span><span style="font-size:9px;color:var(--muted)">${(APP.lists[key]||[]).length}</span></div>
+      <div class="mod-list" id="ml-${key}">${(APP.lists[key]||[]).map((item,i)=>`<div class="mod-item"><span class="drag-h">⣿</span><span class="item-tx" data-editable>${item}</span><button class="del-item" onclick="removeListItem('${key}',${i})">×</button></div>`).join('')}</div>
       <div class="mod-add"><input type="text" id="ma-${key}" placeholder="Ajouter..." onkeydown="if(event.key==='Enter')addListItem('${key}')"><button onclick="addListItem('${key}')">+</button></div>
     </div>`).join('');
   MK.forEach(({key})=>{const el=document.getElementById('ml-'+key);if(el&&window.Sortable){new Sortable(el,{animation:120,handle:'.drag-h',onEnd:evt=>{const list=APP.lists[key];const[m]=list.splice(evt.oldIndex,1);list.splice(evt.newIndex,0,m);saveState();populateSelects();if(currentUser&&!_isSyncing){clearTimeout(window._pushTimer);window._pushTimer=setTimeout(pushToCloud,300);}}});}});
+  setupPencil(); // re-attacher les listeners dynamiques
   // Compact on mobile
   applyMobileModState();
 }
@@ -2336,6 +2370,11 @@ function getRecapAssets() {
 
 function renderRecapTabs() {
   const assets = getRecapAssets();
+  const cfg = getIaConfig();
+  const noKey = document.getElementById('recapNoKey');
+  const genBtn = document.getElementById('recapGenBtn');
+  if (noKey) noKey.style.display = (!cfg.apiKey || !cfg.apiKey.startsWith('sk-ant-')) ? 'block' : 'none';
+  if (genBtn) genBtn.style.display = (!cfg.apiKey || !cfg.apiKey.startsWith('sk-ant-')) ? 'none' : '';
   const wrap = document.getElementById('recapAssetTabs'); if(!wrap) return;
   wrap.innerHTML = assets.map((a,i) => `
     <button onclick="selectRecapAsset(${i})" id="rtab_${i}"
