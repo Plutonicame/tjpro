@@ -416,11 +416,11 @@ tbody td{padding:6px 8px;vertical-align:middle;white-space:nowrap;}
 <nav class="nav">
   <div class="nav-desktop">
     <div class="nav-logo" data-editable>TJP</div>
-    <button class="nav-tab active" onclick="showPage('trackrecord',this)"><span data-editable>Track Record</span</button>
-    <button class="nav-tab" onclick="showPage('journal',this)">Journal</button>
-    <button class="nav-tab" onclick="showPage('calendrier',this)">Calendrier</button>
-    <button class="nav-tab" onclick="showPage('recap',this)">Récap IA</button>
-    <button class="nav-tab" onclick="showPage('modifs',this)">Modifications</button>
+    <button class="nav-tab active" onclick="showPage('trackrecord',this)"><span data-editable>Track Record</span></button>
+    <button class="nav-tab" onclick="showPage('journal',this)"><span data-editable>Journal</span></button>
+    <button class="nav-tab" onclick="showPage('calendrier',this)"><span data-editable>Calendrier</span></button>
+    <button class="nav-tab" onclick="showPage('recap',this)"><span data-editable>Récap IA</span></button>
+    <button class="nav-tab" onclick="showPage('modifs',this)"><span data-editable>Modifications</span></button>
     <div class="nav-clocks">
       <div class="clock-item"><span class="clock-city">NEW YORK</span><span class="clock-time" id="clkNY">--:--:--</span></div>
       <div class="clock-item"><span class="clock-city">LONDON</span><span class="clock-time" id="clkLN">--:--:--</span></div>
@@ -1039,7 +1039,6 @@ function viewTradeImages(id){
   document.getElementById('imgViewContent').innerHTML=t.images.map((src,i)=>`
     <div style="position:relative;display:inline-block;">
       <img src="${src}" style="max-width:100%;max-height:300px;border-radius:8px;border:1px solid var(--border);display:block;margin-bottom:8px;">
-      <button onclick="deleteTradeImage(${id},${i})" style="position:absolute;top:4px;right:4px;background:#ef4444;color:#fff;border:none;border-radius:4px;padding:2px 6px;cursor:pointer;font-size:11px;">×</button>
     </div>`).join('');
   modal.classList.add('open');
 }
@@ -1692,10 +1691,12 @@ function openEditTrade(id){
   renderEditImages(t.images||[]);
   const selTf  = (t.tf||'').split(',').map(s=>s.trim()).filter(Boolean);
   const selConf= (t.conf||'').split(',').map(s=>s.trim()).filter(Boolean);
+  const tfList = APP.lists.timeframes||DEF.timeframes||[];
+  const confList = APP.lists.confluences||DEF.confluences||[];
   document.getElementById('e-tf-wrap').innerHTML =
-    (APP.lists.timeframes||[]).map(tf=>`<div class="chip${selTf.includes(tf)?' sel':''}" data-v="${tf}" onclick="this.classList.toggle('sel')">${tf}</div>`).join('');
+    tfList.map(tf=>`<div class="chip${selTf.includes(tf)?' sel':''}" data-v="${tf}" onclick="this.classList.toggle('sel')">${tf}</div>`).join('');
   document.getElementById('e-conf-wrap').innerHTML =
-    (APP.lists.confluences||[]).map(c=>`<div class="chip${selConf.includes(c)?' sel':''}" data-v="${c}" onclick="this.classList.toggle('sel')">${c}</div>`).join('');
+    confList.map(c=>`<div class="chip${selConf.includes(c)?' sel':''}" data-v="${c}" onclick="this.classList.toggle('sel')">${c}</div>`).join('');
   document.getElementById('editModal').classList.add('open');
   // Init étoiles après ouverture du modal
   setTimeout(()=>initStarPicker('e-stars-picker','e-stars',t.stars||0),60);
