@@ -372,7 +372,7 @@ tbody td{padding:6px 8px;vertical-align:middle;white-space:nowrap;}
 <div id="pencilToolbar">
   <span style="font-family:var(--mono);font-size:9px;color:var(--green)">STYLO</span>
   <label style="font-family:var(--mono);font-size:9px;color:var(--muted)">Taille:</label>
-  <input type="number" id="pencilFontSize" value="14" min="8" max="72">
+  <input type="number" id="pencilFontSize" value="14" min="8" max="72" oninput="applyPencilStyle()">
   <label style="font-family:var(--mono);font-size:9px;color:var(--muted)">Couleur:</label>
   <div id="pencilColorSwatch" onclick="openCPforPencil()" title="Couleur"></div>
   <button class="btn btn-g" style="padding:3px 9px;font-size:9px;" onclick="applyPencilStyle()">✓</button>
