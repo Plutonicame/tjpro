@@ -414,18 +414,20 @@ tbody td{padding:6px 8px;vertical-align:middle;white-space:nowrap;}
 
 <!-- NAV DESKTOP (une seule ligne) -->
 <nav class="nav">
-  <div class="nav-desktop">
+  <div class="nav-desktop" style="position:relative;">
     <div class="nav-logo" data-editable>TJP</div>
     <button class="nav-tab active" onclick="showPage('trackrecord',this)"><span data-editable>Track Record</span></button>
     <button class="nav-tab" onclick="showPage('journal',this)"><span data-editable>Journal</span></button>
     <button class="nav-tab" onclick="showPage('calendrier',this)"><span data-editable>Calendrier</span></button>
     <button class="nav-tab" onclick="showPage('recap',this)"><span data-editable>Récap IA</span></button>
     <button class="nav-tab" onclick="showPage('modifs',this)"><span data-editable>Modifications</span></button>
-    <div class="nav-clocks">
+    <!-- Horloges centrées absolument -->
+    <div class="nav-clocks" style="position:absolute;left:50%;transform:translateX(-50%);">
       <div class="clock-item"><span class="clock-city">NEW YORK</span><span class="clock-time" id="clkNY">--:--:--</span></div>
       <div class="clock-item"><span class="clock-city">LONDON</span><span class="clock-time" id="clkLN">--:--:--</span></div>
       <div class="clock-item"><span class="clock-city">TOKYO</span><span class="clock-time" id="clkTK">--:--:--</span></div>
     </div>
+    <div style="flex:1;"></div>
     <div class="session-badge" id="sessionBadge">—</div>
     <div class="nav-badges">
       <div class="nbadge nb-t" id="navTrades">—</div>
@@ -871,13 +873,17 @@ function togglePencil(){
   } else setupPencil();
 }
 function setupPencil(){
-  // Ajouter listeners sur éléments existants
   document.querySelectorAll('[data-editable]').forEach(el=>{
-    if(!el._ph){el._ph=function(e){if(!pencilActive)return;e.stopPropagation();e.preventDefault();
-      if(currentEditEl&&currentEditEl!==el){currentEditEl.removeAttribute('contenteditable');saveOneEdit(currentEditEl);}
-      currentEditEl=el;el.setAttribute('contenteditable','true');el.focus();};
+    if(!el._ph){
+      el._ph=function(e){
+        if(!pencilActive)return;
+        const isNavSpan=el.closest('.nav-tab');
+        if(!isNavSpan){e.stopPropagation();e.preventDefault();}
+        if(currentEditEl&&currentEditEl!==el){currentEditEl.removeAttribute('contenteditable');saveOneEdit(currentEditEl);}
+        currentEditEl=el;el.setAttribute('contenteditable','true');el.focus();
+      };
       el.addEventListener('click',el._ph);
-      el.addEventListener('touchend',el._ph,{passive:false}); // support tactile téléphone
+      el.addEventListener('touchend',el._ph,{passive:false});
     }
   });
 }
@@ -2162,7 +2168,12 @@ async function pullFromCloud() {
 
 function applyCloudData(data) {
   APP.trades = data.trades || [];
-  APP.lists = data.lists || APP.lists;
+  // Ne pas écraser les listes si celles du cloud sont vides
+  if(data.lists) {
+    const merged = {...APP.lists};
+    Object.entries(data.lists).forEach(([k,v])=>{ if(v&&v.length>0) merged[k]=v; });
+    APP.lists = merged;
+  }
   APP.nextId = data.next_id || APP.nextId;
   if (data.capital) localStorage.setItem('tj_capital', data.capital);
   if (data.risk) localStorage.setItem('tj_risk', data.risk);
