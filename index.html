@@ -1043,10 +1043,29 @@ function viewTradeImages(id){
   if(!t||!t.images||!t.images.length)return;
   const modal=document.getElementById('imgViewModal');
   document.getElementById('imgViewContent').innerHTML=t.images.map((src,i)=>`
-    <div style="position:relative;display:inline-block;">
-      <img src="${src}" style="max-width:100%;max-height:300px;border-radius:8px;border:1px solid var(--border);display:block;margin-bottom:8px;">
+    <div style="position:relative;text-align:center;">
+      <img src="${src}" style="max-width:100%;max-height:60vh;width:auto;height:auto;border-radius:8px;border:1px solid var(--border);display:block;margin:0 auto 8px;object-fit:contain;cursor:zoom-in;" onclick="openFullscreen('${src}')">
+      <button onclick="openFullscreen('${src}')" style="background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:4px;padding:4px 10px;font-size:11px;cursor:pointer;font-family:var(--mono);margin-bottom:8px;">⛶ Plein écran</button>
     </div>`).join('');
   modal.classList.add('open');
+}
+
+function openFullscreen(src){
+  // Créer overlay plein écran
+  const overlay = document.createElement('div');
+  overlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.95);z-index:99999;display:flex;align-items:center;justify-content:center;cursor:zoom-out;';
+  overlay.onclick = () => document.body.removeChild(overlay);
+  const img = document.createElement('img');
+  img.src = src;
+  img.style.cssText='max-width:95vw;max-height:95vh;width:auto;height:auto;object-fit:contain;border-radius:6px;';
+  // Bouton fermer
+  const closeBtn = document.createElement('button');
+  closeBtn.textContent='✕';
+  closeBtn.style.cssText='position:absolute;top:16px;right:16px;background:rgba(255,255,255,.15);border:none;color:#fff;font-size:20px;width:40px;height:40px;border-radius:50%;cursor:pointer;';
+  closeBtn.onclick=(e)=>{e.stopPropagation();document.body.removeChild(overlay);};
+  overlay.appendChild(img);
+  overlay.appendChild(closeBtn);
+  document.body.appendChild(overlay);
 }
 function deleteTradeImage(id,idx){
   const t=APP.trades.find(x=>x.id===id);
