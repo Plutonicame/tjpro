@@ -2043,27 +2043,68 @@ function setupEnterPin() {
 }
 
 async function afterPinValidated() {
+  // Afficher écran de chargement
   showOverlay(null);
-  // Toujours tenter de rafraîchir la session avant de pull
+  const loadEl = document.createElement('div');
+  loadEl.id = 'loadingScreen';
+  loadEl.style.cssText = 'position:fixed;inset:0;background:var(--bg,#0b0f1a);z-index:9998;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;';
+  loadEl.innerHTML = '<div style="font-family:var(--mono,monospace);font-size:14px;color:var(--muted,#6b7a99);">Chargement...</div>';
+  document.body.appendChild(loadEl);
+
+  // Refresh session + pull forcé
   try {
     const { data } = await sb.auth.refreshSession();
     if (data?.session?.user) currentUser = data.session.user;
   } catch(e) {}
-  // Pull forcé depuis le cloud
-  await pullFromCloud();
-  // Démarrer le realtime après
-  setTimeout(startRealtime, 1500);
-  // Poll périodique toutes les 30s en cas de perte du canal realtime
+
+  // Pull avec retry
+  let pulled = false;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      const { data, error } = await sb.from('journal_data')
+        .select('*').eq('user_id', currentUser.id)
+        .order('updated_at', { ascending: false }).limit(1);
+      if (!error && data && data.length) {
+        _isSyncing = true;
+        applyCloudData(data[0]);
+        setTimeout(() => _isSyncing = false, 500);
+        pulled = true;
+        break;
+      }
+    } catch(e) {}
+    await new Promise(r => setTimeout(r, 1000));
+  }
+
+  // Supprimer écran de chargement
+  const le = document.getElementById('loadingScreen');
+  if (le) le.remove();
+
+  if (pulled) showSync('✓ Données chargées', '#22c55e');
+
+  // Realtime + poll 30s
+  setTimeout(startRealtime, 500);
   if (!window._pollInterval) {
     window._pollInterval = setInterval(async () => {
-      if (currentUser && !_isSyncing && !_isPushing) {
-        try {
-          const { data } = await sb.auth.refreshSession();
-          if (data?.session?.user) currentUser = data.session.user;
-        } catch(e) {}
-        await pullFromCloud();
-      }
-    }, 30000);
+      if (!currentUser || _isSyncing || _isPushing) return;
+      try {
+        const { data: rd } = await sb.auth.refreshSession();
+        if (rd?.session?.user) currentUser = rd.session.user;
+        const { data, error } = await sb.from('journal_data')
+          .select('*').eq('user_id', currentUser.id)
+          .order('updated_at', { ascending: false }).limit(1);
+        if (!error && data && data.length) {
+          // Comparer updated_at avec ce qu'on a localement
+          const localTs = localStorage.getItem('tjp_last_updated_at');
+          if (data[0].updated_at !== localTs) {
+            _isSyncing = true;
+            applyCloudData(data[0]);
+            localStorage.setItem('tjp_last_updated_at', data[0].updated_at);
+            setTimeout(() => _isSyncing = false, 500);
+            showSync('✓ Mis à jour', '#22c55e');
+          }
+        }
+      } catch(e) {}
+    }, 15000); // toutes les 15s
   }
 }
 
@@ -2184,7 +2225,7 @@ async function pushToCloud() {
     _lastPushTimestamp = data.updated_at;
     const { error } = await sb.from('journal_data').upsert(data, { onConflict: 'user_id' });
     if (error) { showSync('⚠ '+error.message, '#ef4444'); }
-    else { showSync('✓ Sauvegardé', '#22c55e'); }
+    else { showSync('✓ Sauvegardé', '#22c55e'); localStorage.setItem('tjp_last_updated_at', data.updated_at); }
   } catch(e) { showSync('⚠ Réseau', '#f59e0b'); }
   setTimeout(() => { _isPushing = false; }, 500);
 }
