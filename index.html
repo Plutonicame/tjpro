@@ -38,7 +38,7 @@
   --badge-p-bg:rgba(59,130,246,.1);--badge-p-bd:rgba(59,130,246,.3);--badge-p-tx:#3b82f6;
   --badge-r-bg:rgba(245,158,11,.1);--badge-r-bd:rgba(245,158,11,.3);--badge-r-tx:#f59e0b;
   --eq-line:#00e5a0;--eq-fill-top:rgba(0,229,160,.32);--eq-fill-bot:rgba(0,229,160,0);--eq-bg:#161d2e;--eq-axis:#64748b;--eq-grid:rgba(100,116,139,.1);
-  --pnl-line-pos:#3b82f6;--pnl-line-neg:#ef4444;--pnl-fill-pos-top:rgba(59,130,246,.35);--pnl-fill-pos-bot:rgba(59,130,246,0);--pnl-fill-neg-top:rgba(239,68,68,0);--pnl-fill-neg-bot:rgba(239,68,68,.35);--pnl-bg:#161d2e;--pnl-axis:#64748b;--pnl-grid:rgba(100,116,139,.1);
+  --pnl-bar-pos:#3b82f6;--pnl-bar-neg:#ef4444;--pnl-line-pos:#3b82f6;--pnl-line-neg:#ef4444;--pnl-fill-pos-top:rgba(59,130,246,.35);--pnl-fill-pos-bot:rgba(59,130,246,0);--pnl-fill-neg-top:rgba(239,68,68,0);--pnl-fill-neg-bot:rgba(239,68,68,.35);--pnl-bg:#161d2e;--pnl-axis:#64748b;--pnl-grid:rgba(100,116,139,.1);
   --risk-line:#f59e0b;--risk-fill-top:rgba(245,158,11,.25);--risk-fill-bot:rgba(245,158,11,0);--risk-base:rgba(100,116,139,.5);--risk-bg:#161d2e;--risk-axis:#f59e0b;--risk-grid:rgba(100,116,139,.1);--risk-euro-tx:#3b82f6;
   --pie-win:rgba(0,229,160,.85);--pie-lose:rgba(239,68,68,.85);--pie-neutral:rgba(100,116,139,.6);
   --mgmt-bg:#161d2e;--mgmt-yes:#00e5a0;--mgmt-no:#ef4444;--mgmt-yes-alpha:rgba(0,229,160,.35);--mgmt-no-alpha:rgba(239,68,68,.35);--mgmt-yes-bd:#00e5a0;--mgmt-no-bd:#ef4444;--mgmt-axis:#64748b;--mgmt-grid:rgba(100,116,139,.1);
@@ -463,7 +463,7 @@ tbody td{padding:6px 8px;vertical-align:middle;white-space:nowrap;}
 <!-- TRACK RECORD -->
 <div class="page active" id="page-trackrecord">
   <div class="page-title" data-editable>Track Record</div>
-  <div class="page-sub" data-editable>Risk +1% / 3 gains consécutifs · Baisse de 1% si −5% capital</div>
+  <div class="page-sub" data-editable>Risk −0.5% si DD≥5% depuis sommet · Récup ou 3 gains = +0.5%</div>
   <div class="kpi-strip">
     <div class="kpi-card"><div class="kpi-bar" id="kb1"></div><div class="kpi-icon" data-editable>💰</div><div class="kpi-label" data-editable>Capital</div><div class="kpi-value" id="k0">—</div></div>
     <div class="kpi-card"><div class="kpi-bar" id="kb2"></div><div class="kpi-icon" data-editable>📈</div><div class="kpi-label" data-editable>P&L Total</div><div class="kpi-value" id="k1">—</div></div>
@@ -934,57 +934,84 @@ function confirmReject(){document.getElementById('confirmModal').classList.remov
 // ══ RISK LOGIC ══
 function computeRiskHistory(){
   const sorted=[...APP.trades].sort((a,b)=>a.date.localeCompare(b.date)||(a.heure||'').localeCompare(b.heure||''));
-  const base=RBASE(),smart=SMART();let rp=base,ws=0,ls2=0;
-  let capRef=CAPITAL(),runCap=CAPITAL();
-  let lastMoveWasDown=false; // mode rattrapage disponible seulement si dernier mouvement = baisse
-  let recoveryCapTarget=null; // capital à atteindre pour valider le rattrapage
-  let rpBeforeLoss=null;
+  const base=RBASE(),smart=SMART();
+  let rp=base,ws=0,ls2=0;
+  let runCap=CAPITAL();
+  let highestEq=runCap;
+  let inDrawdown=false; // true = on a baissé le risque, attente du rattrapage
   const hist=[{date:'Départ',rp:base,ws:0,ls:0}];
   sorted.forEach(t=>{
-    const res=t.res||0; runCap+=res;
+    const res=t.res||0;
+    runCap+=res;
     if(smart){
-      if(res>0){
-        ls2=0;
-        if(lastMoveWasDown && recoveryCapTarget!==null && runCap>=recoveryCapTarget){
-          // Rattrapage validé → +0.5%, mode rattrapage désactivé (dernier mouvement = hausse)
-          rp=Math.min(RMAX(),Math.round(rpBeforeLoss*10)/10);
-          lastMoveWasDown=false; recoveryCapTarget=null; rpBeforeLoss=null;
-          ws=0; capRef=runCap;
-        } else if(!lastMoveWasDown){
-          // Pas en mode rattrapage → règle des 3 gains
+      // Mettre à jour le plus haut SANS remonter le risque automatiquement
+      if(runCap>highestEq) highestEq=runCap;
+      // Calculer drawdown depuis le plus haut
+      const dd=highestEq>0?((highestEq-runCap)/highestEq)*100:0;
+      if(dd>=5&&!inDrawdown){
+        // Drawdown >=5% : baisser de 0.5%
+        rp=Math.max(0.01,Math.round((rp-0.5)*100)/100);
+        inDrawdown=true;
+        ws=0;ls2++;
+      } else if(res>0){
+        if(inDrawdown&&runCap>=highestEq){
+          // Rattrapage : retour au plus haut → +0.5%
+          rp=Math.min(RMAX(),Math.round((rp+0.5)*100)/100);
+          inDrawdown=false;ws=0;
+        } else if(!inDrawdown){
+          // 3 gains consécutifs → +0.5%
           ws++;
-          if(ws%3===0){
-            rp=Math.min(RMAX(),Math.round((rp+0.5)*10)/10);
-            capRef=runCap;
-            // Après un +0.5% par gains, lastMoveWasDown reste false → pas de rattrapage dispo
-          }
+          if(ws%3===0){rp=Math.min(RMAX(),Math.round((rp+0.5)*100)/100);}
         }
-        // Si lastMoveWasDown mais pas encore atteint la cible → on attend, pas de +0.5%
       } else if(res<0){
-        ws=0; ls2++;
-        const dd=(runCap-capRef)/capRef*100;
-        const steps=Math.floor(Math.abs(Math.min(dd,0))/5);
-        if(steps>0){
-          rpBeforeLoss=rp;
-          for(let i=0;i<steps;i++){rp=rp>=1?Math.max(0.01,Math.round((rp-1)*100)/100):Math.max(0.01,Math.round(rp/2*1000)/1000);}
-          lastMoveWasDown=true;
-          recoveryCapTarget=capRef; // doit revenir au capital d'avant la perte
-          capRef=runCap;
-        }
+        if(!inDrawdown) ws=0; // reset streak sur perte (si pas encore en drawdown)
       }
     }
     hist.push({date:t.date,heure:t.heure||'',rp,ws,ls:ls2});
   });
   return{hist,finalRp:rp,finalWs:ws,finalLs:ls2};
 }
-function getCurrentCap(){
-  const pnl=APP.trades.reduce((s,t)=>s+(t.res||0),0);
-  const payouts=ls('tj_payouts',[]).reduce((s,p)=>s+p.amount,0);
-  return CAPITAL()+pnl-payouts;
-}
-function getCurrentRiskPct(){return SMART()?computeRiskHistory().finalRp:RBASE();}
-function getCurrentRiskEur(){const rp=getCurrentRiskPct(),cap=getCurrentCap();const raw=cap*rp/100;return RDEC()?parseFloat(raw.toFixed(2)):Math.round(raw);}
 function computeRR(t){const re=Math.max(1,Math.round(CAPITAL()*RBASE()/100));return parseFloat((t.res/re).toFixed(2));}
+
+// ══ RISK CHART ══
+function drawRiskChart(period){
+  const tr=filterT(period);destroy('risk');
+  const axC=gc('--risk-axis')||'#f59e0b';
+  const grC=gc('--risk-grid')||'rgba(100,116,139,.1)';
+  const lineC=gc('--risk-line')||'#f59e0b';
+  const baseC=gc('--risk-base')||'rgba(100,116,139,.5)';
+  const rmax=RMAX(),base=RBASE();
+  let rp=base,ws=0,ls2=0;
+  let runCap=CAPITAL(),highestEq=CAPITAL(),inDrawdown=false;
+  const labels=['Départ'],riskData=[base];
+  tr.forEach(t=>{
+    const res=t.res||0;runCap+=res;
+    if(runCap>highestEq)highestEq=runCap;
+    const dd=highestEq>0?((highestEq-runCap)/highestEq)*100:0;
+    if(dd>=5&&!inDrawdown){rp=Math.max(0.01,Math.round((rp-0.5)*100)/100);inDrawdown=true;ws=0;ls2++;}
+    else if(res>0){
+      if(inDrawdown&&runCap>=highestEq){rp=Math.min(rmax,Math.round((rp+0.5)*100)/100);inDrawdown=false;ws=0;}
+      else if(!inDrawdown){ws++;if(ws%3===0)rp=Math.min(rmax,Math.round((rp+0.5)*100)/100);}
+    }else if(res<0&&!inDrawdown){ws=0;}
+    labels.push(t.date);riskData.push(rp);
+  });
+  const ctx=document.getElementById('cRisk').getContext('2d');
+  CH['risk']=new Chart(ctx,{
+    type:'line',
+    data:{labels,datasets:[
+      {label:'Risk %',data:riskData,borderColor:lineC,backgroundColor:gc('--risk-fill-top')||'rgba(245,158,11,.15)',fill:true,tension:0.3,pointRadius:0,borderWidth:2},
+      {label:'Base',data:Array(labels.length).fill(base),borderColor:baseC,borderDash:[4,4],pointRadius:0,borderWidth:1,fill:false}
+    ]},
+    options:{responsive:true,maintainAspectRatio:false,
+      plugins:{legend:{display:false},tooltip:{callbacks:{label:i=>` Risk: ${i.raw}%`}}},
+      scales:{
+        x:{grid:{color:grC},ticks:{color:axC,maxTicksLimit:10,maxRotation:0}},
+        y:{grid:{color:grC},ticks:{color:axC,callback:v=>v+'%'},
+           title:{display:true,text:'Risk %',color:axC,font:{size:9}}}
+      }
+    }
+  });
+}
 function computeWorstLose(){const s=[...APP.trades].sort((a,b)=>a.date.localeCompare(b.date));let max=0,cur=0;s.forEach(t=>{if(t.res<0){cur++;max=Math.max(max,cur);}else if(t.res>0)cur=0;});return max;}
 function computePctBefore(tid){const s=[...APP.trades].sort((a,b)=>a.date.localeCompare(b.date)||(a.heure||'').localeCompare(b.heure||''));let cap=CAPITAL();for(const t of s){if(t.id===tid)return(t.res/cap)*100;cap+=(t.res||0);}return 0;}
 
@@ -1255,7 +1282,10 @@ function updateKPIs(){
   const rp=getCurrentRiskPct(),re=getCurrentRiskEur(),worst=computeWorstLose();
   const fr=n=>n.toLocaleString('fr-FR',{minimumFractionDigits:2,maximumFractionDigits:2});
   document.getElementById('k0').textContent=fr(getCurrentCap())+'€';
-  const k1=document.getElementById('k1');k1.textContent=(pnl>=0?'+':'')+fr(pnl)+'€';k1.style.color=pnl>=0?'var(--green)':'var(--red)';
+  const k1=document.getElementById('k1');
+  const pnlPct=CAPITAL()>0?(pnl/CAPITAL()*100):0;
+  k1.textContent=(pnl>=0?'+':'')+fr(pnl)+'€ ('+(pnlPct>=0?'+':'')+pnlPct.toFixed(1)+'%)';
+  k1.style.color=pnl>=0?'var(--green)':'var(--red)';
   document.getElementById('k2').textContent=wr.toFixed(1)+'%';document.getElementById('k3').textContent=rrMoy.toFixed(2)+'R';
   document.getElementById('k4').textContent=pf.toFixed(2);
   {const totalPO=ls('tj_payouts',[]).reduce((s,p)=>s+p.amount,0);
@@ -1280,186 +1310,40 @@ function drawEquity(period){
       scales:{x:{grid:{color:grC},ticks:{maxRotation:30,maxTicksLimit:12,color:axC}},y:{grid:{color:grC},ticks:{color:axC,callback:v=>v.toLocaleString('fr-FR')+'€'}}}}});
 }
 
-// PNL — fill natif Chart.js avec interpolation exacte au croisement du zéro
+// PNL — Diagramme en barres par trade
 function drawPnl(period){
   const tr=filterT(period);destroy('pnl');
-  let labels=[],data=[];
-  const M=['Jan','Fév','Mar','Avr','Mai','Jun','Jul','Aoû','Sep','Oct','Nov','Déc'];
-  if(period==='jour'||period==='semaine'){
-    labels=tr.map(t=>t.heure||t.date);
-    data=tr.map(t=>t.res||0);
-  } else if(period==='mois'){
-    const mp={};tr.forEach(t=>{const k=wk(t.date);mp[k]=(mp[k]||0)+(t.res||0);});
-    const ks=Object.keys(mp).sort();labels=ks.map(k=>'S'+k.split('W')[1]);data=ks.map(k=>mp[k]);
-  } else if(period==='trimestre'){
-    const mp={};tr.forEach(t=>{const d=new Date(t.date+'T12:00:00');const k=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');mp[k]=(mp[k]||0)+(t.res||0);});
-    const ks=Object.keys(mp).sort();labels=ks.map(k=>M[parseInt(k.split('-')[1])-1]);data=ks.map(k=>mp[k]);
-  } else {
-    const mp={};tr.forEach(t=>{const d=new Date(t.date+'T12:00:00');const k=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');mp[k]=(mp[k]||0)+(t.res||0);});
-    const ks=Object.keys(mp).sort();labels=ks.map(k=>M[parseInt(k.split('-')[1])-1]+' '+k.split('-')[0]);data=ks.map(k=>mp[k]);
-  }
-  if(!data.length)return;
-
-  const posC  = gc('--pnl-line-pos')||'#3b82f6';
-  const negC  = gc('--pnl-line-neg')||'#ef4444';
-  const ftopP = gc('--pnl-fill-pos-top')||'rgba(59,130,246,.35)';
-  const fbotP = gc('--pnl-fill-pos-bot')||'rgba(59,130,246,0)';
-  const ftopN = gc('--pnl-fill-neg-top')||'rgba(239,68,68,0)';
-  const fbotN = gc('--pnl-fill-neg-bot')||'rgba(239,68,68,.35)';
-  const axC   = gc('--pnl-axis')||'#64748b';
-  const grC   = gc('--pnl-grid')||'rgba(100,116,139,.1)';
-  const maxV  = Math.max(...data, 0.001);
-  const minV  = Math.min(...data, -0.001);
-
-  // Interpolation précise : insérer un point à 0 à chaque croisement
-  // Cela évite tout débordement du fill
-  function interpolateZeroCrossings(rawLabels, rawData){
-    const outL=[], outD=[];
-    for(let i=0;i<rawData.length;i++){
-      outL.push(rawLabels[i]);
-      outD.push(rawData[i]);
-      if(i < rawData.length-1){
-        const v0=rawData[i], v1=rawData[i+1];
-        if((v0>0&&v1<0)||(v0<0&&v1>0)){
-          // Ratio exact du croisement
-          const ratio=Math.abs(v0)/(Math.abs(v0)+Math.abs(v1));
-          // Label interpolé (entre les deux)
-          outL.push(rawLabels[i]);
-          outD.push(0); // Point exact à zéro
-        }
-      }
-    }
-    return {labels:outL, data:outD};
-  }
-
-  const {labels:labelsI, data:dataI} = interpolateZeroCrossings(labels, data);
-
-  const ctx = document.getElementById('cPnl').getContext('2d');
-  const h = 220;
-
-  const gPos = ctx.createLinearGradient(0,0,0,h);
-  gPos.addColorStop(0, ftopP);
-  gPos.addColorStop(1, fbotP);
-
-  const gNeg = ctx.createLinearGradient(0,0,0,h);
-  gNeg.addColorStop(0, ftopN);
-  gNeg.addColorStop(1, fbotN);
-
-  CH['pnl'] = new Chart(ctx, {
-    type:'line',
-    data:{labels:labelsI, datasets:[
-      // Courbe + fill positif : fill uniquement au-dessus de y=0
-      {
-        data: dataI,
-        borderColor: posC,
-        backgroundColor: gPos,
-        borderWidth: 0,
-        tension: 0,
-        pointRadius: 0,
-        fill: {target:{value:0}, above: gPos, below: 'transparent'},
-        order: 2
-      },
-      // Courbe + fill négatif : fill uniquement en dessous de y=0
-      {
-        data: dataI,
-        borderColor: negC,
-        backgroundColor: gNeg,
-        borderWidth: 0,
-        tension: 0,
-        pointRadius: 0,
-        fill: {target:{value:0}, above: 'transparent', below: gNeg},
-        order: 2
-      },
-      // Courbe principale visible avec changement de couleur au 0
-      {
-        data: dataI,
-        borderWidth: 2.8,
-        tension: 0,
-        pointRadius: 0,
-        pointHoverRadius: 4,
-        fill: false,
-        order: 1,
-        segment:{borderColor:seg=>{
-          const v0=dataI[seg.p0DataIndex]??0, v1=dataI[seg.p1DataIndex]??0;
-          if(v0>=0&&v1>=0) return posC;
-          if(v0<0&&v1<0)   return negC;
-          // Croisement exact à zéro grâce aux points interpolés
-          return v0>=0 ? posC : negC;
-        }}
-      },
-      // Ligne zéro
-      {
-        data: labelsI.map(()=>0),
-        borderColor:'rgba(100,116,139,.4)',
-        borderDash:[5,4],
-        borderWidth:1.2,
-        pointRadius:0,
-        fill:false,
-        tension:0,
-        order:3
-      }
-    ]},
-    options:{
-      responsive:true, maintainAspectRatio:false,
+  if(!tr.length)return;
+  const posC=gc('--pnl-bar-pos')||gc('--pnl-line-pos')||'#3b82f6';
+  const negC=gc('--pnl-bar-neg')||gc('--pnl-line-neg')||'#ef4444';
+  const axC=gc('--pnl-axis')||'#64748b';
+  const grC=gc('--pnl-grid')||'rgba(100,116,139,.1)';
+  const sorted=[...tr].sort((a,b)=>a.date.localeCompare(b.date)||(a.heure||'').localeCompare(b.heure||''));
+  const labels=sorted.map(t=>{
+    if(period==='jour'||period==='semaine')return t.heure||t.date.slice(5);
+    if(period==='mois')return t.date.slice(5);
+    return t.date.slice(5);
+  });
+  const data=sorted.map(t=>t.res||0);
+  const colors=data.map(v=>v>=0?posC:negC);
+  const ctx=document.getElementById('cPnl').getContext('2d');
+  CH['pnl']=new Chart(ctx,{
+    type:'bar',
+    data:{labels,datasets:[{data,backgroundColor:colors,borderColor:colors,borderWidth:0,borderRadius:2,barPercentage:0.8}]},
+    options:{responsive:true,maintainAspectRatio:false,
       interaction:{mode:'index',intersect:false},
-      plugins:{
-        legend:{display:false},
-        tooltip:{
-          filter:i=>i.datasetIndex===2,
-          callbacks:{
-            title: items => labelsI[items[0].dataIndex],
-            label: i=>' P&L : '+(dataI[i.dataIndex]>=0?'+':'')+dataI[i.dataIndex].toLocaleString('fr-FR')+'€'
-          }
-        }
-      },
+      plugins:{legend:{display:false},tooltip:{callbacks:{
+        title:items=>sorted[items[0].dataIndex]?.date||'',
+        label:i=>' P&L : '+(data[i.dataIndex]>=0?'+':'')+data[i.dataIndex].toLocaleString('fr-FR')+'€'
+      }}},
       scales:{
-        x:{grid:{color:grC}, ticks:{color:axC, maxRotation:30, maxTicksLimit:12}},
-        y:{grid:{color:grC},
-           ticks:{color:axC, callback:v=>(v>=0?'+':'')+v.toLocaleString('fr-FR')+'€'},
-           min: minV<0 ? minV*1.15 : 0,
-           max: maxV>0 ? maxV*1.15 : 1}
+        x:{grid:{color:grC},ticks:{color:axC,maxRotation:30,maxTicksLimit:16}},
+        y:{grid:{color:grC},ticks:{color:axC,callback:v=>(v>=0?'+':'')+v.toLocaleString('fr-FR')+'€'}}
       }
     }
   });
 }
 
-// RISK — axe Y dynamique : risque courant ±3% (plancher 0%)
-function drawRiskChart(period){
-  if(!SMART()){destroy('risk');return;}
-  let tr=filterT(period);if(!tr.length)tr=filterT('tout');destroy('risk');
-  const base=RBASE(),rmax=RMAX();let rp=base,ws=0,ls2=0;
-  let capRef=CAPITAL(),runCap=CAPITAL();
-  let lastMoveWasDown=false,recoveryCapTarget=null,rpBeforeLoss=null;
-  const labels=['Départ'],riskData=[base];
-  tr.forEach(t=>{
-    const res=t.res||0;runCap+=res;
-    if(res>0){ls2=0;
-      if(lastMoveWasDown&&recoveryCapTarget!==null&&runCap>=recoveryCapTarget){rp=Math.min(rmax,Math.round((rp+0.5)*10)/10);lastMoveWasDown=false;recoveryCapTarget=null;rpBeforeLoss=null;ws=0;capRef=runCap;}
-      else if(!lastMoveWasDown){ws++;if(ws%3===0){rp=Math.min(rmax,Math.round((rp+0.5)*10)/10);capRef=runCap;}}
-    }else if(res<0){ws=0;ls2++;const dd=(runCap-capRef)/capRef*100;const steps=Math.floor(Math.abs(Math.min(dd,0))/5);
-      if(steps>0){rpBeforeLoss=rp;for(let i=0;i<steps;i++){rp=rp>=1?Math.max(0.01,Math.round((rp-1)*100)/100):Math.max(0.01,Math.round(rp/2*1000)/1000);}lastMoveWasDown=true;recoveryCapTarget=capRef;capRef=runCap;}
-    }
-    const d=new Date(t.date+'T12:00:00');labels.push(d.toLocaleDateString('fr-FR',{day:'numeric',month:'short'}));riskData.push(rp);
-  });
-  // Axe dynamique : risque final ±3%, plancher 0
-  const curRp=riskData[riskData.length-1];
-  const yMin=Math.max(0,parseFloat((curRp-3).toFixed(2)));
-  const yMax=parseFloat((Math.max(curRp+3,yMin+6)).toFixed(2));
-  const lc=gc('--risk-line')||'#f59e0b',axC=gc('--risk-axis')||'#f59e0b',grC=gc('--risk-grid')||'rgba(100,116,139,.1)',blC=gc('--risk-base')||'rgba(100,116,139,.5)';
-  const ftop=gc('--risk-fill-top')||'rgba(245,158,11,.25)',fbot=gc('--risk-fill-bot')||'rgba(245,158,11,0)';
-  const ctx=document.getElementById('cRisk').getContext('2d');
-  const g=ctx.createLinearGradient(0,0,0,210);g.addColorStop(0,ftop);g.addColorStop(1,fbot);
-  CH['risk']=new Chart(ctx,{type:'line',data:{labels,datasets:[
-    {data:riskData,borderColor:lc,backgroundColor:g,borderWidth:2.5,tension:0,pointRadius:0,fill:true,stepped:'before'},
-    {data:labels.map(()=>base),borderColor:blC,borderDash:[6,4],borderWidth:1.5,pointRadius:0,fill:false},
-    {data:labels.map(()=>rmax),borderColor:'rgba(239,68,68,.5)',borderDash:[3,3],borderWidth:1.2,pointRadius:0,fill:false}
-  ]},options:{responsive:true,maintainAspectRatio:false,interaction:{mode:'index',intersect:false},
-    plugins:{legend:{display:false},tooltip:{callbacks:{label:i=>i.datasetIndex===0?' Risk : '+i.parsed.y+'%':i.datasetIndex===1?' Base : '+i.parsed.y+'%':i.datasetIndex===2?' Max : '+i.parsed.y+'%':null}}},
-    scales:{x:{grid:{color:grC},ticks:{color:axC,maxRotation:30,maxTicksLimit:14}},
-      y:{grid:{color:grC},min:yMin,max:yMax,
-         ticks:{color:axC,callback:v=>v.toFixed(1)+'%',stepSize:1},
-         title:{display:true,text:'Risk %',color:axC,font:{size:9}}}}}});
-}
 
 // PIE
 function drawPie(period){
