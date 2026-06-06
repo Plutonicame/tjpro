@@ -409,8 +409,9 @@ tbody td{padding:6px 8px;vertical-align:middle;white-space:nowrap;}
   <button class="nav-tab" onclick="showPage('trackrecord');closeMobileMenu()">Track Record</button>
   <button class="nav-tab" onclick="showPage('journal');closeMobileMenu()">Journal</button>
   <button class="nav-tab" onclick="showPage('calendrier');closeMobileMenu()">Calendrier</button>
-  <button class="nav-tab" onclick="showPage('recap');closeMobileMenu()">Récap IA</button>
+  
   <button class="nav-tab" onclick="showPage('modifs');closeMobileMenu()">Modifications</button>
+  <button class="nav-tab" onclick="showPage('pointscles');closeMobileMenu()">Points Clés</button>
 </div>
 
 <!-- NAV DESKTOP (une seule ligne) -->
@@ -420,8 +421,9 @@ tbody td{padding:6px 8px;vertical-align:middle;white-space:nowrap;}
     <button class="nav-tab active" onclick="showPage('trackrecord',this)"><span data-editable>Track Record</span></button>
     <button class="nav-tab" onclick="showPage('journal',this)"><span data-editable>Journal</span></button>
     <button class="nav-tab" onclick="showPage('calendrier',this)"><span data-editable>Calendrier</span></button>
-    <button class="nav-tab" onclick="showPage('recap',this)"><span data-editable>Récap IA</span></button>
+    
     <button class="nav-tab" onclick="showPage('modifs',this)"><span data-editable>Modifications</span></button>
+    <button class="nav-tab" onclick="showPage('pointscles',this)"><span data-editable>Points Clés</span></button>
     <!-- Horloges centrées absolument -->
     <div class="nav-clocks" style="position:absolute;left:50%;transform:translateX(-50%);">
       <div class="clock-item"><span class="clock-city">NEW YORK</span><span class="clock-time" id="clkNY">--:--:--</span></div>
@@ -523,6 +525,35 @@ tbody td{padding:6px 8px;vertical-align:middle;white-space:nowrap;}
     </div>
   </div>
   <div id="compCharts"></div>
+
+  <!-- Top 5 / Pires 5 trades -->
+  <div class="two-col" style="margin-top:16px;gap:12px;">
+    <div class="card">
+      <div class="card-header"><div class="card-title" style="color:var(--green)" data-editable>🏆 TOP 5 TRADES</div></div>
+      <div class="card-body" id="top5trades"></div>
+    </div>
+    <div class="card">
+      <div class="card-header"><div class="card-title" style="color:var(--red)" data-editable>💀 PIRES 5 TRADES</div></div>
+      <div class="card-body" id="worst5trades"></div>
+    </div>
+  </div>
+</div>
+
+<!-- POINTS CLÉS IA -->
+<div class="page" id="page-pointscles" style="display:none">
+  <div class="page-title" data-editable>Points Clés</div>
+  <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px;align-items:center;">
+    <button class="btn btn-p" onclick="generatePointsCles()" id="pcGenBtn" style="white-space:nowrap;">Analyser ma stratégie</button>
+  </div>
+  <div id="pcStatus" style="display:none;font-family:var(--mono);font-size:11px;color:var(--muted);padding:8px 12px;background:var(--surface);border-radius:6px;border:1px solid var(--border);margin-bottom:10px;"></div>
+  <div id="pcContent" style="display:none;">
+    <div style="font-family:var(--mono);font-size:9px;color:var(--muted);margin-bottom:10px;" id="pcTimestamp"></div>
+    <div id="pcCards" style="display:grid;grid-template-columns:1fr 1fr;gap:12px;"></div>
+  </div>
+  <div class="card" style="margin-top:16px;">
+    <div class="card-header"><div class="card-title" data-editable>HISTORIQUE ANALYSES</div></div>
+    <div class="card-body" id="pcHistory"><div style="color:var(--muted);font-size:12px;">Aucune analyse sauvegardée.</div></div>
+  </div>
 </div>
 
 <!-- JOURNAL (sans champ Servi) -->
@@ -572,46 +603,6 @@ tbody td{padding:6px 8px;vertical-align:middle;white-space:nowrap;}
         <tbody id="tradeTable"></tbody>
       </table>
       <div class="empty-state" id="emptyState">📋 Aucun trade.</div>
-    </div>
-  </div>
-</div>
-
-<!-- RÉCAP IA -->
-<div class="page" id="page-recap" style="display:none">
-  <div class="page-title" data-editable>Récap IA — Marchés</div>
-
-  <!-- Message si pas de clé API -->
-  <div id="recapNoKey" style="display:none;margin-bottom:14px;padding:14px;background:var(--surface);border:1px solid var(--border);border-radius:8px;text-align:center;">
-    <div style="font-family:var(--mono);font-size:12px;color:var(--muted);margin-bottom:10px;" data-editable>Clé API Anthropic requise pour générer des analyses</div>
-    <button class="btn btn-p" style="font-size:12px;" onclick="showPage('modifs');closeMobileMenu();setTimeout(()=>document.getElementById('iaApiKey')?.focus(),300)">
-      → Configurer ma clé API dans Modifications
-    </button>
-  </div>
-
-  <!-- Barre d'actifs / onglets -->
-  <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px;align-items:center;">
-    <div id="recapAssetTabs" style="display:flex;gap:6px;flex-wrap:wrap;flex:1;"></div>
-    <button class="btn btn-p" onclick="generateRecap()" id="recapGenBtn" style="white-space:nowrap;">Générer le récap</button>
-  </div>
-
-  <!-- Statut -->
-  <div id="recapStatus" style="display:none;font-family:var(--mono);font-size:11px;color:var(--muted);margin-bottom:10px;padding:8px 12px;background:var(--surface);border-radius:6px;border:1px solid var(--border);"></div>
-
-  <!-- Contenu de l'analyse -->
-  <div id="recapContent" style="display:none;">
-    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;align-items:center;">
-      <span style="font-family:var(--mono);font-size:9px;color:var(--muted);" id="recapTimestamp"></span>
-      <button class="btn btn-g" style="font-size:10px;padding:4px 10px;" onclick="saveRecapToHistory()">💾 Sauvegarder</button>
-      <button class="btn btn-g" style="font-size:10px;padding:4px 10px;" onclick="exportRecapPdf()">📄 Exporter</button>
-    </div>
-    <div id="recapAssetPages"></div>
-  </div>
-
-  <!-- Historique -->
-  <div class="card" style="margin-top:16px;">
-    <div class="card-header"><div class="card-title">HISTORIQUE DES RÉCAPS</div></div>
-    <div class="card-body" id="recapHistory" style="max-height:300px;overflow-y:auto;">
-      <div style="color:var(--muted);font-size:12px;">Aucun récap sauvegardé.</div>
     </div>
   </div>
 </div>
@@ -677,6 +668,9 @@ tbody td{padding:6px 8px;vertical-align:middle;white-space:nowrap;}
     </div>
   </div>
 
+
+
+
   <div class="card">
     <div class="card-header">
       <div class="card-title" data-editable>SÉCURITÉ</div>
@@ -687,62 +681,7 @@ tbody td{padding:6px 8px;vertical-align:middle;white-space:nowrap;}
   </div>
 
   <!-- AGENT IA -->
-  <div class="card">
-    <div class="card-header"><div class="card-title" data-editable>AGENT IA — CONFIGURATION</div></div>
-    <div class="card-body">
-      <div class="fg" style="margin-bottom:14px;">
-        <label data-editable>Clé API Anthropic </label><a href="https://console.anthropic.com" target="_blank" style="color:var(--blue);font-size:10px;">(obtenir une clé →)</a></label>
-        <div style="display:flex;gap:6px;align-items:center;">
-          <input type="password" id="iaApiKey" placeholder="sk-ant-..." style="flex:1;font-family:var(--mono);font-size:12px;" oninput="saveIaConfig()">
-          <button class="btn btn-g" style="font-size:10px;padding:5px 10px;" onclick="document.getElementById('iaApiKey').type=document.getElementById('iaApiKey').type==='password'?'text':'password'">👁</button>
-        </div>
-        <div style="font-size:10px;color:var(--muted);margin-top:4px;" data-editable>Les actifs analysés sont ceux de ta liste de paires (section ci-dessous).</div>
-      </div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px;">
-        <!-- Surface Horizon -->
-        <div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:12px;">
-          <div style="font-family:var(--mono);font-size:9px;color:var(--muted);margin-bottom:10px;letter-spacing:1px;" data-editable>HORIZON D'ANALYSE</div>
-          <div style="display:flex;flex-direction:column;gap:7px;">
-            <label style="display:flex;align-items:center;gap:7px;font-size:12px;cursor:pointer;"><input type="checkbox" id="ia_h_scalping" onchange="saveIaConfig()"> <span data-editable>Scalping</span></label>
-            <label style="display:flex;align-items:center;gap:7px;font-size:12px;cursor:pointer;"><input type="checkbox" id="ia_h_intraday" checked onchange="saveIaConfig()"> <span data-editable>Intraday</span></label>
-            <label style="display:flex;align-items:center;gap:7px;font-size:12px;cursor:pointer;"><input type="checkbox" id="ia_h_court" onchange="saveIaConfig()"> <span data-editable>Court terme</span></label>
-            <label style="display:flex;align-items:center;gap:7px;font-size:12px;cursor:pointer;"><input type="checkbox" id="ia_h_moyen" onchange="saveIaConfig()"> <span data-editable>Moyen terme</span></label>
-            <label style="display:flex;align-items:center;gap:7px;font-size:12px;cursor:pointer;"><input type="checkbox" id="ia_h_long" onchange="saveIaConfig()"> <span data-editable>Long terme</span></label>
-            <label style="display:flex;align-items:center;gap:7px;font-size:12px;cursor:pointer;"><input type="checkbox" id="ia_h_invest" onchange="saveIaConfig()"> <span data-editable>Investissement</span></label>
-          </div>
-        </div>
-        <!-- Surface Types -->
-        <div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:12px;">
-          <div style="font-family:var(--mono);font-size:9px;color:var(--muted);margin-bottom:10px;letter-spacing:1px;" data-editable>TYPES D'ANALYSE</div>
-          <div style="display:flex;flex-direction:column;gap:7px;">
-            <label style="display:flex;align-items:center;gap:7px;font-size:12px;cursor:pointer;"><input type="checkbox" id="ia_tech" checked onchange="saveIaConfig()"> <span data-editable>Technique</span></label>
-            <label style="display:flex;align-items:center;gap:7px;font-size:12px;cursor:pointer;"><input type="checkbox" id="ia_fund" checked onchange="saveIaConfig()"> <span data-editable>Fondamental</span></label>
-            <label style="display:flex;align-items:center;gap:7px;font-size:12px;cursor:pointer;"><input type="checkbox" id="ia_macro" checked onchange="saveIaConfig()"> <span data-editable>Macroéconomique</span></label>
-            <label style="display:flex;align-items:center;gap:7px;font-size:12px;cursor:pointer;"><input type="checkbox" id="ia_micro" onchange="saveIaConfig()"> <span data-editable>Microéconomique</span></label>
-            <label style="display:flex;align-items:center;gap:7px;font-size:12px;cursor:pointer;"><input type="checkbox" id="ia_sentiment" checked onchange="saveIaConfig()"> <span data-editable>Sentiment</span></label>
-            <label style="display:flex;align-items:center;gap:7px;font-size:12px;cursor:pointer;"><input type="checkbox" id="ia_flux" checked onchange="saveIaConfig()"> <span data-editable>Flux institutionnels</span></label>
-            <label style="display:flex;align-items:center;gap:7px;font-size:12px;cursor:pointer;"><input type="checkbox" id="ia_inter" checked onchange="saveIaConfig()"> <span data-editable>Intermarket</span></label>
-            <label style="display:flex;align-items:center;gap:7px;font-size:12px;cursor:pointer;"><input type="checkbox" id="ia_geo" onchange="saveIaConfig()"> <span data-editable>Géopolitique</span></label>
-            <label style="display:flex;align-items:center;gap:7px;font-size:12px;cursor:pointer;"><input type="checkbox" id="ia_banques" checked onchange="saveIaConfig()"> <span data-editable>Banques centrales</span></label>
-            <label style="display:flex;align-items:center;gap:7px;font-size:12px;cursor:pointer;"><input type="checkbox" id="ia_oblig" onchange="saveIaConfig()"> <span data-editable>Obligataire</span></label>
-            <label style="display:flex;align-items:center;gap:7px;font-size:12px;cursor:pointer;"><input type="checkbox" id="ia_crypto" onchange="saveIaConfig()"> <span data-editable>Crypto</span></label>
-            <label style="display:flex;align-items:center;gap:7px;font-size:12px;cursor:pointer;"><input type="checkbox" id="ia_commo" onchange="saveIaConfig()"> <span data-editable>Matières premières</span></label>
-            <label style="display:flex;align-items:center;gap:7px;font-size:12px;cursor:pointer;"><input type="checkbox" id="ia_indices" onchange="saveIaConfig()"> <span data-editable>Indices mondiaux</span></label>
-            <label style="display:flex;align-items:center;gap:7px;font-size:12px;cursor:pointer;"><input type="checkbox" id="ia_liquidite" onchange="saveIaConfig()"> <span data-editable>Liquidité globale</span></label>
-            <label style="display:flex;align-items:center;gap:7px;font-size:12px;cursor:pointer;"><input type="checkbox" id="ia_saisonnalite" onchange="saveIaConfig()"> <span data-editable>Saisonnalité</span></label>
-            <label style="display:flex;align-items:center;gap:7px;font-size:12px;cursor:pointer;"><input type="checkbox" id="ia_orderflow" onchange="saveIaConfig()"> <span data-editable>Order flow / COT</span></label>
-          </div>
-        </div>
-      </div>
-      <div class="fg">
-        <label>Modèle IA <span style="font-size:10px;color:var(--muted);" data-editable>(Haiku = moins cher, Sonnet = meilleur)</span></label>
-        <select id="iaModel" onchange="saveIaConfig()">
-          <option value="claude-haiku-4-5-20251001">Haiku 4.5 — ~$0.02/récap</option>
-          <option value="claude-sonnet-4-6" selected>Sonnet 4.6 — ~$0.10/récap</option>
-        </select>
-      </div>
-    </div>
-  </div>
+  
 
   <div class="card">
     <div class="card-header">
@@ -972,6 +911,8 @@ function computeRiskHistory(){
   return{hist,finalRp:rp,finalWs:ws,finalLs:ls2};
 }
 function computeRR(t){const re=Math.max(1,Math.round(CAPITAL()*RBASE()/100));return parseFloat((t.res/re).toFixed(2));}
+function getCurrentRiskPct(){return computeRiskHistory().finalRp;}
+function getCurrentRiskEur(){return Math.round(CAPITAL()*getCurrentRiskPct()/100*100)/100;}
 
 // ══ RISK CHART ══
 function drawRiskChart(period){
@@ -1023,8 +964,7 @@ function showPage(id,btn){
   if(btn)btn.classList.add('active');
   if(id==='trackrecord')setTimeout(refreshAllCharts,50);
   if(id==='calendrier')renderCalendar();
-  if(id==='modifs')renderModifs();
-  setTimeout(setupPencil, 50);
+  if(id==='modifs'){renderModifs();setTimeout(setupPencil,50);}
 }
 
 // ══ FORM ══
@@ -2171,7 +2111,7 @@ function applyCloudData(data) {
   lss('tj_trades', APP.trades);
   lss('tj_lists', APP.lists);
   lss('tj_nextId', APP.nextId);
-  renderTable(); updateNavBadges();
+  renderTable(); updateNavBadges(); refreshAllCharts();
   setTimeout(applyPencilEdits, 100);
   localStorage.setItem('tjp_last_uid', currentUser.id);
   setTimeout(() => { _isSyncing = false; }, 1000);
@@ -2306,262 +2246,9 @@ document.addEventListener('DOMContentLoaded', () => {
 // AGENT IA — RÉCAP MARCHÉS
 // ══════════════════════════════════════════
 
-function getIaConfig() {
-  const raw = localStorage.getItem('tjp_ia_config');
-  const def = {
-    apiKey:'', horizon:{intraday:true}, model:'claude-sonnet-4-6',
-    types:{tech:true,fund:true,macro:true,micro:false,sentiment:true,flux:true,inter:true,geo:false,banques:true,oblig:false,crypto:false,commo:false,indices:false,liquidite:false,saisonnalite:false,orderflow:false}
-  };
-  if (!raw) return def;
-  const parsed = JSON.parse(raw);
-  return {...def, ...parsed, types:{...def.types,...(parsed.types||{})}, horizon:{...def.horizon,...(parsed.horizon||{})}};
-}
 
-function saveIaConfig() {
-  const cfg = getIaConfig();
-  cfg.apiKey = document.getElementById('iaApiKey')?.value || cfg.apiKey;
-  cfg.model = document.getElementById('iaModel')?.value || cfg.model;
-  // Horizon cases à cocher
-  ['scalping','intraday','court','moyen','long','invest'].forEach(h => {
-    const el = document.getElementById('ia_h_'+h); if(el) cfg.horizon[h] = el.checked;
-  });
-  // Types
-  ['tech','fund','macro','micro','sentiment','flux','inter','geo','banques','oblig','crypto','commo','indices','liquidite','saisonnalite','orderflow'].forEach(t => {
-    const el = document.getElementById('ia_'+t); if(el) cfg.types[t] = el.checked;
-  });
-  localStorage.setItem('tjp_ia_config', JSON.stringify(cfg));
-  renderRecapTabs();
-  if(typeof currentUser!=="undefined"&&currentUser&&!_isSyncing){clearTimeout(window._pushTimer);window._pushTimer=setTimeout(pushToCloud,300);}
-}
 
-function loadIaConfigUI() {
-  const cfg = getIaConfig();
-  const k = document.getElementById('iaApiKey'); if(k) k.value = cfg.apiKey||'';
-  const m = document.getElementById('iaModel'); if(m) m.value = cfg.model||'claude-sonnet-4-6';
-  ['scalping','intraday','court','moyen','long','invest'].forEach(h => {
-    const el = document.getElementById('ia_h_'+h); if(el) el.checked = cfg.horizon?.[h]||false;
-  });
-  ['tech','fund','macro','micro','sentiment','flux','inter','geo','banques','oblig','crypto','commo','indices','liquidite','saisonnalite','orderflow'].forEach(t => {
-    const el = document.getElementById('ia_'+t); if(el) el.checked = cfg.types?.[t]??false;
-  });
-  renderRecapTabs();
-}
 
-// ── Onglets actifs dans la page Récap ──
-let currentRecapAsset = 0;
-let currentRecapData = null;
-
-function getRecapAssets() {
-  return (APP && APP.lists && APP.lists.paires) ? APP.lists.paires : ['XAUUSD','EURUSD','NAS100'];
-}
-
-function renderRecapTabs() {
-  const assets = getRecapAssets();
-  const cfg = getIaConfig();
-  const noKey = document.getElementById('recapNoKey');
-  const genBtn = document.getElementById('recapGenBtn');
-  if (noKey) noKey.style.display = (!cfg.apiKey || !cfg.apiKey.startsWith('sk-ant-')) ? 'block' : 'none';
-  if (genBtn) genBtn.style.display = (!cfg.apiKey || !cfg.apiKey.startsWith('sk-ant-')) ? 'none' : '';
-  const wrap = document.getElementById('recapAssetTabs'); if(!wrap) return;
-  wrap.innerHTML = assets.map((a,i) => `
-    <button onclick="selectRecapAsset(${i})" id="rtab_${i}"
-      style="font-family:var(--mono);font-size:10px;padding:5px 10px;border-radius:4px;cursor:pointer;
-      background:${i===currentRecapAsset?'var(--btn-p-bg)':'var(--surface)'};
-      color:${i===currentRecapAsset?'var(--btn-p-tx)':'var(--text)'};
-      border:1px solid ${i===currentRecapAsset?'transparent':'var(--border)'};">
-      ${a}
-    </button>`).join('');
-}
-
-function selectRecapAsset(i) {
-  currentRecapAsset = i;
-  renderRecapTabs();
-  if (currentRecapData) renderRecapPage(i);
-}
-
-function renderRecapPage(i) {
-  const wrap = document.getElementById('recapAssetPages'); if(!wrap) return;
-  const assets = getRecapAssets();
-  const asset = assets[i];
-  const data = currentRecapData?.[asset];
-  if (!data) {
-    wrap.innerHTML = `<div style="color:var(--muted);font-size:13px;padding:20px;text-align:center;">
-      Clique sur <strong>Générer le récap</strong> pour analyser ${asset}.<br>
-      <span style="font-size:11px;">Assure-toi d'avoir configuré ta clé API dans Modifications → Agent IA.</span>
-    </div>`;
-    return;
-  }
-  // Formatter le markdown basique
-  const formatted = data
-    .replace(/^## (.+)$/gm, '<h3 style="color:var(--blue);font-family:var(--mono);font-size:13px;margin:16px 0 8px;border-bottom:1px solid var(--border);padding-bottom:4px;">$1</h3>')
-    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
-    .replace(/\n/g, '<br>');
-  wrap.innerHTML = `
-    <div class="card">
-      <div class="card-header"><div class="card-title">${asset} — ANALYSE COMPLÈTE</div></div>
-      <div class="card-body" style="font-size:13px;line-height:1.8;color:var(--text);">${formatted}</div>
-    </div>`;
-}
-
-// ── Génération du récap ──
-async function generateRecap() {
-  const cfg = getIaConfig();
-  if (!cfg.apiKey || !cfg.apiKey.startsWith('sk-ant-')) {
-    showRecapStatus('⚠ Clé API manquante. Va dans Modifications → Agent IA pour la configurer.', '#ef4444');
-    return;
-  }
-  const assets = getRecapAssets();
-  if (!assets.length) { showRecapStatus('⚠ Aucune paire dans ta liste. Ajoute des paires dans Modifications.', '#ef4444'); return; }
-
-  const btn = document.getElementById('recapGenBtn');
-  btn.disabled = true; btn.textContent = '⏳ Analyse...';
-  document.getElementById('recapContent').style.display = 'none';
-  showRecapStatus('🔄 Connexion à l\'IA...', 'var(--muted)');
-
-  // Types actifs
-  const typeLabels = {
-    tech:'analyse technique',fund:'analyse fondamentale',macro:'macroéconomie',micro:'microéconomie',
-    sentiment:'sentiment de marché',flux:'flux institutionnels',inter:'corrélations intermarket',
-    geo:'contexte géopolitique',banques:'politique des banques centrales',oblig:'marchés obligataires',
-    crypto:'dynamique crypto',commo:'matières premières',indices:'indices mondiaux',
-    liquidite:'liquidité globale',saisonnalite:'saisonnalité',orderflow:'order flow et COT'
-  };
-  const types = Object.entries(cfg.types).filter(([,v])=>v).map(([k])=>typeLabels[k]||k);
-  const horizons = Object.entries(cfg.horizon||{}).filter(([,v])=>v).map(([k])=>k).join(', ') || 'intraday';
-
-  const now = new Date();
-  const dateStr = now.toLocaleDateString('fr-FR',{weekday:'long',year:'numeric',month:'long',day:'numeric'});
-  const timeStr = now.toLocaleTimeString('fr-FR');
-
-  currentRecapData = {};
-  let errors = 0;
-
-  for (let i = 0; i < assets.length; i++) {
-    const asset = assets[i];
-    showRecapStatus(`🔄 Analyse ${asset}... (${i+1}/${assets.length})`, 'var(--muted)');
-    try {
-      const prompt = `Tu es un analyste financier institutionnel senior.
-Date : ${dateStr} à ${timeStr} (heure française).
-Actif : ${asset} | Horizon : ${horizons}
-Types d'analyse : ${types.join(', ')}
-
-Génère une analyse institutionnelle complète et structurée de ${asset}.
-Utilise des données réelles et actuelles via tes outils de recherche.
-Structure exacte requise :
-
-## 📊 CONTEXTE MACRO & BANQUES CENTRALES
-[Politique monétaire, taux directeurs, inflation, Fed/BCE/BOJ/BOE selon pertinence pour cet actif]
-
-## 🔗 CORRÉLATIONS INTERMARKET
-[DXY, taux US10Y, or, pétrole, indices, selon l'actif analysé - interconnexions clés]
-
-## 📈 STRUCTURE TECHNIQUE
-[Tendance actuelle, niveaux clés support/résistance, momentum, volumes, patterns]
-
-## 🏦 FLUX INSTITUTIONNELS & SENTIMENT
-[COT report, positionnement net, sentiment retail vs smart money, options flow]
-
-## 🌍 GÉOPOLITIQUE & ÉVÉNEMENTS
-[Risques géopolitiques actifs, agenda économique proche, catalyseurs potentiels]
-
-## 🎯 SCÉNARIOS PROBABILISTES
-**Scénario haussier (%)** : [conditions, cibles]
-**Scénario baissier (%)** : [conditions, cibles]
-**Biais du moment** : [HAUSSIER/BAISSIER/NEUTRE] — [invalidation]
-
-Sois précis, factuel, institutionnel. Indique clairement si une donnée n'est pas disponible.`;
-
-      const response = await fetch('https://api.anthropic.com/v1/messages', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-api-key': cfg.apiKey,
-          'anthropic-version': '2023-06-01',
-          'anthropic-dangerous-direct-browser-access': 'true'
-        },
-        body: JSON.stringify({
-          model: cfg.model,
-          max_tokens: 2500,
-          tools: [{ type: 'web_search_20250305', name: 'web_search' }],
-          messages: [{ role: 'user', content: prompt }]
-        })
-      });
-
-      if (!response.ok) {
-        const err = await response.json().catch(()=>({error:{message:`HTTP ${response.status}`}}));
-        throw new Error(err.error?.message || `Erreur HTTP ${response.status}`);
-      }
-
-      const data = await response.json();
-      const text = data.content.filter(b=>b.type==='text').map(b=>b.text).join('\n');
-      currentRecapData[asset] = text || '⚠ Réponse vide de l\'IA.';
-
-    } catch(e) {
-      currentRecapData[asset] = `⚠ Erreur : ${e.message}`;
-      errors++;
-    }
-  }
-
-  document.getElementById('recapTimestamp').textContent = `Généré le ${now.toLocaleString('fr-FR')}`;
-  document.getElementById('recapContent').style.display = 'block';
-  renderRecapPage(currentRecapAsset);
-  showRecapStatus(errors===0 ? `✓ ${assets.length} actifs analysés avec succès` : `⚠ Terminé avec ${errors} erreur(s)`, errors===0?'#22c55e':'#f59e0b');
-  btn.disabled = false; btn.textContent = 'Générer le récap';
-  saveRecapToHistory(true);
-}
-
-function showRecapStatus(msg, color) {
-  const el = document.getElementById('recapStatus');
-  el.textContent = msg; el.style.color = color; el.style.display = 'block';
-}
-
-// ── Historique des récaps ──
-function saveRecapToHistory(auto=false) {
-  if (!currentRecapData) return;
-  const history = JSON.parse(localStorage.getItem('tjp_recap_history') || '[]');
-  const entry = { date: new Date().toISOString(), data: currentRecapData, auto };
-  history.unshift(entry);
-  // Garder max 30 récaps
-  if (history.length > 30) history.pop();
-  localStorage.setItem('tjp_recap_history', JSON.stringify(history));
-  renderRecapHistory();
-  if (!auto) showRecapStatus('✓ Récap sauvegardé dans l\'historique', '#22c55e');
-}
-
-function renderRecapHistory() {
-  const wrap = document.getElementById('recapHistory'); if(!wrap) return;
-  const history = JSON.parse(localStorage.getItem('tjp_recap_history') || '[]');
-  if (!history.length) { wrap.innerHTML = '<div style="color:var(--muted);font-size:12px;">Aucun récap sauvegardé.</div>'; return; }
-  wrap.innerHTML = history.map((h,i) => {
-    const d = new Date(h.date);
-    const assets = Object.keys(h.data);
-    return `<div style="display:flex;align-items:center;gap:8px;padding:8px;border-bottom:1px solid var(--border);cursor:pointer;" onclick="loadRecapFromHistory(${i})">
-      <div style="flex:1;">
-        <div style="font-family:var(--mono);font-size:11px;color:var(--text);">${d.toLocaleDateString('fr-FR')} ${d.toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'})}</div>
-        <div style="font-size:10px;color:var(--muted);">${assets.join(', ')}</div>
-      </div>
-      <button onclick="event.stopPropagation();deleteRecapHistory(${i})" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:14px;">🗑</button>
-    </div>`;
-  }).join('');
-}
-
-function loadRecapFromHistory(i) {
-  const history = JSON.parse(localStorage.getItem('tjp_recap_history') || '[]');
-  if (!history[i]) return;
-  currentRecapData = history[i].data;
-  const d = new Date(history[i].date);
-  document.getElementById('recapTimestamp').textContent = `Généré le ${d.toLocaleString('fr-FR')}`;
-  document.getElementById('recapContent').style.display = 'block';
-  renderRecapPage(currentRecapAsset);
-  showPage('recap');
-}
-
-function deleteRecapHistory(i) {
-  const history = JSON.parse(localStorage.getItem('tjp_recap_history') || '[]');
-  history.splice(i,1);
-  localStorage.setItem('tjp_recap_history', JSON.stringify(history));
-  renderRecapHistory();
-}
 
 function exportRecapPdf() {
   if (!currentRecapData) return;
@@ -2600,6 +2287,279 @@ document.addEventListener('DOMContentLoaded', () => {
 const shakeStyle = document.createElement('style');
 shakeStyle.textContent = '@keyframes shake{0%,100%{transform:translateX(0)}25%{transform:translateX(-6px)}75%{transform:translateX(6px)}}';
 document.head.appendChild(shakeStyle);
+
+// ══ TOP 5 / PIRES 5 TRADES ══
+function renderTop5() {
+  const sorted = [...APP.trades].sort((a,b) => (b.res||0) - (a.res||0));
+  const top5 = sorted.slice(0, 5);
+  const worst5 = [...APP.trades].sort((a,b) => (a.res||0) - (b.res||0)).slice(0, 5);
+
+  function tradeRow(t) {
+    const pct = CAPITAL() > 0 ? ((t.res||0)/CAPITAL()*100).toFixed(2) : '0.00';
+    const col = (t.res||0) >= 0 ? 'var(--green)' : 'var(--red)';
+    return `<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid var(--border);">
+      <div>
+        <div style="font-family:var(--mono);font-size:11px;">${t.paire||'—'} <span style="color:var(--muted);font-size:10px;">${t.date||''}</span></div>
+        <div style="font-size:10px;color:var(--muted);">${t.session||''} ${t.tf||''}</div>
+      </div>
+      <div style="text-align:right;font-family:var(--mono);font-size:12px;color:${col};">
+        ${(t.res||0)>=0?'+':''}${(t.res||0).toLocaleString('fr-FR')}€<br>
+        <span style="font-size:10px;">${pct>=0?'+':''}${pct}%</span>
+      </div>
+    </div>`;
+  }
+
+  const t5 = document.getElementById('top5trades');
+  const w5 = document.getElementById('worst5trades');
+  if (t5) t5.innerHTML = top5.length ? top5.map(tradeRow).join('') : '<div style="color:var(--muted);font-size:12px;">Aucun trade</div>';
+  if (w5) w5.innerHTML = worst5.length ? worst5.map(tradeRow).join('') : '<div style="color:var(--muted);font-size:12px;">Aucun trade</div>';
+}
+
+// ══ GRAPHIQUE TIMEFRAMES ══
+function drawTFChart() {
+  const trades = APP.trades;
+  if (!trades.length) return;
+  const tfMap = {};
+  trades.forEach(t => {
+    const tfs = (t.tf||'').split(',').map(s=>s.trim()).filter(Boolean);
+    tfs.forEach(tf => {
+      if (!tfMap[tf]) tfMap[tf] = {wins:0,losses:0,pnl:0,count:0};
+      tfMap[tf].count++;
+      tfMap[tf].pnl += t.res||0;
+      if ((t.res||0) > 0) tfMap[tf].wins++;
+      else if ((t.res||0) < 0) tfMap[tf].losses++;
+    });
+  });
+  const labels = Object.keys(tfMap);
+  if (!labels.length) return;
+  const pnls = labels.map(tf => tfMap[tf].pnl);
+  const wrs = labels.map(tf => tfMap[tf].count > 0 ? Math.round(tfMap[tf].wins/tfMap[tf].count*100) : 0);
+  const posC = gc('--pnl-bar-pos')||'#3b82f6';
+  const negC = gc('--pnl-bar-neg')||'#ef4444';
+  const axC = gc('--pnl-axis')||'#64748b';
+  const grC = gc('--pnl-grid')||'rgba(100,116,139,.1)';
+
+  // Insérer le graphique TF dans la page track record
+  let tfWrap = document.getElementById('tfChart');
+  if (!tfWrap) {
+    const compDiv = document.getElementById('compCharts');
+    if (compDiv) {
+      const card = document.createElement('div');
+      card.className = 'card';
+      card.style.marginTop = '16px';
+      card.innerHTML = `<div class="card-header"><div class="card-title" data-editable>PERFORMANCE PAR TIMEFRAME</div></div>
+        <div class="card-body"><div class="chart-body" id="tfChart" style="height:200px;"><canvas id="cTF"></canvas></div></div>`;
+      compDiv.insertBefore(card, compDiv.firstChild);
+      tfWrap = document.getElementById('tfChart');
+    }
+  }
+  if (!tfWrap) return;
+
+  destroy('tf');
+  const ctx = document.getElementById('cTF')?.getContext('2d');
+  if (!ctx) return;
+  CH['tf'] = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [
+        { label: 'P&L (€)', data: pnls, backgroundColor: pnls.map(v=>v>=0?posC:negC), yAxisID: 'y' },
+        { label: 'Win Rate (%)', data: wrs, type: 'line', borderColor: gc('--eq-line')||'#00e5a0', pointRadius: 4, fill: false, yAxisID: 'y2' }
+      ]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { labels: { color: axC, font: { size: 10 } } } },
+      scales: {
+        x: { grid: { color: grC }, ticks: { color: axC } },
+        y: { grid: { color: grC }, ticks: { color: axC, callback: v=>(v>=0?'+':'')+v+'€' }, position: 'left' },
+        y2: { ticks: { color: axC, callback: v=>v+'%' }, position: 'right', grid: { display: false }, min: 0, max: 100 }
+      }
+    }
+  });
+}
+
+// ══ POINTS CLÉS IA INTERNE ══
+async function generatePointsCles() {
+  const trades = APP.trades;
+  if (trades.length < 2) {
+    document.getElementById('pcStatus').textContent = '⚠ Pas assez de trades pour analyser (minimum 2).';
+    document.getElementById('pcStatus').style.display = 'block';
+    document.getElementById('pcStatus').style.color = '#f59e0b';
+    return;
+  }
+
+  const btn = document.getElementById('pcGenBtn');
+  btn.disabled = true; btn.textContent = '⏳ Analyse...';
+  const statusEl = document.getElementById('pcStatus');
+  statusEl.style.display = 'block';
+  statusEl.style.color = 'var(--muted)';
+  statusEl.textContent = '🔄 Analyse en cours...';
+
+  // Calculer les stats localement
+  const total = trades.length;
+  const wins = trades.filter(t=>(t.res||0)>0).length;
+  const losses = trades.filter(t=>(t.res||0)<0).length;
+  const winRate = total > 0 ? (wins/total*100).toFixed(1) : 0;
+  const pnl = trades.reduce((s,t)=>s+(t.res||0),0);
+  const avgWin = wins > 0 ? trades.filter(t=>(t.res||0)>0).reduce((s,t)=>s+(t.res||0),0)/wins : 0;
+  const avgLoss = losses > 0 ? Math.abs(trades.filter(t=>(t.res||0)<0).reduce((s,t)=>s+(t.res||0),0)/losses) : 0;
+  const profitFactor = avgLoss > 0 ? (avgWin/avgLoss).toFixed(2) : '∞';
+
+  // Stats par session
+  const sessions = {};
+  trades.forEach(t=>{ const s=t.session||'Inconnu'; if(!sessions[s])sessions[s]={wins:0,total:0,pnl:0}; sessions[s].total++; sessions[s].pnl+=t.res||0; if((t.res||0)>0)sessions[s].wins++; });
+
+  // Stats par paire
+  const pairs = {};
+  trades.forEach(t=>{ const p=t.paire||'Inconnu'; if(!pairs[p])pairs[p]={wins:0,total:0,pnl:0}; pairs[p].total++; pairs[p].pnl+=t.res||0; if((t.res||0)>0)pairs[p].wins++; });
+
+  // Stats par TF
+  const tfs = {};
+  trades.forEach(t=>{ (t.tf||'').split(',').map(s=>s.trim()).filter(Boolean).forEach(tf=>{ if(!tfs[tf])tfs[tf]={wins:0,total:0,pnl:0}; tfs[tf].total++; tfs[tf].pnl+=t.res||0; if((t.res||0)>0)tfs[tf].wins++; }); });
+
+  // Stats par confluence
+  const confs = {};
+  trades.forEach(t=>{ (t.conf||'').split(',').map(s=>s.trim()).filter(Boolean).forEach(c=>{ if(!confs[c])confs[c]={wins:0,total:0,pnl:0}; confs[c].total++; confs[c].pnl+=t.res||0; if((t.res||0)>0)confs[c].wins++; }); });
+
+  // Meilleures/pires sessions, paires, confluences
+  const bestSession = Object.entries(sessions).sort((a,b)=>b[1].pnl-a[1].pnl)[0];
+  const worstSession = Object.entries(sessions).sort((a,b)=>a[1].pnl-b[1].pnl)[0];
+  const bestPair = Object.entries(pairs).sort((a,b)=>b[1].pnl-a[1].pnl)[0];
+  const worstPair = Object.entries(pairs).sort((a,b)=>a[1].pnl-b[1].pnl)[0];
+  const bestConf = Object.entries(confs).sort((a,b)=>b[1].pnl-a[1].pnl)[0];
+  const worstConf = Object.entries(confs).sort((a,b)=>a[1].pnl-b[1].pnl)[0];
+
+  // Séries
+  let maxWS=0,curWS=0,maxLS=0,curLS=0;
+  trades.sort((a,b)=>a.date.localeCompare(b.date)).forEach(t=>{ if((t.res||0)>0){curWS++;maxWS=Math.max(maxWS,curWS);curLS=0;}else if((t.res||0)<0){curLS++;maxLS=Math.max(maxLS,curLS);curWS=0;} });
+
+  // Générer les points clés
+  const cards = [
+    {
+      title: '📊 Résumé de Performance',
+      color: pnl >= 0 ? 'var(--green)' : 'var(--red)',
+      points: [
+        `Win Rate : ${winRate}% (${wins}W / ${losses}L sur ${total} trades)`,
+        `P&L Total : ${pnl>=0?'+':''}${pnl.toLocaleString('fr-FR')}€`,
+        `Profit Factor : ${profitFactor}`,
+        `Gain moyen : +${avgWin.toFixed(2)}€ | Perte moyenne : -${avgLoss.toFixed(2)}€`,
+        `Meilleure série : ${maxWS} gains | Pire série : ${maxLS} pertes`
+      ]
+    },
+    {
+      title: '✅ Points Forts',
+      color: 'var(--green)',
+      points: [
+        bestSession ? `Meilleure session : ${bestSession[0]} (+${bestSession[1].pnl.toFixed(2)}€, ${(bestSession[1].wins/bestSession[1].total*100).toFixed(0)}% WR)` : null,
+        bestPair ? `Meilleure paire : ${bestPair[0]} (+${bestPair[1].pnl.toFixed(2)}€)` : null,
+        bestConf ? `Meilleure confluence : ${bestConf[0]} (+${bestConf[1].pnl.toFixed(2)}€, ${(bestConf[1].wins/bestConf[1].total*100).toFixed(0)}% WR)` : null,
+        winRate > 50 ? `Win Rate > 50% : bon indicateur de précision d'entrée` : null,
+        profitFactor > 1.5 ? `Profit Factor > 1.5 : ratio risque/rendement favorable` : null,
+      ].filter(Boolean)
+    },
+    {
+      title: '⚠️ Points à Améliorer',
+      color: 'var(--red)',
+      points: [
+        worstSession && worstSession[1].pnl < 0 ? `Session difficile : ${worstSession[0]} (${worstSession[1].pnl.toFixed(2)}€)` : null,
+        worstPair && worstPair[1].pnl < 0 ? `Paire à surveiller : ${worstPair[0]} (${worstPair[1].pnl.toFixed(2)}€)` : null,
+        worstConf && worstConf[1].pnl < 0 ? `Confluence à revoir : ${worstConf[0]} (${worstConf[1].pnl.toFixed(2)}€)` : null,
+        winRate < 40 ? `Win Rate < 40% : travailler la sélection des entrées` : null,
+        profitFactor < 1 ? `Profit Factor < 1 : les pertes dépassent les gains` : null,
+        maxLS >= 3 ? `Série de ${maxLS} pertes consécutives : vérifier la gestion du risque` : null,
+      ].filter(Boolean)
+    },
+    {
+      title: '💡 Recommandations',
+      color: 'var(--blue)',
+      points: [
+        bestSession ? `Concentre-toi sur la session ${bestSession[0]} qui est ta plus rentable` : null,
+        worstSession && worstSession[1].pnl < 0 ? `Évite ou réduis ton risque pendant la session ${worstSession[0]}` : null,
+        bestConf ? `Priorise la confluence "${bestConf[0]}" dans tes setups` : null,
+        avgWin < avgLoss ? `Ton gain moyen (${avgWin.toFixed(0)}€) < perte moyenne (${avgLoss.toFixed(0)}€) : vise un RR > 1.5` : null,
+        total < 20 ? `Seulement ${total} trades : continue à alimenter ton journal pour des analyses plus fiables` : null,
+        total >= 20 && winRate > 50 && profitFactor > 1.5 ? `Stratégie solide : maintiens ta discipline et respecte ton plan de trading` : null,
+      ].filter(Boolean)
+    }
+  ];
+
+  // Afficher
+  document.getElementById('pcTimestamp').textContent = `Analysé le ${new Date().toLocaleString('fr-FR')}`;
+  document.getElementById('pcCards').innerHTML = cards.map(card=>`
+    <div class="card" style="border-left:3px solid ${card.color};">
+      <div class="card-header"><div class="card-title" style="color:${card.color}" data-editable>${card.title}</div></div>
+      <div class="card-body">
+        ${card.points.length ? card.points.map(p=>`<div style="font-size:12px;padding:4px 0;border-bottom:1px solid var(--border);">• ${p}</div>`).join('') : '<div style="color:var(--muted);font-size:12px;">Pas assez de données</div>'}
+      </div>
+    </div>`).join('');
+
+  document.getElementById('pcContent').style.display = 'block';
+  statusEl.style.display = 'none';
+
+  // Sauvegarder dans historique
+  const history = JSON.parse(localStorage.getItem('tjp_pc_history')||'[]');
+  history.unshift({ date: new Date().toISOString(), cards });
+  if (history.length > 10) history.pop();
+  localStorage.setItem('tjp_pc_history', JSON.stringify(history));
+  renderPcHistory();
+
+  btn.disabled = false; btn.textContent = 'Analyser ma stratégie';
+}
+
+function renderPcHistory() {
+  const history = JSON.parse(localStorage.getItem('tjp_pc_history')||'[]');
+  const wrap = document.getElementById('pcHistory');
+  if (!wrap) return;
+  if (!history.length) { wrap.innerHTML = '<div style="color:var(--muted);font-size:12px;">Aucune analyse sauvegardée.</div>'; return; }
+  wrap.innerHTML = history.map((h,i)=>`
+    <div style="display:flex;align-items:center;gap:8px;padding:8px;border-bottom:1px solid var(--border);cursor:pointer;" onclick="loadPcHistory(${i})">
+      <div style="flex:1;font-family:var(--mono);font-size:11px;">${new Date(h.date).toLocaleString('fr-FR')}</div>
+      <button onclick="event.stopPropagation();deletePcHistory(${i})" style="background:none;border:none;color:var(--red);cursor:pointer;">🗑</button>
+    </div>`).join('');
+}
+
+function loadPcHistory(i) {
+  const history = JSON.parse(localStorage.getItem('tjp_pc_history')||'[]');
+  if (!history[i]) return;
+  document.getElementById('pcCards').innerHTML = history[i].cards.map(card=>`
+    <div class="card" style="border-left:3px solid ${card.color};">
+      <div class="card-header"><div class="card-title" style="color:${card.color}" data-editable>${card.title}</div></div>
+      <div class="card-body">${card.points.map(p=>`<div style="font-size:12px;padding:4px 0;border-bottom:1px solid var(--border);">• ${p}</div>`).join('')}</div>
+    </div>`).join('');
+  document.getElementById('pcTimestamp').textContent = `Analysé le ${new Date(history[i].date).toLocaleString('fr-FR')}`;
+  document.getElementById('pcContent').style.display = 'block';
+  showPage('pointscles');
+}
+
+function deletePcHistory(i) {
+  const history = JSON.parse(localStorage.getItem('tjp_pc_history')||'[]');
+  history.splice(i,1);
+  localStorage.setItem('tjp_pc_history', JSON.stringify(history));
+  renderPcHistory();
+}
+
+// Appeler renderTop5 et drawTFChart dans refreshAllCharts
+const _origRefreshAll = refreshAllCharts;
+window.refreshAllCharts = function() {
+  _origRefreshAll();
+  renderTop5();
+  drawTFChart();
+};
+
+// Init Points Clés
+document.addEventListener('DOMContentLoaded', () => {
+  renderPcHistory();
+  // Charger clé API si stockée
+  const savedKey = localStorage.getItem('tjp_ia_key');
+  if (savedKey && document.getElementById('iaApiKey')) {
+    document.getElementById('iaApiKey').value = savedKey;
+  }
+  const savedModel = localStorage.getItem('tjp_ia_model');
+  if (savedModel && document.getElementById('iaModel')) {
+    document.getElementById('iaModel').value = savedModel;
+  }
+});
 </script>
 </body>
 </html>
