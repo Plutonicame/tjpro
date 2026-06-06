@@ -2288,6 +2288,317 @@ const shakeStyle = document.createElement('style');
 shakeStyle.textContent = '@keyframes shake{0%,100%{transform:translateX(0)}25%{transform:translateX(-6px)}75%{transform:translateX(6px)}}';
 document.head.appendChild(shakeStyle);
 
+// ══════════════════════════════════════
+// TOP 5 / PIRES 5 TRADES
+// ══════════════════════════════════════
+function renderTop5(){
+  const trades = [...APP.trades].filter(t=>t.res!==undefined&&t.res!==null);
+  if(!trades.length){
+    document.getElementById('top5trades').innerHTML='<div style="color:var(--muted);font-size:12px;">Aucun trade</div>';
+    document.getElementById('worst5trades').innerHTML='<div style="color:var(--muted);font-size:12px;">Aucun trade</div>';
+    return;
+  }
+  const sorted = [...trades].sort((a,b)=>b.res-a.res);
+  const top5 = sorted.slice(0,5);
+  const worst5 = sorted.slice(-5).reverse();
+  const row = (t,color) => `<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid var(--border);">
+    <div>
+      <div style="font-family:var(--mono);font-size:11px;color:var(--text);">${t.paire||'—'} <span style="color:var(--muted);font-size:10px;">${t.date||''}</span></div>
+      <div style="font-size:10px;color:var(--muted);">${t.session||''} ${t.dir||''}</div>
+    </div>
+    <div style="font-family:var(--mono);font-size:13px;font-weight:700;color:${color};">${t.res>=0?'+':''}${t.res?.toLocaleString('fr-FR')}€</div>
+  </div>`;
+  document.getElementById('top5trades').innerHTML = top5.map(t=>row(t,'var(--green)')).join('');
+  document.getElementById('worst5trades').innerHTML = worst5.map(t=>row(t,'var(--red)')).join('');
+}
+
+// ══════════════════════════════════════
+// GRAPHIQUE TIMEFRAMES
+// ══════════════════════════════════════
+function drawTFChart(){
+  const trades = APP.trades.filter(t=>t.tf&&t.tf.trim());
+  if(!trades.length) return;
+  // Compter les TF
+  const tfCount = {};
+  const tfPnl = {};
+  trades.forEach(t=>{
+    const tfs = t.tf.split(',').map(s=>s.trim()).filter(Boolean);
+    tfs.forEach(tf=>{
+      tfCount[tf]=(tfCount[tf]||0)+1;
+      tfPnl[tf]=(tfPnl[tf]||0)+(t.res||0);
+    });
+  });
+  const labels = Object.keys(tfCount).sort((a,b)=>tfCount[b]-tfCount[a]);
+  const counts = labels.map(tf=>tfCount[tf]);
+  const pnls = labels.map(tf=>tfPnl[tf]);
+  const colors = pnls.map(v=>v>=0?gc('--green')||'#00e5a0':gc('--red')||'#ef4444');
+
+  // Injecter le canvas si pas présent
+  let wrap = document.getElementById('tfChartWrap');
+  if(!wrap){
+    const tr = document.getElementById('page-trackrecord');
+    if(!tr) return;
+    const compCharts = document.getElementById('compCharts');
+    const card = document.createElement('div');
+    card.className = 'card';
+    card.style.marginTop = '14px';
+    card.innerHTML = `<div class="card-header"><div class="card-title" data-editable>TIMEFRAMES</div><div class="period-btns"></div></div>
+      <div class="card-body chart-body" id="tfChartWrap"><canvas id="cTF"></canvas></div>`;
+    compCharts.insertAdjacentElement('beforebegin', card);
+    wrap = document.getElementById('tfChartWrap');
+  }
+  if(CH['tf']) CH['tf'].destroy();
+  const ctx = document.getElementById('cTF')?.getContext('2d');
+  if(!ctx) return;
+  CH['tf'] = new Chart(ctx,{
+    type:'bar',
+    data:{labels,datasets:[
+      {label:'Trades',data:counts,backgroundColor:gc('--btn-p-bg')||'#00e5a0',borderRadius:4,yAxisID:'y'},
+      {label:'P&L',data:pnls,backgroundColor:colors,borderRadius:4,yAxisID:'y2'}
+    ]},
+    options:{responsive:true,maintainAspectRatio:false,
+      plugins:{legend:{display:true,labels:{color:gc('--text')||'#e2e8f0',font:{size:10}}}},
+      scales:{
+        y:{position:'left',ticks:{color:gc('--muted')||'#64748b',font:{size:9}},grid:{color:'rgba(100,116,139,.1)'}},
+        y2:{position:'right',ticks:{color:gc('--muted')||'#64748b',font:{size:9},callback:v=>(v>=0?'+':'')+v+'€'},grid:{display:false}}
+      }
+    }
+  });
+}
+
+// ══════════════════════════════════════
+// POINTS CLÉS IA INTERNE
+// ══════════════════════════════════════
+let _pcHistory = [];
+
+function showPcStatus(msg, color='var(--muted)'){
+  const el = document.getElementById('pcStatus');
+  if(!el) return;
+  el.textContent = msg; el.style.color = color; el.style.display = 'block';
+}
+
+async function generatePointsCles(){
+  const btn = document.getElementById('pcGenBtn');
+  if(!btn) return;
+  if(!APP.trades.length){ showPcStatus('Aucun trade dans le journal.','var(--red)'); return; }
+
+  btn.disabled = true; btn.textContent = '⏳ Analyse...';
+  showPcStatus('Analyse de tes trades en cours...','var(--muted)');
+  document.getElementById('pcContent').style.display = 'none';
+
+  // Préparer les données de performance
+  const trades = APP.trades;
+  const totalTrades = trades.length;
+  const winners = trades.filter(t=>t.res>0);
+  const losers = trades.filter(t=>t.res<0);
+  const winRate = totalTrades>0?(winners.length/totalTrades*100).toFixed(1):0;
+  const totalPnl = trades.reduce((s,t)=>s+(t.res||0),0);
+  const avgWin = winners.length>0?(winners.reduce((s,t)=>s+t.res,0)/winners.length).toFixed(2):0;
+  const avgLoss = losers.length>0?(losers.reduce((s,t)=>s+t.res,0)/losers.length).toFixed(2):0;
+  const profitFactor = Math.abs(avgLoss)>0?(Math.abs(avgWin*winners.length)/(Math.abs(avgLoss)*losers.length)).toFixed(2):'∞';
+
+  // Meilleures/pires paires
+  const byPaire = {};
+  trades.forEach(t=>{
+    if(!t.paire) return;
+    if(!byPaire[t.paire]) byPaire[t.paire]={pnl:0,count:0,wins:0};
+    byPaire[t.paire].pnl+=t.res||0;
+    byPaire[t.paire].count++;
+    if(t.res>0) byPaire[t.paire].wins++;
+  });
+  const pairesSort = Object.entries(byPaire).sort((a,b)=>b[1].pnl-a[1].pnl);
+  const bestPaire = pairesSort[0];
+  const worstPaire = pairesSort[pairesSort.length-1];
+
+  // Meilleures sessions
+  const bySess = {};
+  trades.forEach(t=>{
+    if(!t.session) return;
+    if(!bySess[t.session]) bySess[t.session]={pnl:0,count:0,wins:0};
+    bySess[t.session].pnl+=t.res||0;
+    bySess[t.session].count++;
+    if(t.res>0) bySess[t.session].wins++;
+  });
+  const sessSort = Object.entries(bySess).sort((a,b)=>b[1].pnl-a[1].pnl);
+
+  // Meilleures confluences
+  const byConf = {};
+  trades.forEach(t=>{
+    if(!t.conf) return;
+    t.conf.split(',').forEach(c=>{
+      const cc = c.trim(); if(!cc) return;
+      if(!byConf[cc]) byConf[cc]={pnl:0,count:0,wins:0};
+      byConf[cc].pnl+=t.res||0; byConf[cc].count++;
+      if(t.res>0) byConf[cc].wins++;
+    });
+  });
+  const confSort = Object.entries(byConf).sort((a,b)=>b[1].pnl-a[1].pnl);
+
+  // Appel API Claude interne
+  const prompt = `Tu es un coach de trading professionnel. Analyse ces statistiques et génère des points clés concis et actionnables.
+
+DONNÉES DU JOURNAL:
+- Total trades: ${totalTrades}
+- Win rate: ${winRate}%
+- P&L total: ${totalPnl.toFixed(2)}€
+- Gain moyen: ${avgWin}€ | Perte moyenne: ${avgLoss}€
+- Profit factor: ${profitFactor}
+- Meilleure paire: ${bestPaire?`${bestPaire[0]} (${bestPaire[1].pnl.toFixed(2)}€, ${(bestPaire[1].wins/bestPaire[1].count*100).toFixed(0)}% WR)`:'N/A'}
+- Pire paire: ${worstPaire?`${worstPaire[0]} (${worstPaire[1].pnl.toFixed(2)}€)`:'N/A'}
+- Meilleures sessions: ${sessSort.slice(0,3).map(([s,d])=>`${s}(${d.pnl.toFixed(0)}€)`).join(', ')||'N/A'}
+- Meilleures confluences: ${confSort.slice(0,5).map(([c,d])=>`${c}(${d.pnl.toFixed(0)}€)`).join(', ')||'N/A'}
+
+Génère exactement 6 points clés au format JSON strict (pas de markdown, pas d'explication):
+[
+  {"titre":"Points Forts","icone":"💪","points":["point1","point2","point3"]},
+  {"titre":"Points Faibles","icone":"⚠️","points":["point1","point2","point3"]},
+  {"titre":"Ce qui marche","icone":"✅","points":["point1","point2"]},
+  {"titre":"À améliorer","icone":"🎯","points":["point1","point2"]},
+  {"titre":"Meilleures confluences","icone":"🔑","points":["point1","point2"]},
+  {"titre":"Recommandations","icone":"📋","points":["point1","point2","point3"]}
+]
+Sois précis, basé sur les données réelles, max 15 mots par point.`;
+
+  try {
+    const response = await fetch('https://api.anthropic.com/v1/messages', {
+      method:'POST',
+      headers:{'Content-Type':'application/json','anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
+      body: JSON.stringify({
+        model:'claude-haiku-4-5-20251001',
+        max_tokens:1500,
+        system:'Tu es un expert en analyse de performance de trading. Réponds UNIQUEMENT en JSON valide, sans markdown ni explication.',
+        messages:[{role:'user',content:prompt}]
+      })
+    });
+
+    // Note: nécessite une clé API ou le proxy interne
+    if(!response.ok) throw new Error('API '+response.status);
+    const data = await response.json();
+    const text = data.content?.find(b=>b.type==='text')?.text||'[]';
+    const clean = text.replace(/```json|```/g,'').trim();
+    const cards = JSON.parse(clean);
+    renderPcCards(cards);
+
+  } catch(e) {
+    // Fallback : génération locale basée sur les données
+    const cards = generateLocalAnalysis({winRate,totalPnl,avgWin,avgLoss,profitFactor,bestPaire,worstPaire,sessSort,confSort,totalTrades,winners,losers});
+    renderPcCards(cards);
+  }
+
+  btn.disabled = false; btn.textContent = 'Analyser ma stratégie';
+}
+
+function generateLocalAnalysis({winRate,totalPnl,avgWin,avgLoss,profitFactor,bestPaire,worstPaire,sessSort,confSort,totalTrades,winners,losers}){
+  const wRate = parseFloat(winRate);
+  const pf = parseFloat(profitFactor)||0;
+  const cards = [
+    {titre:'Points Forts',icone:'💪',points:[
+      wRate>=55?`Win rate solide à ${winRate}%`:`${totalTrades} trades analysés`,
+      totalPnl>0?`P&L positif : +${totalPnl.toFixed(2)}€`:`Expérience accumulée sur ${totalTrades} trades`,
+      bestPaire?`Meilleure paire : ${bestPaire[0]} (+${bestPaire[1].pnl.toFixed(0)}€)`:`Sessions identifiées : ${sessSort.length}`
+    ]},
+    {titre:'Points Faibles',icone:'⚠️',points:[
+      wRate<50?`Win rate à améliorer : ${winRate}%`:`Ratio gain/perte à optimiser`,
+      worstPaire&&worstPaire[1].pnl<0?`Paire à éviter : ${worstPaire[0]} (${worstPaire[1].pnl.toFixed(0)}€)`:`Analyser les séries de pertes`,
+      parseFloat(avgLoss)<-100?`Pertes moyennes élevées : ${avgLoss}€`:`Affiner les stops loss`
+    ]},
+    {titre:'Ce qui marche',icone:'✅',points:[
+      bestPaire?`${bestPaire[0]} : ${(bestPaire[1].wins/bestPaire[1].count*100).toFixed(0)}% WR, +${bestPaire[1].pnl.toFixed(0)}€`:'Identifier et répliquer les setups gagnants',
+      sessSort[0]?`Session ${sessSort[0][0]} : +${sessSort[0][1].pnl.toFixed(0)}€`:'Analyser les meilleures sessions'
+    ]},
+    {titre:'À améliorer',icone:'🎯',points:[
+      worstPaire?`Réduire exposition sur ${worstPaire[0]}`:'Diversifier les paires analysées',
+      sessSort[sessSort.length-1]&&sessSort[sessSort.length-1][1].pnl<0?`Session ${sessSort[sessSort.length-1][0]} peu performante`:'Affiner les entrées'
+    ]},
+    {titre:'Meilleures confluences',icone:'🔑',points:confSort.slice(0,3).map(([c,d])=>`${c} : ${(d.wins/d.count*100).toFixed(0)}% WR, ${d.pnl>0?'+':''}${d.pnl.toFixed(0)}€`).concat(confSort.length<2?['Ajouter plus de confluences dans les trades']:[] )},
+    {titre:'Recommandations',icone:'📋',points:[
+      pf>=1.5?`Profit factor bon (${profitFactor}) : maintenir la stratégie`:`Améliorer le profit factor (actuellement ${profitFactor})`,
+      wRate>=50&&totalPnl>0?'Stratégie rentable : augmenter progressivement le capital':'Backtester davantage avant d\'augmenter les tailles',
+      `Objectif : viser ${(wRate+5).toFixed(0)}% WR sur les ${Math.min(20,totalTrades)} prochains trades`
+    ]}
+  ];
+  return cards;
+}
+
+function renderPcCards(cards){
+  const wrap = document.getElementById('pcCards');
+  if(!wrap) return;
+  wrap.innerHTML = cards.map(c=>`
+    <div class="card" style="margin:0;">
+      <div class="card-header" style="padding:10px 14px;">
+        <div class="card-title" style="font-size:11px;" data-editable>${c.icone} ${c.titre}</div>
+      </div>
+      <div class="card-body" style="padding:10px 14px;">
+        ${(c.points||[]).map(p=>`<div style="display:flex;gap:6px;align-items:flex-start;margin-bottom:6px;">
+          <span style="color:var(--green);font-size:10px;margin-top:2px;">▸</span>
+          <span style="font-size:12px;color:var(--text);line-height:1.5;">${p}</span>
+        </div>`).join('')}
+      </div>
+    </div>`).join('');
+  const ts = new Date().toLocaleString('fr-FR');
+  document.getElementById('pcTimestamp').textContent = `Généré le ${ts}`;
+  document.getElementById('pcContent').style.display = 'block';
+  document.getElementById('pcStatus').style.display = 'none';
+
+  // Sauvegarder dans l'historique
+  _pcHistory.unshift({date:ts,cards});
+  if(_pcHistory.length>10) _pcHistory.pop();
+  localStorage.setItem('tjp_pc_history',JSON.stringify(_pcHistory));
+  renderPcHistory();
+}
+
+function renderPcHistory(){
+  const wrap = document.getElementById('pcHistory'); if(!wrap) return;
+  if(!_pcHistory.length){wrap.innerHTML='<div style="color:var(--muted);font-size:12px;">Aucune analyse sauvegardée.</div>';return;}
+  wrap.innerHTML = _pcHistory.map((h,i)=>`
+    <div style="display:flex;align-items:center;gap:8px;padding:8px;border-bottom:1px solid var(--border);cursor:pointer;" onclick="loadPcHistory(${i})">
+      <div style="flex:1;font-family:var(--mono);font-size:11px;color:var(--text);">${h.date}</div>
+      <button onclick="event.stopPropagation();deletePcHistory(${i})" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:14px;">🗑</button>
+    </div>`).join('');
+}
+function loadPcHistory(i){
+  if(_pcHistory[i]) renderPcCards(_pcHistory[i].cards);
+  showPage('pointscles');
+}
+function deletePcHistory(i){
+  _pcHistory.splice(i,1);
+  localStorage.setItem('tjp_pc_history',JSON.stringify(_pcHistory));
+  renderPcHistory();
+}
+
+// Init Points Clés au chargement
+document.addEventListener('DOMContentLoaded',()=>{
+  try{ _pcHistory=JSON.parse(localStorage.getItem('tjp_pc_history')||'[]'); }catch(e){_pcHistory=[];}
+  renderPcHistory();
+  // Init clé API UI si présente
+  const savedKey = localStorage.getItem('tjp_ia_key');
+  const keyEl = document.getElementById('iaApiKey');
+  if(keyEl&&savedKey) keyEl.value = savedKey;
+  const modelEl = document.getElementById('iaModel');
+  const savedModel = localStorage.getItem('tjp_ia_model');
+  if(modelEl&&savedModel) modelEl.value = savedModel;
+});
+
+// Étendre showPage pour Points Clés et Top5
+const _origShowPagePC = window.showPage||function(){};
+window.showPage = function(page, btn){
+  _origShowPagePC(page, btn);
+  if(page==='trackrecord'){
+    setTimeout(()=>{ renderTop5(); drawTFChart(); }, 100);
+  }
+  if(page==='pointscles'){
+    renderPcHistory();
+  }
+};
+
+// Appeler renderTop5 dans refreshAllCharts
+const _origRefresh = refreshAllCharts;
+window.refreshAllCharts = function(){
+  _origRefresh();
+  renderTop5();
+  drawTFChart();
+};
+
 // ══ TOP 5 / PIRES 5 TRADES ══
 function renderTop5() {
   const sorted = [...APP.trades].sort((a,b) => (b.res||0) - (a.res||0));
