@@ -1974,15 +1974,16 @@ async function submitReturnEmail() {
 
 // ══ AUTH INIT ══
 async function initAuth() {
+  // Attendre que Supabase traite le hash de l'URL (access_token après OAuth)
+  await new Promise(r => setTimeout(r, 200));
+  
   const { data: { session } } = await sb.auth.getSession();
 
   if (session && session.user) {
-    // Retour après redirect Google
     currentUser = session.user;
     localStorage.setItem(emailKey(currentUser.id), currentUser.email);
     localStorage.setItem(uidByEmailKey(currentUser.email.toLowerCase()), currentUser.id);
     localStorage.setItem('tjp_last_uid', currentUser.id);
-    // NE PAS signOut — on garde la session pour que Supabase accepte les requêtes
 
     const pin = localStorage.getItem(pinKey(currentUser.id));
     if (pin) {
@@ -1994,11 +1995,9 @@ async function initAuth() {
       setupCreatePin();
     }
   } else {
-    // Vérifier s'il y a une session Supabase existante (refresh token)
     const lastUid = localStorage.getItem('tjp_last_uid');
     if (lastUid && localStorage.getItem(pinKey(lastUid))) {
-      // Tenter de restaurer la session Supabase silencieusement
-      const { data: refreshData } = await sb.auth.refreshSession();
+      const { data: refreshData } = await sb.auth.refreshSession().catch(()=>({data:{}}));
       if (refreshData?.user) {
         currentUser = refreshData.user;
       } else {
@@ -2011,6 +2010,25 @@ async function initAuth() {
       showOverlay('overlayGoogle');
     }
   }
+  
+  // Écouter les changements d'état auth (nécessaire pour le redirect OAuth)
+  sb.auth.onAuthStateChange(async (event, session) => {
+    if (event === 'SIGNED_IN' && session?.user && !currentUser) {
+      currentUser = session.user;
+      localStorage.setItem(emailKey(currentUser.id), currentUser.email);
+      localStorage.setItem(uidByEmailKey(currentUser.email.toLowerCase()), currentUser.id);
+      localStorage.setItem('tjp_last_uid', currentUser.id);
+      const pin = localStorage.getItem(pinKey(currentUser.id));
+      if (pin) {
+        document.getElementById('enterPinSub').textContent = currentUser.email;
+        showOverlay('overlayEnterPin');
+        setupEnterPin();
+      } else {
+        showOverlay('overlayCreatePin');
+        setupCreatePin();
+      }
+    }
+  });
 }
 
 // ══ SYNC ══
