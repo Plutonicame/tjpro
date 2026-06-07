@@ -2498,7 +2498,7 @@ async function generatePointsCles(){
   if(worstPaire&&worstPaire[1].pnl<0)pf2.push(`${worstPaire[0]} : paire la moins rentable (${worstPaire[1].pnl.toFixed(0)}€)`);
   if(maxDD>10)pf2.push(`Drawdown max : ${maxDD.toFixed(1)}% — revoir la gestion du risque`);
   if(Math.abs(parseFloat(avgLoss))>Math.abs(parseFloat(avgWin))*1.5)pf2.push(`Pertes moyennes (${avgLoss}€) trop grandes vs gains (${avgWin}€)`);
-  if(!pf2.length)pf2.push('Continuer à journaliser pour identifier les axes d'amélioration');
+  if(!pf2.length)pf2.push("Continuer a journaliser pour identifier les axes d'amelioration");
   cards.push({titre:'Points Faibles',icone:'⚠️',color:'var(--red)',points:pf2.slice(0,4)});
 
   // 3. Ce qui marche
