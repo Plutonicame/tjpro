@@ -2135,14 +2135,15 @@ function applyCloudData(data) {
   lss('tj_lists', APP.lists);
   lss('tj_nextId', APP.nextId);
   renderTable(); 
-  updateNavBadges(); 
-  if(document.getElementById('page-trackrecord')?.classList.contains('active')){
-    setTimeout(refreshAllCharts, 200);
-  } else {
-    setTimeout(updateKPIs, 100);
-  }
-  if(document.getElementById('page-modifs')?.classList.contains('active')) renderModifs();
-  setTimeout(applyPencilEdits, 100);
+  updateNavBadges();
+  // Toujours tout rafraîchir après un pull cloud
+  setTimeout(()=>{
+    refreshAllCharts();
+    renderTop5();
+    drawTFChart();
+    if(document.getElementById('page-modifs')?.classList.contains('active')) renderModifs();
+    applyPencilEdits();
+  }, 200);
   localStorage.setItem('tjp_last_uid', currentUser.id);
   setTimeout(() => { _isSyncing = false; }, 1000);
   if(data.updated_at) localStorage.setItem('tjp_last_updated_at', data.updated_at);
@@ -2637,132 +2638,6 @@ function drawTFChart() {
 }
 
 // ══ POINTS CLÉS IA INTERNE ══
-async function generatePointsCles() {
-  const trades = APP.trades;
-  if (trades.length < 2) {
-    document.getElementById('pcStatus').textContent = '⚠ Pas assez de trades pour analyser (minimum 2).';
-    document.getElementById('pcStatus').style.display = 'block';
-    document.getElementById('pcStatus').style.color = '#f59e0b';
-    return;
-  }
-
-  const btn = document.getElementById('pcGenBtn');
-  btn.disabled = true; btn.textContent = '⏳ Analyse...';
-  const statusEl = document.getElementById('pcStatus');
-  statusEl.style.display = 'block';
-  statusEl.style.color = 'var(--muted)';
-  statusEl.textContent = '🔄 Analyse en cours...';
-
-  // Calculer les stats localement
-  const total = trades.length;
-  const wins = trades.filter(t=>(t.res||0)>0).length;
-  const losses = trades.filter(t=>(t.res||0)<0).length;
-  const winRate = total > 0 ? (wins/total*100).toFixed(1) : 0;
-  const pnl = trades.reduce((s,t)=>s+(t.res||0),0);
-  const avgWin = wins > 0 ? trades.filter(t=>(t.res||0)>0).reduce((s,t)=>s+(t.res||0),0)/wins : 0;
-  const avgLoss = losses > 0 ? Math.abs(trades.filter(t=>(t.res||0)<0).reduce((s,t)=>s+(t.res||0),0)/losses) : 0;
-  const profitFactor = avgLoss > 0 ? (avgWin/avgLoss).toFixed(2) : '∞';
-
-  // Stats par session
-  const sessions = {};
-  trades.forEach(t=>{ const s=t.session||'Inconnu'; if(!sessions[s])sessions[s]={wins:0,total:0,pnl:0}; sessions[s].total++; sessions[s].pnl+=t.res||0; if((t.res||0)>0)sessions[s].wins++; });
-
-  // Stats par paire
-  const pairs = {};
-  trades.forEach(t=>{ const p=t.paire||'Inconnu'; if(!pairs[p])pairs[p]={wins:0,total:0,pnl:0}; pairs[p].total++; pairs[p].pnl+=t.res||0; if((t.res||0)>0)pairs[p].wins++; });
-
-  // Stats par TF
-  const tfs = {};
-  trades.forEach(t=>{ (t.tf||'').split(',').map(s=>s.trim()).filter(Boolean).forEach(tf=>{ if(!tfs[tf])tfs[tf]={wins:0,total:0,pnl:0}; tfs[tf].total++; tfs[tf].pnl+=t.res||0; if((t.res||0)>0)tfs[tf].wins++; }); });
-
-  // Stats par confluence
-  const confs = {};
-  trades.forEach(t=>{ (t.conf||'').split(',').map(s=>s.trim()).filter(Boolean).forEach(c=>{ if(!confs[c])confs[c]={wins:0,total:0,pnl:0}; confs[c].total++; confs[c].pnl+=t.res||0; if((t.res||0)>0)confs[c].wins++; }); });
-
-  // Meilleures/pires sessions, paires, confluences
-  const bestSession = Object.entries(sessions).sort((a,b)=>b[1].pnl-a[1].pnl)[0];
-  const worstSession = Object.entries(sessions).sort((a,b)=>a[1].pnl-b[1].pnl)[0];
-  const bestPair = Object.entries(pairs).sort((a,b)=>b[1].pnl-a[1].pnl)[0];
-  const worstPair = Object.entries(pairs).sort((a,b)=>a[1].pnl-b[1].pnl)[0];
-  const bestConf = Object.entries(confs).sort((a,b)=>b[1].pnl-a[1].pnl)[0];
-  const worstConf = Object.entries(confs).sort((a,b)=>a[1].pnl-b[1].pnl)[0];
-
-  // Séries
-  let maxWS=0,curWS=0,maxLS=0,curLS=0;
-  trades.sort((a,b)=>a.date.localeCompare(b.date)).forEach(t=>{ if((t.res||0)>0){curWS++;maxWS=Math.max(maxWS,curWS);curLS=0;}else if((t.res||0)<0){curLS++;maxLS=Math.max(maxLS,curLS);curWS=0;} });
-
-  // Générer les points clés
-  const cards = [
-    {
-      title: '📊 Résumé de Performance',
-      color: pnl >= 0 ? 'var(--green)' : 'var(--red)',
-      points: [
-        `Win Rate : ${winRate}% (${wins}W / ${losses}L sur ${total} trades)`,
-        `P&L Total : ${pnl>=0?'+':''}${pnl.toLocaleString('fr-FR')}€`,
-        `Profit Factor : ${profitFactor}`,
-        `Gain moyen : +${avgWin.toFixed(2)}€ | Perte moyenne : -${avgLoss.toFixed(2)}€`,
-        `Meilleure série : ${maxWS} gains | Pire série : ${maxLS} pertes`
-      ]
-    },
-    {
-      title: '✅ Points Forts',
-      color: 'var(--green)',
-      points: [
-        bestSession ? `Meilleure session : ${bestSession[0]} (+${bestSession[1].pnl.toFixed(2)}€, ${(bestSession[1].wins/bestSession[1].total*100).toFixed(0)}% WR)` : null,
-        bestPair ? `Meilleure paire : ${bestPair[0]} (+${bestPair[1].pnl.toFixed(2)}€)` : null,
-        bestConf ? `Meilleure confluence : ${bestConf[0]} (+${bestConf[1].pnl.toFixed(2)}€, ${(bestConf[1].wins/bestConf[1].total*100).toFixed(0)}% WR)` : null,
-        winRate > 50 ? `Win Rate > 50% : bon indicateur de précision d'entrée` : null,
-        profitFactor > 1.5 ? `Profit Factor > 1.5 : ratio risque/rendement favorable` : null,
-      ].filter(Boolean)
-    },
-    {
-      title: '⚠️ Points à Améliorer',
-      color: 'var(--red)',
-      points: [
-        worstSession && worstSession[1].pnl < 0 ? `Session difficile : ${worstSession[0]} (${worstSession[1].pnl.toFixed(2)}€)` : null,
-        worstPair && worstPair[1].pnl < 0 ? `Paire à surveiller : ${worstPair[0]} (${worstPair[1].pnl.toFixed(2)}€)` : null,
-        worstConf && worstConf[1].pnl < 0 ? `Confluence à revoir : ${worstConf[0]} (${worstConf[1].pnl.toFixed(2)}€)` : null,
-        winRate < 40 ? `Win Rate < 40% : travailler la sélection des entrées` : null,
-        profitFactor < 1 ? `Profit Factor < 1 : les pertes dépassent les gains` : null,
-        maxLS >= 3 ? `Série de ${maxLS} pertes consécutives : vérifier la gestion du risque` : null,
-      ].filter(Boolean)
-    },
-    {
-      title: '💡 Recommandations',
-      color: 'var(--blue)',
-      points: [
-        bestSession ? `Concentre-toi sur la session ${bestSession[0]} qui est ta plus rentable` : null,
-        worstSession && worstSession[1].pnl < 0 ? `Évite ou réduis ton risque pendant la session ${worstSession[0]}` : null,
-        bestConf ? `Priorise la confluence "${bestConf[0]}" dans tes setups` : null,
-        avgWin < avgLoss ? `Ton gain moyen (${avgWin.toFixed(0)}€) < perte moyenne (${avgLoss.toFixed(0)}€) : vise un RR > 1.5` : null,
-        total < 20 ? `Seulement ${total} trades : continue à alimenter ton journal pour des analyses plus fiables` : null,
-        total >= 20 && winRate > 50 && profitFactor > 1.5 ? `Stratégie solide : maintiens ta discipline et respecte ton plan de trading` : null,
-      ].filter(Boolean)
-    }
-  ];
-
-  // Afficher
-  document.getElementById('pcTimestamp').textContent = `Analysé le ${new Date().toLocaleString('fr-FR')}`;
-  document.getElementById('pcCards').innerHTML = cards.map(card=>`
-    <div class="card" style="border-left:3px solid ${card.color};">
-      <div class="card-header"><div class="card-title" style="color:${card.color}" data-editable>${card.title}</div></div>
-      <div class="card-body">
-        ${card.points.length ? card.points.map(p=>`<div style="font-size:12px;padding:4px 0;border-bottom:1px solid var(--border);">• ${p}</div>`).join('') : '<div style="color:var(--muted);font-size:12px;">Pas assez de données</div>'}
-      </div>
-    </div>`).join('');
-
-  document.getElementById('pcContent').style.display = 'block';
-  statusEl.style.display = 'none';
-
-  // Sauvegarder dans historique
-  const history = JSON.parse(localStorage.getItem('tjp_pc_history')||'[]');
-  history.unshift({ date: new Date().toISOString(), cards });
-  if (history.length > 10) history.pop();
-  localStorage.setItem('tjp_pc_history', JSON.stringify(history));
-  renderPcHistory();
-
-  btn.disabled = false; btn.textContent = 'Analyser ma stratégie';
-}
 
 function renderPcHistory() {
   const history = JSON.parse(localStorage.getItem('tjp_pc_history')||'[]');
