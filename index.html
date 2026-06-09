@@ -469,8 +469,8 @@ tbody td{padding:6px 8px;vertical-align:middle;white-space:nowrap;}
   <div class="page-sub" data-editable>Risk −0.5% si DD≥5% depuis sommet · Récup ou 3 gains = +0.5%</div>
   <div class="kpi-strip">
     <div class="kpi-card"><div class="kpi-bar" id="kb1"></div><div class="kpi-icon" data-editable>💰</div><div class="kpi-label" data-editable>Capital</div><div class="kpi-value" id="k0">—</div></div>
-    <div class="kpi-card"><div class="kpi-bar" id="kb2"></div><div class="kpi-icon" data-editable>📈</div><div class="kpi-label" data-editable>P&L Total</div><div class="kpi-value" id="k1">—</div></div>
-    <div class="kpi-card"><div class="kpi-bar" id="kb3"></div><div class="kpi-icon" data-editable>🎯</div><div class="kpi-label" data-editable>Win Rate</div><div class="kpi-value" id="k2">—</div></div>
+    <div class="kpi-card"><div class="kpi-bar" id="kb2"></div><div class="kpi-icon" data-editable>📈</div><div class="kpi-label" data-editable>P&L Total</div><div class="kpi-value" id="k1" data-editable>—</div></div>
+    <div class="kpi-card"><div class="kpi-bar" id="kb3"></div><div class="kpi-icon" data-editable>🎯</div><div class="kpi-label" data-editable>Win Rate</div><div class="kpi-value" id="k2" data-editable>—</div></div>
     <div class="kpi-card"><div class="kpi-bar" id="kb4"></div><div class="kpi-icon" data-editable>⚖️</div><div class="kpi-label" data-editable>RR Moyen</div><div class="kpi-value" id="k3">—</div></div>
     <div class="kpi-card"><div class="kpi-bar" id="kb5"></div><div class="kpi-icon" data-editable>📊</div><div class="kpi-label" data-editable>Profit Factor</div><div class="kpi-value" id="k4">—</div></div>
     <div class="kpi-card"><div class="kpi-bar" id="kb6"></div><div class="kpi-icon" data-editable>💸</div><div class="kpi-label" data-editable>Pay Out</div><div class="kpi-value" id="k5">—</div></div>
@@ -544,7 +544,18 @@ tbody td{padding:6px 8px;vertical-align:middle;white-space:nowrap;}
 <div class="page" id="page-pointscles" style="display:none">
   <div class="page-title" data-editable>Points Clés</div>
   <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px;align-items:center;">
-    <button class="btn btn-p" onclick="generatePointsCles()" id="pcGenBtn" style="white-space:nowrap;">Analyser ma stratégie</button>
+    <button class="btn btn-p" onclick="generatePointsCles()" id="pcGenBtn" style="white-space:nowrap;">Analyser ma strategie</button>
+  </div>
+  <!-- Zone de questions -->
+  <div class="card" style="margin-bottom:14px;">
+    <div class="card-header"><div class="card-title" data-editable>POSER UNE QUESTION</div></div>
+    <div class="card-body">
+      <div style="display:flex;gap:8px;">
+        <input type="text" id="pcQuestion" placeholder="Ex: Quelle est ma meilleure paire sur le lundi ?" style="flex:1;font-size:13px;" onkeydown="if(event.key==='Enter')askPcQuestion()">
+        <button class="btn btn-p" onclick="askPcQuestion()" style="white-space:nowrap;">Demander</button>
+      </div>
+      <div id="pcQuestionAnswer" style="display:none;margin-top:10px;padding:10px;background:var(--surface);border-radius:6px;border:1px solid var(--border);font-size:13px;line-height:1.7;color:var(--text);"></div>
+    </div>
   </div>
   <div id="pcStatus" style="display:none;font-family:var(--mono);font-size:11px;color:var(--muted);padding:8px 12px;background:var(--surface);border-radius:6px;border:1px solid var(--border);margin-bottom:10px;"></div>
   <div id="pcContent" style="display:none;">
@@ -888,9 +899,10 @@ function computeRiskHistory(){
       if(runCap>highestEq) highestEq=runCap;
       // Calculer drawdown depuis le plus haut
       const dd=highestEq>0?((highestEq-runCap)/highestEq)*100:0;
-      if(dd>=5&&!inDrawdown){
-        // Drawdown >=5% : baisser de 0.5%
-        rp=Math.max(0.01,Math.round((rp-0.5)*100)/100);
+      const ddSteps=Math.floor(dd/5); // chaque palier de 5% = -0.5%
+      if(ddSteps>0&&!inDrawdown){
+        // Chaque palier de 5% de drawdown = -0.5% de risk
+        for(let _i=0;_i<ddSteps;_i++) rp=Math.max(0.01,Math.round((rp-0.5)*100)/100);
         inDrawdown=true;
         ws=0;ls2++;
       } else if(res>0){
@@ -931,7 +943,8 @@ function drawRiskChart(period){
     const res=t.res||0;runCap+=res;
     if(runCap>highestEq)highestEq=runCap;
     const dd=highestEq>0?((highestEq-runCap)/highestEq)*100:0;
-    if(dd>=5&&!inDrawdown){rp=Math.max(0.01,Math.round((rp-0.5)*100)/100);inDrawdown=true;ws=0;ls2++;}
+    const ddSteps=Math.floor(dd/5);
+    if(ddSteps>0&&!inDrawdown){for(let _i=0;_i<ddSteps;_i++)rp=Math.max(0.01,Math.round((rp-0.5)*100)/100);inDrawdown=true;ws=0;ls2++;}
     else if(res>0){
       if(inDrawdown&&runCap>=highestEq){rp=Math.min(rmax,Math.round((rp+0.5)*100)/100);inDrawdown=false;ws=0;}
       else if(!inDrawdown){ws++;if(ws%3===0)rp=Math.min(rmax,Math.round((rp+0.5)*100)/100);}
@@ -942,7 +955,7 @@ function drawRiskChart(period){
   CH['risk']=new Chart(ctx,{
     type:'line',
     data:{labels,datasets:[
-      {label:'Risk %',data:riskData,borderColor:lineC,backgroundColor:gc('--risk-fill-top')||'rgba(245,158,11,.15)',fill:true,tension:0.3,pointRadius:0,borderWidth:2},
+      {label:'Risk %',data:riskData,borderColor:lineC,backgroundColor:gc('--risk-fill-top')||'rgba(245,158,11,.15)',fill:true,tension:0,pointRadius:2,borderWidth:2,stepped:'before'},
       {label:'Base',data:Array(labels.length).fill(base),borderColor:baseC,borderDash:[4,4],pointRadius:0,borderWidth:1,fill:false}
     ]},
     options:{responsive:true,maintainAspectRatio:false,
@@ -2327,7 +2340,7 @@ function renderTop5(){
   const sorted = [...trades].sort((a,b)=>b.res-a.res);
   const top5 = sorted.slice(0,5);
   const worst5 = sorted.slice(-5).reverse();
-  const medals = ['🥇','🥈','🥉','4️⃣','5️⃣'];
+  const medals = ['🥇','🥈','🥉','',''];
   const badEmojis = ['💸','📉','😬','❌','🚨'];
   const rowTop = (t,i) => `<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid var(--border);">
     <div style="display:flex;align-items:center;gap:8px;">
