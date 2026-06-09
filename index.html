@@ -950,6 +950,7 @@ function drawRiskChart(period){
       scales:{
         x:{grid:{color:grC},ticks:{color:axC,maxTicksLimit:10,maxRotation:0}},
         y:{grid:{color:grC},ticks:{color:axC,callback:v=>v+'%'},
+           suggestedMin:Math.max(0,base-3),suggestedMax:Math.min(RMAX()+3,base+3),
            title:{display:true,text:'Risk %',color:axC,font:{size:9}}}
       }
     }
@@ -987,7 +988,7 @@ function addTrade(){markUserAction();
   APP.trades.unshift(t);saveState();renderTable();updateNavBadges();
   document.getElementById('alertSaved').classList.add('show');setTimeout(()=>document.getElementById('alertSaved').classList.remove('show'),2200);resetForm();
 }
-function deleteTrade(id){markUserAction();APP.trades=APP.trades.filter(t=>t.id!==parseInt(id,10));saveState();renderTable();updateNavBadges();}
+function deleteTrade(id){markUserAction();APP.trades=APP.trades.filter(t=>t.id!==parseInt(id,10));saveState();renderTable();updateNavBadges();clearTimeout(window._pushTimer);window._pushTimer=setTimeout(pushToCloud,0);}
 function resetForm(){['f-date','f-heure','f-paire','f-session','f-dir','f-rrcible','f-res','f-mgmt','f-reprend','f-notes'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});document.querySelectorAll('#tf-wrap .chip,#conf-wrap .chip').forEach(c=>c.classList.remove('sel'));document.getElementById('f-date').value=new Date().toISOString().split('T')[0];initStarPicker('f-stars-picker','f-stars',0);window._formImages=[];renderFormImages();}
 function tagD(v){return v==='LONG'?'<span class="tag tag-long">LONG</span>':v==='SHORT'?'<span class="tag tag-short">SHORT</span>':v||'—';}
 function tagO(v){const m={Oui:'oui',Non:'non','Peut-être':'peut','N/A':'na'};return v?`<span class="tag tag-${m[v]||'na'}">${v}</span>`:'—';}
@@ -2326,15 +2327,30 @@ function renderTop5(){
   const sorted = [...trades].sort((a,b)=>b.res-a.res);
   const top5 = sorted.slice(0,5);
   const worst5 = sorted.slice(-5).reverse();
-  const row = (t,color) => `<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid var(--border);">
-    <div>
-      <div style="font-family:var(--mono);font-size:11px;color:var(--text);">${t.paire||'—'} <span style="color:var(--muted);font-size:10px;">${t.date||''}</span></div>
-      <div style="font-size:10px;color:var(--muted);">${t.session||''} ${t.dir||''}</div>
+  const medals = ['🥇','🥈','🥉','4️⃣','5️⃣'];
+  const badEmojis = ['💸','📉','😬','❌','🚨'];
+  const rowTop = (t,i) => `<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid var(--border);">
+    <div style="display:flex;align-items:center;gap:8px;">
+      <span style="font-size:16px;">${medals[i]}</span>
+      <div>
+        <div style="font-family:var(--mono);font-size:11px;color:var(--text);">${t.paire||'—'} <span style="color:var(--muted);font-size:10px;">${t.date||''}</span></div>
+        <div style="font-size:10px;color:var(--muted);">${t.session||''} ${t.dir||''}</div>
+      </div>
     </div>
-    <div style="font-family:var(--mono);font-size:13px;font-weight:700;color:${color};">${t.res>=0?'+':''}${t.res?.toLocaleString('fr-FR')}€</div>
+    <div style="font-family:var(--mono);font-size:13px;font-weight:700;color:var(--green);">+${t.res?.toLocaleString('fr-FR')}€</div>
   </div>`;
-  document.getElementById('top5trades').innerHTML = top5.map(t=>row(t,'var(--green)')).join('');
-  document.getElementById('worst5trades').innerHTML = worst5.map(t=>row(t,'var(--red)')).join('');
+  const rowWorst = (t,i) => `<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid var(--border);">
+    <div style="display:flex;align-items:center;gap:8px;">
+      <span style="font-size:16px;">${badEmojis[i]}</span>
+      <div>
+        <div style="font-family:var(--mono);font-size:11px;color:var(--text);">${t.paire||'—'} <span style="color:var(--muted);font-size:10px;">${t.date||''}</span></div>
+        <div style="font-size:10px;color:var(--muted);">${t.session||''} ${t.dir||''}</div>
+      </div>
+    </div>
+    <div style="font-family:var(--mono);font-size:13px;font-weight:700;color:var(--red);">${t.res?.toLocaleString('fr-FR')}€</div>
+  </div>`;
+  document.getElementById('top5trades').innerHTML = top5.map((t,i)=>rowTop(t,i)).join('');
+  document.getElementById('worst5trades').innerHTML = worst5.map((t,i)=>rowWorst(t,i)).join('');
 }
 
 // ══════════════════════════════════════
@@ -2627,7 +2643,9 @@ function drawTFChart() {
   });
 }
 
-// ══ POINTS CLÉS IA INTERNE ══
+// ══════════════════════════════════════
+// POINTS CLÉS IA INTERNE
+// ══════════════════════════════════════
 
 function renderPcHistory() {
   const history = JSON.parse(localStorage.getItem('tjp_pc_history')||'[]');
@@ -2635,23 +2653,15 @@ function renderPcHistory() {
   if (!wrap) return;
   if (!history.length) { wrap.innerHTML = '<div style="color:var(--muted);font-size:12px;">Aucune analyse sauvegardée.</div>'; return; }
   wrap.innerHTML = history.map((h,i)=>`
-    <div style="display:flex;align-items:center;gap:8px;padding:8px;border-bottom:1px solid var(--border);cursor:pointer;" onclick="loadPcHistory(${i})">
-      <div style="flex:1;font-family:var(--mono);font-size:11px;">${new Date(h.date).toLocaleString('fr-FR')}</div>
+    <div style="display:flex;align-items:center;gap:8px;padding:8px;border-bottom:1px solid var(--border);cursor:pointer;" onclick="loadPcFromHistory(${i})">
+      <div style="flex:1;font-family:var(--mono);font-size:11px;">${h.date}</div>
       <button onclick="event.stopPropagation();deletePcHistory(${i})" style="background:none;border:none;color:var(--red);cursor:pointer;">🗑</button>
     </div>`).join('');
 }
 
-function loadPcHistory(i) {
+function loadPcFromHistory(i) {
   const history = JSON.parse(localStorage.getItem('tjp_pc_history')||'[]');
-  if (!history[i]) return;
-  document.getElementById('pcCards').innerHTML = history[i].cards.map(card=>`
-    <div class="card" style="border-left:3px solid ${card.color};">
-      <div class="card-header"><div class="card-title" style="color:${card.color}" data-editable>${card.title}</div></div>
-      <div class="card-body">${card.points.map(p=>`<div style="font-size:12px;padding:4px 0;border-bottom:1px solid var(--border);">• ${p}</div>`).join('')}</div>
-    </div>`).join('');
-  document.getElementById('pcTimestamp').textContent = `Analysé le ${new Date(history[i].date).toLocaleString('fr-FR')}`;
-  document.getElementById('pcContent').style.display = 'block';
-  showPage('pointscles');
+  if (history[i]) renderPcCards(history[i].cards);
 }
 
 function deletePcHistory(i) {
@@ -2661,27 +2671,189 @@ function deletePcHistory(i) {
   renderPcHistory();
 }
 
-// Appeler renderTop5 et drawTFChart dans refreshAllCharts
-const _origRefreshAll = typeof refreshAllCharts === 'function' ? refreshAllCharts : function(){};
-window.refreshAllCharts = function() {
-  _origRefreshAll();
-  renderTop5();
-  drawTFChart();
-};
+function renderPcCards(data) {
+  // data = { positifs: [{titre,points}], negatifs: [{titre,points}], resume: string }
+  const wrap = document.getElementById('pcCards');
+  if (!wrap) return;
 
-// Init Points Clés
-document.addEventListener('DOMContentLoaded', () => {
+  let html2 = '';
+
+  // Bloc positifs
+  if (data.positifs && data.positifs.length) {
+    html2 += `<div class="card" style="border:1px solid var(--green);margin:0;">
+      <div class="card-header" style="background:rgba(0,229,160,.07);">
+        <div class="card-title" style="color:var(--green)" data-editable>✅ POINTS CLÉS POSITIFS</div>
+      </div>
+      <div class="card-body">
+        ${data.positifs.map(item=>`
+          <div style="margin-bottom:10px;">
+            <div style="font-family:var(--mono);font-size:10px;color:var(--green);margin-bottom:4px;">${item.titre}</div>
+            ${(item.points||[]).map(p=>`<div style="display:flex;gap:6px;align-items:flex-start;margin-bottom:3px;">
+              <span style="color:var(--green);font-size:10px;margin-top:2px;">▸</span>
+              <span style="font-size:12px;color:var(--text);line-height:1.5;">${p}</span>
+            </div>`).join('')}
+          </div>`).join('')}
+      </div>
+    </div>`;
+  }
+
+  // Bloc négatifs
+  if (data.negatifs && data.negatifs.length) {
+    html2 += `<div class="card" style="border:1px solid var(--red);margin:0;">
+      <div class="card-header" style="background:rgba(239,68,68,.07);">
+        <div class="card-title" style="color:var(--red)" data-editable>⚠️ POINTS CLÉS À AMÉLIORER</div>
+      </div>
+      <div class="card-body">
+        ${data.negatifs.map(item=>`
+          <div style="margin-bottom:10px;">
+            <div style="font-family:var(--mono);font-size:10px;color:var(--red);margin-bottom:4px;">${item.titre}</div>
+            ${(item.points||[]).map(p=>`<div style="display:flex;gap:6px;align-items:flex-start;margin-bottom:3px;">
+              <span style="color:var(--red);font-size:10px;margin-top:2px;">▸</span>
+              <span style="font-size:12px;color:var(--text);line-height:1.5;">${p}</span>
+            </div>`).join('')}
+          </div>`).join('')}
+      </div>
+    </div>`;
+  }
+
+  // Résumé pleine largeur
+  if (data.resume) {
+    html2 += `<div class="card" style="grid-column:1/-1;margin:0;border:1px solid var(--border);">
+      <div class="card-header"><div class="card-title" data-editable>📋 RÉSUMÉ & RECOMMANDATIONS</div></div>
+      <div class="card-body" style="font-size:13px;line-height:1.8;color:var(--text);">${data.resume}</div>
+    </div>`;
+  }
+
+  wrap.innerHTML = html2;
+  document.getElementById('pcContent').style.display = 'block';
+  document.getElementById('pcStatus').style.display = 'none';
+  setupPencil();
+}
+
+async function generatePointsCles() {
+  const btn = document.getElementById('pcGenBtn');
+  if (!btn) return;
+  const trades = APP.trades;
+  if (!trades.length) {
+    document.getElementById('pcStatus').textContent = 'Aucun trade dans le journal.';
+    document.getElementById('pcStatus').style.color = 'var(--red)';
+    document.getElementById('pcStatus').style.display = 'block';
+    return;
+  }
+
+  btn.disabled = true; btn.textContent = 'Analyse...';
+  document.getElementById('pcStatus').textContent = 'Analyse de ' + trades.length + ' trades...';
+  document.getElementById('pcStatus').style.color = 'var(--muted)';
+  document.getElementById('pcStatus').style.display = 'block';
+  document.getElementById('pcContent').style.display = 'none';
+
+  // ── Stats complètes ──
+  const total = trades.length;
+  const winners = trades.filter(t=>(t.res||0)>0);
+  const losers = trades.filter(t=>(t.res||0)<0);
+  const totalPnl = trades.reduce((s,t)=>s+(t.res||0),0);
+  const wr = total > 0 ? (winners.length/total*100).toFixed(1) : 0;
+  const avgWin = winners.length ? (winners.reduce((s,t)=>s+t.res,0)/winners.length).toFixed(2) : 0;
+  const avgLoss = losers.length ? (losers.reduce((s,t)=>s+t.res,0)/losers.length).toFixed(2) : 0;
+  const gw = winners.reduce((s,t)=>s+t.res,0);
+  const gl = Math.abs(losers.reduce((s,t)=>s+t.res,0));
+  const pf = gl > 0 ? (gw/gl).toFixed(2) : '∞';
+
+  const stat = (arr, key) => {
+    const m = {};
+    arr.forEach(t => {
+      const vals = t[key] ? (key==='tf'||key==='conf' ? t[key].split(',') : [t[key]]) : [];
+      vals.forEach(v => {
+        v = v.trim(); if (!v) return;
+        if (!m[v]) m[v] = {pnl:0,n:0,w:0};
+        m[v].pnl += t.res||0; m[v].n++; if((t.res||0)>0) m[v].w++;
+      });
+    });
+    return Object.entries(m).sort((a,b)=>b[1].pnl-a[1].pnl);
+  };
+
+  const byPaire = stat(trades,'paire');
+  const bySess = stat(trades,'session');
+  const byTF = stat(trades,'tf');
+  const byConf = stat(trades,'conf');
+  const jours = ['Dim','Lun','Mar','Mer','Jeu','Ven','Sam'];
+  const byDay = stat(trades.map(t=>({...t,day:t.date?jours[new Date(t.date).getDay()]:'?'})),'day');
+  const worstDay = byDay.filter(([,d])=>d.pnl<0).sort((a,b)=>a[1].pnl-b[1].pnl);
+
+  let maxWS=0,curWS=0,maxLS=0,curLS=0;
+  [...trades].sort((a,b)=>a.date.localeCompare(b.date)).forEach(t=>{
+    if((t.res||0)>0){curWS++;maxWS=Math.max(maxWS,curWS);curLS=0;}
+    else if((t.res||0)<0){curLS++;maxLS=Math.max(maxLS,curLS);curWS=0;}
+  });
+
+  const cap = CAPITAL();
+  let peak=cap,runCap=cap,maxDD=0;
+  trades.forEach(t=>{runCap+=t.res||0;if(runCap>peak)peak=runCap;const dd=(peak-runCap)/peak*100;if(dd>maxDD)maxDD=dd;});
+
+  // ── Construire les points ──
+  const positifs = [];
+  const negatifs = [];
+
+  // Positifs
+  const pp = [];
+  if (parseFloat(wr) >= 50) pp.push(`Win rate de ${wr}% sur ${total} trades`);
+  if (parseFloat(pf) >= 1.5) pp.push(`Profit factor excellent : ${pf}`);
+  if (totalPnl > 0) pp.push(`Compte en hausse : +${totalPnl.toFixed(2)}€ (+${(totalPnl/cap*100).toFixed(1)}%)`);
+  if (maxWS >= 3) pp.push(`Serie gagnante max : ${maxWS} trades consecutifs`);
+  byPaire.filter(([,d])=>d.pnl>0).slice(0,2).forEach(([p,d])=>pp.push(`${p} rentable : +${d.pnl.toFixed(0)}€, ${(d.w/d.n*100).toFixed(0)}% WR`));
+  bySess.filter(([,d])=>d.pnl>0).slice(0,2).forEach(([s,d])=>pp.push(`Session ${s} performante : +${d.pnl.toFixed(0)}€`));
+  byConf.filter(([,d])=>d.pnl>0&&d.n>=2).slice(0,3).forEach(([c,d])=>pp.push(`Confluence "${c}" fiable : ${(d.w/d.n*100).toFixed(0)}% WR`));
+  byDay.filter(([,d])=>d.pnl>0).slice(0,2).forEach(([day,d])=>pp.push(`${day} : jour rentable (+${d.pnl.toFixed(0)}€)`));
+  if (pp.length) positifs.push({titre:'PERFORMANCE GLOBALE',points:pp.slice(0,4)});
+
+  const ptf = byTF.filter(([,d])=>d.pnl>0).slice(0,3).map(([tf,d])=>`TF ${tf} : ${(d.w/d.n*100).toFixed(0)}% WR, +${d.pnl.toFixed(0)}€ (${d.n} trades)`);
+  if (ptf.length) positifs.push({titre:'TIMEFRAMES EFFICACES',points:ptf});
+
+  // Négatifs
+  const pn = [];
+  if (parseFloat(wr) < 50) pn.push(`Win rate faible : ${wr}% — viser 50%+`);
+  if (parseFloat(pf) < 1) pn.push(`Profit factor < 1 (${pf}) : les pertes depassent les gains`);
+  if (totalPnl < 0) pn.push(`Compte en baisse : ${totalPnl.toFixed(2)}€`);
+  if (maxDD > 10) pn.push(`Drawdown max eleve : ${maxDD.toFixed(1)}%`);
+  if (maxLS >= 3) pn.push(`Serie perdante max : ${maxLS} — risque de revenge trading`);
+  if (Math.abs(parseFloat(avgLoss)) > parseFloat(avgWin) * 1.5) pn.push(`Pertes moyennes (${avgLoss}€) trop grandes vs gains (${avgWin}€)`);
+  if (pn.length) negatifs.push({titre:'PROBLEMES IDENTIFIES',points:pn.slice(0,4)});
+
+  const pnpaire = byPaire.filter(([,d])=>d.pnl<0).slice(0,3).map(([p,d])=>`Reduire ou arreter ${p} : ${d.pnl.toFixed(0)}€, ${(d.w/d.n*100).toFixed(0)}% WR`);
+  if (pnpaire.length) negatifs.push({titre:'PAIRES A EVITER',points:pnpaire});
+
+  const pntf = byTF.filter(([,d])=>d.pnl<0).slice(0,3).map(([tf,d])=>`Arreter TF ${tf} : ${d.pnl.toFixed(0)}€, ${(d.w/d.n*100).toFixed(0)}% WR`);
+  if (pntf.length) negatifs.push({titre:'TIMEFRAMES DEFICITAIRES',points:pntf});
+
+  const pnday = worstDay.slice(0,2).map(([day,d])=>`Ne pas trader le ${day} : ${d.pnl.toFixed(0)}€, ${(d.w/d.n*100).toFixed(0)}% WR`);
+  if (pnday.length) negatifs.push({titre:'JOURS A EVITER',points:pnday});
+
+  const pnconf = byConf.filter(([,d])=>d.pnl<0&&d.n>=2).slice(0,3).map(([c,d])=>`Confluence "${c}" peu fiable : ${d.pnl.toFixed(0)}€`);
+  if (pnconf.length) negatifs.push({titre:'CONFLUENCES INEFFICACES',points:pnconf});
+
+  // Résumé
+  const resume = `<strong>Win Rate :</strong> ${wr}% | <strong>P&L :</strong> ${totalPnl>0?'+':''}${totalPnl.toFixed(2)}€ | <strong>Profit Factor :</strong> ${pf} | <strong>Drawdown max :</strong> ${maxDD.toFixed(1)}%<br><br>` +
+    (byPaire[0] ? `<strong>Meilleure paire :</strong> ${byPaire[0][0]} (+${byPaire[0][1].pnl.toFixed(0)}€)` + (byPaire[byPaire.length-1][1].pnl<0 ? ` | <strong>Pire paire :</strong> ${byPaire[byPaire.length-1][0]} (${byPaire[byPaire.length-1][1].pnl.toFixed(0)}€)` : '') + '<br>' : '') +
+    (bySess[0] ? `<strong>Meilleure session :</strong> ${bySess[0][0]} (+${bySess[0][1].pnl.toFixed(0)}€)<br>` : '') +
+    (worstDay.length ? `<strong>Jours a eviter :</strong> ${worstDay.slice(0,2).map(([d])=>d).join(', ')}<br>` : '') +
+    `<br><strong>Action prioritaire :</strong> ${
+      parseFloat(wr)<50 ? 'Ameliorer la selection des entrees pour atteindre 50%+ de win rate.' :
+      parseFloat(pf)<1.2 ? 'Couper les pertes plus tot pour ameliorer le profit factor.' :
+      maxDD>15 ? 'Mettre en place un stop journalier pour limiter le drawdown.' :
+      pntf.length ? `Arreter de trader sur les TF deficitaires (${byTF.filter(([,d])=>d.pnl<0).map(([tf])=>tf).join(', ')}).` :
+      'Continuer la strategie actuelle et augmenter progressivement la taille.'
+    }`;
+
+  const result = { positifs, negatifs, resume };
+  renderPcCards(result);
+
+  // Sauvegarder
+  const history = JSON.parse(localStorage.getItem('tjp_pc_history')||'[]');
+  history.unshift({ date: new Date().toLocaleString('fr-FR'), cards: result });
+  if (history.length > 10) history.pop();
+  localStorage.setItem('tjp_pc_history', JSON.stringify(history));
   renderPcHistory();
-  // Charger clé API si stockée
-  const savedKey = localStorage.getItem('tjp_ia_key');
-  if (savedKey && document.getElementById('iaApiKey')) {
-    document.getElementById('iaApiKey').value = savedKey;
-  }
-  const savedModel = localStorage.getItem('tjp_ia_model');
-  if (savedModel && document.getElementById('iaModel')) {
-    document.getElementById('iaModel').value = savedModel;
-  }
-});
-</script>
-</body>
-</html>
+
+  btn.disabled = false; btn.textContent = 'Analyser ma strategie';
+}
+
