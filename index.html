@@ -2019,82 +2019,14 @@ async function submitReturnEmail() {
 // ══ AUTH INIT ══
 async function initAuth() {
   const _sb = getSb();
-  const hasOAuthHash = window.location.hash.includes('access_token');
 
-  // Écouter les changements d'auth AVANT tout (capte le token OAuth au retour de Google)
-  _sb.auth.onAuthStateChange((event, sess) => {
-    if ((event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') && sess?.user && !currentUser) {
-      currentUser = sess.user;
-      localStorage.setItem(emailKey(currentUser.id), currentUser.email);
-      localStorage.setItem(uidByEmailKey(currentUser.email.toLowerCase()), currentUser.id);
-      localStorage.setItem('tjp_last_uid', currentUser.id);
-      // Nettoyer l'URL
-      if (window.location.hash.includes('access_token')) {
-        history.replaceState(null, '', window.location.pathname);
-      }
-      const pin = localStorage.getItem(pinKey(currentUser.id));
-      if (pin) {
-        document.getElementById('enterPinSub').textContent = currentUser.email;
-        showOverlay('overlayEnterPin');
-        setupEnterPin();
-      } else {
-        showOverlay('overlayCreatePin');
-        setupCreatePin();
-      }
-    }
-  });
-
-  // Si retour OAuth, attendre que Supabase parse le hash (onAuthStateChange le gère)
-  if (hasOAuthHash) {
-    // Afficher un écran d'attente pendant le traitement du token
-    showOverlay(null);
-    const wait = document.createElement('div');
-    wait.id = 'oauthWait';
-    wait.style.cssText = 'position:fixed;inset:0;background:#0b0f1a;z-index:9999;display:flex;align-items:center;justify-content:center;font-family:monospace;font-size:14px;color:#6b7a99;';
-    wait.textContent = 'Connexion en cours...';
-    document.body.appendChild(wait);
-    // Timeout de sécurité : si onAuthStateChange ne se déclenche pas dans 5s, fallback
-    await new Promise(r => setTimeout(r, 2000));
-    const w = document.getElementById('oauthWait');
-    if (w) w.remove();
-    // Vérifier manuellement si la session est là
-    try {
-      const result = await _sb.auth.getSession();
-      if (result.data?.session?.user && !currentUser) {
-        currentUser = result.data.session.user;
-        localStorage.setItem(emailKey(currentUser.id), currentUser.email);
-        localStorage.setItem(uidByEmailKey(currentUser.email.toLowerCase()), currentUser.id);
-        localStorage.setItem('tjp_last_uid', currentUser.id);
-        history.replaceState(null, '', window.location.pathname);
-        const pin = localStorage.getItem(pinKey(currentUser.id));
-        if (pin) {
-          document.getElementById('enterPinSub').textContent = currentUser.email;
-          showOverlay('overlayEnterPin');
-          setupEnterPin();
-        } else {
-          showOverlay('overlayCreatePin');
-          setupCreatePin();
-        }
-        return;
-      }
-    } catch(e) {}
-    // Token invalide ou expiré
-    showOverlay('overlayGoogle');
-    return;
-  }
-
-  // Pas de hash OAuth — flux normal
-  let session = null;
-  try {
-    const result = await _sb.auth.getSession();
-    session = result.data?.session;
-  } catch(e) {}
-
-  if (session?.user) {
-    currentUser = session.user;
+  function handleUser(user) {
+    if (!user || currentUser) return;
+    currentUser = user;
     localStorage.setItem(emailKey(currentUser.id), currentUser.email);
     localStorage.setItem(uidByEmailKey(currentUser.email.toLowerCase()), currentUser.id);
     localStorage.setItem('tjp_last_uid', currentUser.id);
+    history.replaceState(null, '', window.location.pathname + window.location.search.replace(/[?&]code=[^&]*/,'').replace(/^[?&]/,''));
     const pin = localStorage.getItem(pinKey(currentUser.id));
     if (pin) {
       document.getElementById('enterPinSub').textContent = currentUser.email;
@@ -2104,19 +2036,52 @@ async function initAuth() {
       showOverlay('overlayCreatePin');
       setupCreatePin();
     }
+  }
+
+  // Supabase PKCE : le code d'autorisation est dans ?code= (query param, pas hash)
+  const urlParams = new URLSearchParams(window.location.search);
+  const code = urlParams.get('code');
+
+  if (code) {
+    // Afficher écran d'attente
+    showOverlay(null);
+    const wait = document.createElement('div');
+    wait.style.cssText = 'position:fixed;inset:0;background:#0b0f1a;z-index:9999;display:flex;align-items:center;justify-content:center;font-family:monospace;font-size:14px;color:#6b7a99;';
+    wait.textContent = 'Connexion en cours...';
+    document.body.appendChild(wait);
+
+    try {
+      const { data, error } = await _sb.auth.exchangeCodeForSession(code);
+      wait.remove();
+      if (error) throw error;
+      handleUser(data?.session?.user);
+      return;
+    } catch(e) {
+      wait.remove();
+      showOverlay('overlayGoogle');
+      return;
+    }
+  }
+
+  // Pas de code PKCE — vérifier session existante
+  let session = null;
+  try {
+    const result = await _sb.auth.getSession();
+    session = result.data?.session;
+  } catch(e) {}
+
+  if (session?.user) {
+    handleUser(session.user);
     return;
   }
 
-  // Vérifier s'il y a un compte connu (reconnexion)
+  // Compte connu ? Tenter refresh
   const lastUid = localStorage.getItem('tjp_last_uid');
   if (lastUid && localStorage.getItem(pinKey(lastUid))) {
     try {
       const { data } = await _sb.auth.refreshSession();
       if (data?.session?.user) {
-        currentUser = data.session.user;
-        document.getElementById('enterPinSub').textContent = currentUser.email;
-        showOverlay('overlayEnterPin');
-        setupEnterPin();
+        handleUser(data.session.user);
         return;
       }
     } catch(e) {}
