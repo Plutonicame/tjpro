@@ -725,7 +725,13 @@ window.SUPABASE_URL = 'https://ghjashqgwlaofjubzrcp.supabase.co';
 window.SUPABASE_KEY = 'sb_publishable_v_Uc1c_TsGyA7ieZPfaGnw_Ajknc7af';
 window.sb = null;
 function getSb() {
-  if (!window.sb) window.sb = supabase.createClient(window.SUPABASE_URL, window.SUPABASE_KEY);
+  if (!window.sb) window.sb = supabase.createClient(window.SUPABASE_URL, window.SUPABASE_KEY, {
+    auth: {
+      flowType: 'implicit',
+      detectSessionInUrl: true,
+      persistSession: true
+    }
+  });
   return window.sb;
 }
 
@@ -2020,13 +2026,13 @@ async function submitReturnEmail() {
 async function initAuth() {
   const _sb = getSb();
 
-  function handleUser(user) {
+  function applyUser(user) {
     if (!user || currentUser) return;
     currentUser = user;
     localStorage.setItem(emailKey(currentUser.id), currentUser.email);
     localStorage.setItem(uidByEmailKey(currentUser.email.toLowerCase()), currentUser.id);
     localStorage.setItem('tjp_last_uid', currentUser.id);
-    history.replaceState(null, '', window.location.pathname + window.location.search.replace(/[?&]code=[^&]*/,'').replace(/^[?&]/,''));
+    history.replaceState(null, '', window.location.pathname);
     const pin = localStorage.getItem(pinKey(currentUser.id));
     if (pin) {
       document.getElementById('enterPinSub').textContent = currentUser.email;
@@ -2038,12 +2044,33 @@ async function initAuth() {
     }
   }
 
-  // Supabase PKCE : le code d'autorisation est dans ?code= (query param, pas hash)
-  const urlParams = new URLSearchParams(window.location.search);
-  const code = urlParams.get('code');
+  // Flow implicit : token dans le hash #access_token=...
+  if (window.location.hash.includes('access_token')) {
+    showOverlay(null);
+    const wait = document.createElement('div');
+    wait.style.cssText = 'position:fixed;inset:0;background:#0b0f1a;z-index:9999;display:flex;align-items:center;justify-content:center;font-family:monospace;font-size:14px;color:#6b7a99;';
+    wait.textContent = 'Connexion en cours...';
+    document.body.appendChild(wait);
 
+    // Supabase detectSessionInUrl parse le hash automatiquement — on attend
+    await new Promise(r => setTimeout(r, 1000));
+    wait.remove();
+
+    try {
+      const { data } = await _sb.auth.getSession();
+      if (data?.session?.user) {
+        applyUser(data.session.user);
+        return;
+      }
+    } catch(e) {}
+
+    showOverlay('overlayGoogle');
+    return;
+  }
+
+  // Flow PKCE : code dans ?code= (fallback)
+  const code = new URLSearchParams(window.location.search).get('code');
   if (code) {
-    // Afficher écran d'attente
     showOverlay(null);
     const wait = document.createElement('div');
     wait.style.cssText = 'position:fixed;inset:0;background:#0b0f1a;z-index:9999;display:flex;align-items:center;justify-content:center;font-family:monospace;font-size:14px;color:#6b7a99;';
@@ -2053,35 +2080,36 @@ async function initAuth() {
     try {
       const { data, error } = await _sb.auth.exchangeCodeForSession(code);
       wait.remove();
-      if (error) throw error;
-      handleUser(data?.session?.user);
-      return;
-    } catch(e) {
-      wait.remove();
-      showOverlay('overlayGoogle');
-      return;
-    }
-  }
+      if (!error && data?.session?.user) {
+        applyUser(data.session.user);
+        return;
+      }
+    } catch(e) {}
 
-  // Pas de code PKCE — vérifier session existante
-  let session = null;
-  try {
-    const result = await _sb.auth.getSession();
-    session = result.data?.session;
-  } catch(e) {}
-
-  if (session?.user) {
-    handleUser(session.user);
+    wait.remove();
+    showOverlay('overlayGoogle');
     return;
   }
 
-  // Compte connu ? Tenter refresh
+  // Pas de retour OAuth — vérifier session existante
+  let session = null;
+  try {
+    const { data } = await _sb.auth.getSession();
+    session = data?.session;
+  } catch(e) {}
+
+  if (session?.user) {
+    applyUser(session.user);
+    return;
+  }
+
+  // Compte connu ? Tenter refresh silencieux
   const lastUid = localStorage.getItem('tjp_last_uid');
   if (lastUid && localStorage.getItem(pinKey(lastUid))) {
     try {
       const { data } = await _sb.auth.refreshSession();
       if (data?.session?.user) {
-        handleUser(data.session.user);
+        applyUser(data.session.user);
         return;
       }
     } catch(e) {}
@@ -2306,7 +2334,9 @@ function removeFormImg(i) { window._formImages.splice(i,1); renderFormImages(); 
 // ══ INIT ══
 document.addEventListener('DOMContentLoaded', () => {
   // Initialiser le client Supabase (lib forcément chargée à ce stade)
-  window.sb = supabase.createClient(window.SUPABASE_URL, window.SUPABASE_KEY);
+  window.sb = supabase.createClient(window.SUPABASE_URL, window.SUPABASE_KEY, {
+    auth: { flowType: 'implicit', detectSessionInUrl: true, persistSession: true }
+  });
 
   initAuth();
   initStarPicker('f-stars-picker','f-stars',0);
