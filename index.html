@@ -721,9 +721,13 @@ tbody td{padding:6px 8px;vertical-align:middle;white-space:nowrap;}
 
 <script>
 // ══ SUPABASE CONFIG ══
-const SUPABASE_URL = 'https://ghjashqgwlaofjubzrcp.supabase.co';
-const SUPABASE_KEY = 'sb_publishable_v_Uc1c_TsGyA7ieZPfaGnw_Ajknc7af';
-const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+window.SUPABASE_URL = 'https://ghjashqgwlaofjubzrcp.supabase.co';
+window.SUPABASE_KEY = 'sb_publishable_v_Uc1c_TsGyA7ieZPfaGnw_Ajknc7af';
+window.sb = null;
+function getSb() {
+  if (!window.sb) window.sb = supabase.createClient(window.SUPABASE_URL, window.SUPABASE_KEY);
+  return window.sb;
+}
 
 // ══ GOOGLE LOGIN via popup (compatible file://) ══
 async function signInWithGoogle() {
@@ -737,11 +741,12 @@ async function signInWithGoogle() {
   btn.textContent = 'Ouverture de Google...';
 
   try {
+    const _sb = getSb();
     // URL de redirection : page Supabase qui renvoie le token dans le hash
-    const redirectTo = SUPABASE_URL + '/auth/v1/callback';
+    const redirectTo = window.SUPABASE_URL + '/auth/v1/callback';
 
     // Obtenir l'URL OAuth depuis Supabase
-    const { data, error: oauthErr } = await sb.auth.signInWithOAuth({
+    const { data, error: oauthErr } = await _sb.auth.signInWithOAuth({
       provider: 'google',
       options: {
         redirectTo: redirectTo,
@@ -799,7 +804,7 @@ async function signInWithGoogle() {
             popup.close();
 
             // Injecter la session dans Supabase
-            const { data: sessData, error: sessErr } = await sb.auth.setSession({
+            const { data: sessData, error: sessErr } = await _sb.auth.setSession({
               access_token: accessToken,
               refresh_token: refreshToken || ''
             });
@@ -2366,6 +2371,9 @@ function removeFormImg(i) { window._formImages.splice(i,1); renderFormImages(); 
 
 // ══ INIT ══
 document.addEventListener('DOMContentLoaded', () => {
+  // Initialiser le client Supabase (lib forcément chargée à ce stade)
+  window.sb = supabase.createClient(window.SUPABASE_URL, window.SUPABASE_KEY);
+
   initAuth();
   initStarPicker('f-stars-picker','f-stars',0);
   initStarPicker('e-stars-picker','e-stars',0);
