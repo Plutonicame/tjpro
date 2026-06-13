@@ -720,13 +720,16 @@ tbody td{padding:6px 8px;vertical-align:middle;white-space:nowrap;}
 <div class="footer" style="display:none"></div>
 
 <script>
-// ══ SUPABASE CONFIG — client unique, flow implicit natif ══
+// ══ CAPTURE DU HASH OAUTH AVANT QUE SUPABASE NE LE CONSOMME ══
+window._oauthHash = window.location.hash || '';
+
+// ══ SUPABASE CONFIG — client unique, gestion manuelle de la session ══
 window.SUPABASE_URL = 'https://ghjashqgwlaofjubzrcp.supabase.co';
 window.SUPABASE_KEY = 'sb_publishable_v_Uc1c_TsGyA7ieZPfaGnw_Ajknc7af';
 window.sb = supabase.createClient(window.SUPABASE_URL, window.SUPABASE_KEY, {
   auth: {
     flowType: 'implicit',
-    detectSessionInUrl: true,
+    detectSessionInUrl: false,
     persistSession: true,
     autoRefreshToken: true
   }
@@ -2015,9 +2018,7 @@ async function initAuth() {
     localStorage.setItem(emailKey(currentUser.id), currentUser.email);
     localStorage.setItem(uidByEmailKey(currentUser.email.toLowerCase()), currentUser.id);
     localStorage.setItem('tjp_last_uid', currentUser.id);
-    if (window.location.hash.includes('access_token')) {
-      history.replaceState(null, '', window.location.pathname);
-    }
+    history.replaceState(null, '', window.location.pathname);
     const pin = localStorage.getItem(pinKey(currentUser.id));
     if (pin) {
       document.getElementById('enterPinSub').textContent = currentUser.email;
@@ -2029,8 +2030,8 @@ async function initAuth() {
     }
   }
 
-  // Écran d'attente pendant le retour OAuth (Supabase parse le hash automatiquement)
-  const isOAuthReturn = window.location.hash.includes('access_token');
+  const hash = window._oauthHash || '';
+  const isOAuthReturn = hash.includes('access_token');
   let wait = null;
   if (isOAuthReturn) {
     showOverlay(null);
@@ -2041,42 +2042,33 @@ async function initAuth() {
     document.body.appendChild(wait);
   }
 
-  // getSession() déclenche/attend le parsing automatique du hash par Supabase
   let session = null;
-  let debugLog = [];
-  try {
-    const { data, error } = await sb.auth.getSession();
-    session = data?.session;
-    debugLog.push('getSession: session=' + (session?.user ? session.user.email : 'null') + ' error=' + (error?.message || 'none'));
-  } catch(e) { debugLog.push('getSession EXCEPTION: ' + e.message); }
 
-  // Fallback : si Supabase n'a pas créé de session via le hash (ex: clock skew warning),
-  // extraire le token manuellement et forcer la session
-  if (!session?.user && isOAuthReturn) {
-    try {
-      const params = new URLSearchParams(window.location.hash.replace('#',''));
-      const accessToken = params.get('access_token');
-      const refreshToken = params.get('refresh_token');
-      debugLog.push('hash has access_token: ' + !!accessToken + ', refresh_token: ' + !!refreshToken);
-      if (accessToken && refreshToken) {
+  if (isOAuthReturn) {
+    // detectSessionInUrl est désactivé : on extrait et applique le token nous-mêmes
+    const params = new URLSearchParams(hash.replace('#', ''));
+    const accessToken = params.get('access_token');
+    const refreshToken = params.get('refresh_token');
+    if (accessToken && refreshToken) {
+      try {
         const { data, error } = await sb.auth.setSession({
           access_token: accessToken,
           refresh_token: refreshToken
         });
-        debugLog.push('setSession: session=' + (data?.session?.user ? data.session.user.email : 'null') + ' error=' + (error?.message || 'none'));
         if (!error && data?.session?.user) {
           session = data.session;
         }
-      }
-    } catch(e) { debugLog.push('setSession EXCEPTION: ' + e.message); }
+      } catch(e) {}
+    }
+  } else {
+    // Pas de retour OAuth : vérifier session existante
+    try {
+      const { data } = await sb.auth.getSession();
+      session = data?.session;
+    } catch(e) {}
   }
 
   if (wait) wait.remove();
-
-  // MODE DEBUG : afficher ce qui s'est passé si retour OAuth sans session
-  if (isOAuthReturn && !session?.user) {
-    alert('DEBUG OAuth:\n' + debugLog.join('\n'));
-  }
 
   if (session?.user) {
     applyUser(session.user);
