@@ -742,113 +742,22 @@ async function signInWithGoogle() {
 
   try {
     const _sb = getSb();
-    // URL de redirection : page Supabase qui renvoie le token dans le hash
-    const redirectTo = window.SUPABASE_URL + '/auth/v1/callback';
+    // Redirection vers GitHub Pages après auth Google
+    const redirectTo = 'https://plutonicame.github.io/tjpro/';
 
     // Obtenir l'URL OAuth depuis Supabase
     const { data, error: oauthErr } = await _sb.auth.signInWithOAuth({
       provider: 'google',
       options: {
         redirectTo: redirectTo,
-        skipBrowserRedirect: true, // NE PAS rediriger la page principale
         queryParams: { prompt: 'select_account' }
       }
     });
 
-    if (oauthErr || !data?.url) {
-      throw new Error(oauthErr?.message || 'Impossible d\'obtenir l\'URL OAuth');
+    if (oauthErr) {
+      throw new Error(oauthErr.message || 'Erreur OAuth');
     }
-
-    // Ouvrir dans un popup centré
-    const w = 520, h = 620;
-    const left = Math.max(0, (screen.width - w) / 2);
-    const top = Math.max(0, (screen.height - h) / 2);
-    const popup = window.open(data.url, 'tjp_google_auth',
-      `width=${w},height=${h},left=${left},top=${top},scrollbars=yes,resizable=yes`);
-
-    if (!popup) {
-      throw new Error('Le popup a été bloqué par le navigateur. Autorise les popups pour ce fichier.');
-    }
-
-    btn.textContent = 'En attente de Google...';
-
-    // Surveiller le popup pour récupérer le token
-    let resolved = false;
-    const checkInterval = setInterval(async () => {
-      try {
-        if (popup.closed) {
-          clearInterval(checkInterval);
-          if (!resolved) {
-            btn.disabled = false;
-            btn.innerHTML = GOOGLE_ICON;
-            err.textContent = 'Connexion annulée.';
-            err.style.display = 'block';
-          }
-          return;
-        }
-
-        // Essayer de lire l'URL du popup (même domaine après redirection Supabase)
-        let popupHref = '';
-        try { popupHref = popup.location.href; } catch(e) { return; } // cross-origin, pas encore
-
-        // Supabase callback renvoie le token dans le hash (#access_token=...)
-        if (popupHref.includes('access_token') || popupHref.includes('#')) {
-          const hashStr = popupHref.split('#')[1] || '';
-          const params = new URLSearchParams(hashStr);
-          const accessToken = params.get('access_token');
-          const refreshToken = params.get('refresh_token');
-
-          if (accessToken) {
-            resolved = true;
-            clearInterval(checkInterval);
-            popup.close();
-
-            // Injecter la session dans Supabase
-            const { data: sessData, error: sessErr } = await _sb.auth.setSession({
-              access_token: accessToken,
-              refresh_token: refreshToken || ''
-            });
-
-            if (sessErr || !sessData?.session?.user) {
-              throw new Error(sessErr?.message || 'Session invalide');
-            }
-
-            // Succès !
-            currentUser = sessData.session.user;
-            localStorage.setItem(emailKey(currentUser.id), currentUser.email);
-            localStorage.setItem(uidByEmailKey(currentUser.email.toLowerCase()), currentUser.id);
-            localStorage.setItem('tjp_last_uid', currentUser.id);
-
-            btn.disabled = false;
-            btn.innerHTML = GOOGLE_ICON;
-
-            const pin = localStorage.getItem(pinKey(currentUser.id));
-            if (pin) {
-              document.getElementById('enterPinSub').textContent = currentUser.email;
-              showOverlay('overlayEnterPin');
-              setupEnterPin();
-            } else {
-              showOverlay('overlayCreatePin');
-              setupCreatePin();
-            }
-          }
-        }
-      } catch(e) {
-        // Ignorer les erreurs cross-origin (popup sur Google)
-      }
-    }, 500);
-
-    // Timeout de sécurité : 3 minutes
-    setTimeout(() => {
-      if (!resolved) {
-        clearInterval(checkInterval);
-        if (!popup.closed) popup.close();
-        btn.disabled = false;
-        btn.innerHTML = GOOGLE_ICON;
-        err.textContent = 'Délai dépassé. Réessaie.';
-        err.style.display = 'block';
-      }
-    }, 180000);
+    // signInWithOAuth redirige automatiquement — on n'arrivera pas ici
 
   } catch(e) {
     btn.disabled = false;
@@ -2109,10 +2018,18 @@ async function submitReturnEmail() {
 
 // ══ AUTH INIT ══
 async function initAuth() {
+  const _sb = getSb();
+
+  // Si retour depuis Google OAuth (hash dans l'URL), laisser Supabase le parser
+  if (window.location.hash.includes('access_token')) {
+    await new Promise(r => setTimeout(r, 400));
+    history.replaceState(null, '', window.location.pathname);
+  }
+
   // Vérifier si une session Supabase existe déjà (ex: refresh token valide)
   let session = null;
   try {
-    const result = await sb.auth.getSession();
+    const result = await _sb.auth.getSession();
     session = result.data?.session;
   } catch(e) {}
 
@@ -2140,7 +2057,7 @@ async function initAuth() {
   if (lastUid && localStorage.getItem(pinKey(lastUid))) {
     // Tenter refresh silencieux de la session
     try {
-      const { data } = await sb.auth.refreshSession();
+      const { data } = await _sb.auth.refreshSession();
       if (data?.session?.user) {
         currentUser = data.session.user;
         document.getElementById('enterPinSub').textContent = currentUser.email;
