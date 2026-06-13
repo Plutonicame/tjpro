@@ -2048,6 +2048,25 @@ async function initAuth() {
     session = data?.session;
   } catch(e) {}
 
+  // Fallback : si Supabase n'a pas créé de session via le hash (ex: clock skew warning),
+  // extraire le token manuellement et forcer la session
+  if (!session?.user && isOAuthReturn) {
+    try {
+      const params = new URLSearchParams(window.location.hash.replace('#',''));
+      const accessToken = params.get('access_token');
+      const refreshToken = params.get('refresh_token');
+      if (accessToken && refreshToken) {
+        const { data, error } = await sb.auth.setSession({
+          access_token: accessToken,
+          refresh_token: refreshToken
+        });
+        if (!error && data?.session?.user) {
+          session = data.session;
+        }
+      }
+    } catch(e) {}
+  }
+
   if (wait) wait.remove();
 
   if (session?.user) {
