@@ -720,10 +720,10 @@ tbody td{padding:6px 8px;vertical-align:middle;white-space:nowrap;}
 <div class="footer" style="display:none"></div>
 
 <script>
-// ══ HELPER : détecte si on tourne en file:// ══
-function isFileProtocol() {
-  return window.location.protocol === 'file:';
-}
+// ══ SUPABASE CONFIG ══
+const SUPABASE_URL = 'https://ghjashqgwlaofjubzrcp.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_v_Uc1c_TsGyA7ieZPfaGnw_Ajknc7af';
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
 // ══ GOOGLE LOGIN via popup (compatible file://) ══
 async function signInWithGoogle() {
@@ -1906,9 +1906,7 @@ function saveEditTrade(){markUserAction();
 <div id="syncStatus" style="position:fixed;bottom:16px;right:16px;background:#161d2e;border:1px solid #1e2d45;border-radius:6px;padding:6px 12px;font-family:'Space Mono',monospace;font-size:10px;color:#6b7a99;z-index:1000;display:none;"></div>
 
 <script>
-const SUPABASE_URL = 'https://ghjashqgwlaofjubzrcp.supabase.co';
-const SUPABASE_KEY = 'sb_publishable_v_Uc1c_TsGyA7ieZPfaGnw_Ajknc7af';
-const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+// (SUPABASE_URL, SUPABASE_KEY et sb définis dans le premier bloc script)
 
 let currentUser = null;
 let syncTimeout = null;
