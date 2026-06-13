@@ -720,6 +720,12 @@ tbody td{padding:6px 8px;vertical-align:middle;white-space:nowrap;}
 <div class="footer" style="display:none"></div>
 
 <script>
+// ══ CAPTURE IMMÉDIATE DU HASH OAUTH (avant tout) ══
+window._oauthHash = window.location.hash || '';
+if (window._oauthHash.includes('access_token')) {
+  history.replaceState(null, '', window.location.pathname);
+}
+
 // ══ SUPABASE CONFIG ══
 window.SUPABASE_URL = 'https://ghjashqgwlaofjubzrcp.supabase.co';
 window.SUPABASE_KEY = 'sb_publishable_v_Uc1c_TsGyA7ieZPfaGnw_Ajknc7af';
@@ -728,8 +734,8 @@ function getSb() {
   if (!window.sb) window.sb = supabase.createClient(window.SUPABASE_URL, window.SUPABASE_KEY, {
     auth: {
       flowType: 'implicit',
-      detectSessionInUrl: true,
-      persistSession: true
+      detectSessionInUrl: false,
+      persistSession: false
     }
   });
   return window.sb;
@@ -2044,8 +2050,8 @@ async function initAuth() {
     }
   }
 
-  // Extraire le token directement depuis le hash (sans passer par le storage Supabase)
-  const hash = window.location.hash;
+  // Extraire le token depuis le hash capturé au démarrage
+  const hash = window._oauthHash || window.location.hash;
   if (hash.includes('access_token')) {
     const params = new URLSearchParams(hash.replace('#', ''));
     const accessToken = params.get('access_token');
@@ -2325,7 +2331,7 @@ function removeFormImg(i) { window._formImages.splice(i,1); renderFormImages(); 
 document.addEventListener('DOMContentLoaded', () => {
   // Initialiser le client Supabase (lib forcément chargée à ce stade)
   window.sb = supabase.createClient(window.SUPABASE_URL, window.SUPABASE_KEY, {
-    auth: { flowType: 'implicit', detectSessionInUrl: true, persistSession: true }
+    auth: { flowType: 'implicit', detectSessionInUrl: false, persistSession: false }
   });
 
   initAuth();
