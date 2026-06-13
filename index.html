@@ -2019,14 +2019,71 @@ async function submitReturnEmail() {
 // ══ AUTH INIT ══
 async function initAuth() {
   const _sb = getSb();
+  const hasOAuthHash = window.location.hash.includes('access_token');
 
-  // Si retour depuis Google OAuth (hash dans l'URL), laisser Supabase le parser
-  if (window.location.hash.includes('access_token')) {
-    await new Promise(r => setTimeout(r, 400));
-    history.replaceState(null, '', window.location.pathname);
+  // Écouter les changements d'auth AVANT tout (capte le token OAuth au retour de Google)
+  _sb.auth.onAuthStateChange((event, sess) => {
+    if ((event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') && sess?.user && !currentUser) {
+      currentUser = sess.user;
+      localStorage.setItem(emailKey(currentUser.id), currentUser.email);
+      localStorage.setItem(uidByEmailKey(currentUser.email.toLowerCase()), currentUser.id);
+      localStorage.setItem('tjp_last_uid', currentUser.id);
+      // Nettoyer l'URL
+      if (window.location.hash.includes('access_token')) {
+        history.replaceState(null, '', window.location.pathname);
+      }
+      const pin = localStorage.getItem(pinKey(currentUser.id));
+      if (pin) {
+        document.getElementById('enterPinSub').textContent = currentUser.email;
+        showOverlay('overlayEnterPin');
+        setupEnterPin();
+      } else {
+        showOverlay('overlayCreatePin');
+        setupCreatePin();
+      }
+    }
+  });
+
+  // Si retour OAuth, attendre que Supabase parse le hash (onAuthStateChange le gère)
+  if (hasOAuthHash) {
+    // Afficher un écran d'attente pendant le traitement du token
+    showOverlay(null);
+    const wait = document.createElement('div');
+    wait.id = 'oauthWait';
+    wait.style.cssText = 'position:fixed;inset:0;background:#0b0f1a;z-index:9999;display:flex;align-items:center;justify-content:center;font-family:monospace;font-size:14px;color:#6b7a99;';
+    wait.textContent = 'Connexion en cours...';
+    document.body.appendChild(wait);
+    // Timeout de sécurité : si onAuthStateChange ne se déclenche pas dans 5s, fallback
+    await new Promise(r => setTimeout(r, 2000));
+    const w = document.getElementById('oauthWait');
+    if (w) w.remove();
+    // Vérifier manuellement si la session est là
+    try {
+      const result = await _sb.auth.getSession();
+      if (result.data?.session?.user && !currentUser) {
+        currentUser = result.data.session.user;
+        localStorage.setItem(emailKey(currentUser.id), currentUser.email);
+        localStorage.setItem(uidByEmailKey(currentUser.email.toLowerCase()), currentUser.id);
+        localStorage.setItem('tjp_last_uid', currentUser.id);
+        history.replaceState(null, '', window.location.pathname);
+        const pin = localStorage.getItem(pinKey(currentUser.id));
+        if (pin) {
+          document.getElementById('enterPinSub').textContent = currentUser.email;
+          showOverlay('overlayEnterPin');
+          setupEnterPin();
+        } else {
+          showOverlay('overlayCreatePin');
+          setupCreatePin();
+        }
+        return;
+      }
+    } catch(e) {}
+    // Token invalide ou expiré
+    showOverlay('overlayGoogle');
+    return;
   }
 
-  // Vérifier si une session Supabase existe déjà (ex: refresh token valide)
+  // Pas de hash OAuth — flux normal
   let session = null;
   try {
     const result = await _sb.auth.getSession();
@@ -2034,12 +2091,10 @@ async function initAuth() {
   } catch(e) {}
 
   if (session?.user) {
-    // Session valide - sauvegarder et demander PIN
     currentUser = session.user;
     localStorage.setItem(emailKey(currentUser.id), currentUser.email);
     localStorage.setItem(uidByEmailKey(currentUser.email.toLowerCase()), currentUser.id);
     localStorage.setItem('tjp_last_uid', currentUser.id);
-
     const pin = localStorage.getItem(pinKey(currentUser.id));
     if (pin) {
       document.getElementById('enterPinSub').textContent = currentUser.email;
@@ -2055,7 +2110,6 @@ async function initAuth() {
   // Vérifier s'il y a un compte connu (reconnexion)
   const lastUid = localStorage.getItem('tjp_last_uid');
   if (lastUid && localStorage.getItem(pinKey(lastUid))) {
-    // Tenter refresh silencieux de la session
     try {
       const { data } = await _sb.auth.refreshSession();
       if (data?.session?.user) {
@@ -2066,13 +2120,11 @@ async function initAuth() {
         return;
       }
     } catch(e) {}
-    // Session expirée mais compte connu - demander email
     currentUser = { id: lastUid, email: localStorage.getItem(emailKey(lastUid)) };
     showOverlay('overlayEmailPin');
     const inp = document.getElementById('returnEmail');
     if (inp) inp.addEventListener('keydown', e => { if(e.key==='Enter') submitReturnEmail(); });
   } else {
-    // Aucun compte connu - connexion Google
     showOverlay('overlayGoogle');
   }
 }
