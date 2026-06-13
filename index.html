@@ -2043,10 +2043,12 @@ async function initAuth() {
 
   // getSession() déclenche/attend le parsing automatique du hash par Supabase
   let session = null;
+  let debugLog = [];
   try {
-    const { data } = await sb.auth.getSession();
+    const { data, error } = await sb.auth.getSession();
     session = data?.session;
-  } catch(e) {}
+    debugLog.push('getSession: session=' + (session?.user ? session.user.email : 'null') + ' error=' + (error?.message || 'none'));
+  } catch(e) { debugLog.push('getSession EXCEPTION: ' + e.message); }
 
   // Fallback : si Supabase n'a pas créé de session via le hash (ex: clock skew warning),
   // extraire le token manuellement et forcer la session
@@ -2055,19 +2057,26 @@ async function initAuth() {
       const params = new URLSearchParams(window.location.hash.replace('#',''));
       const accessToken = params.get('access_token');
       const refreshToken = params.get('refresh_token');
+      debugLog.push('hash has access_token: ' + !!accessToken + ', refresh_token: ' + !!refreshToken);
       if (accessToken && refreshToken) {
         const { data, error } = await sb.auth.setSession({
           access_token: accessToken,
           refresh_token: refreshToken
         });
+        debugLog.push('setSession: session=' + (data?.session?.user ? data.session.user.email : 'null') + ' error=' + (error?.message || 'none'));
         if (!error && data?.session?.user) {
           session = data.session;
         }
       }
-    } catch(e) {}
+    } catch(e) { debugLog.push('setSession EXCEPTION: ' + e.message); }
   }
 
   if (wait) wait.remove();
+
+  // MODE DEBUG : afficher ce qui s'est passé si retour OAuth sans session
+  if (isOAuthReturn && !session?.user) {
+    alert('DEBUG OAuth:\n' + debugLog.join('\n'));
+  }
 
   if (session?.user) {
     applyUser(session.user);
