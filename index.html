@@ -1990,17 +1990,33 @@ async function submitReturnEmail() {
 
 // ══ AUTH INIT ══
 async function initAuth() {
-  // Attendre que Supabase traite le hash de l'URL (access_token après OAuth)
-  await new Promise(r => setTimeout(r, 200));
+  // Supabase détecte automatiquement le hash #access_token dans l'URL
+  // et crée une session - on attend que ce soit fait
   
-  const { data: { session } } = await sb.auth.getSession();
+  // D'abord vérifier s'il y a un hash OAuth dans l'URL (retour Google)
+  const hasOAuthHash = window.location.hash.includes('access_token') || 
+                       window.location.hash.includes('error');
+  
+  if (hasOAuthHash) {
+    // Attendre que Supabase traite le hash
+    await new Promise(r => setTimeout(r, 500));
+  }
 
-  if (session && session.user) {
+  let session = null;
+  try {
+    const result = await sb.auth.getSession();
+    session = result.data?.session;
+  } catch(e) {}
+
+  if (session?.user) {
+    // Session valide - sauvegarder et demander PIN
     currentUser = session.user;
     localStorage.setItem(emailKey(currentUser.id), currentUser.email);
     localStorage.setItem(uidByEmailKey(currentUser.email.toLowerCase()), currentUser.id);
     localStorage.setItem('tjp_last_uid', currentUser.id);
-
+    // Nettoyer le hash de l'URL
+    if (hasOAuthHash) history.replaceState(null,'',window.location.pathname);
+    
     const pin = localStorage.getItem(pinKey(currentUser.id));
     if (pin) {
       document.getElementById('enterPinSub').textContent = currentUser.email;
@@ -2010,30 +2026,19 @@ async function initAuth() {
       showOverlay('overlayCreatePin');
       setupCreatePin();
     }
-  } else {
-    const lastUid = localStorage.getItem('tjp_last_uid');
-    if (lastUid && localStorage.getItem(pinKey(lastUid))) {
-      const { data: refreshData } = await sb.auth.refreshSession().catch(()=>({data:{}}));
-      if (refreshData?.user) {
-        currentUser = refreshData.user;
-      } else {
-        currentUser = { id: lastUid, email: localStorage.getItem(emailKey(lastUid)) };
-      }
-      showOverlay('overlayEmailPin');
-      const inp = document.getElementById('returnEmail');
-      if (inp) inp.addEventListener('keydown', e => { if(e.key==='Enter') submitReturnEmail(); });
-    } else {
-      showOverlay('overlayGoogle');
-    }
+    return;
   }
-  
-  // Écouter les changements d'état auth (nécessaire pour le redirect OAuth)
-  sb.auth.onAuthStateChange(async (event, session) => {
-    if (event === 'SIGNED_IN' && session?.user && !currentUser) {
-      currentUser = session.user;
+
+  // Pas de session - écouter les changements (pour le redirect OAuth)
+  sb.auth.onAuthStateChange((event, sess) => {
+    if ((event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') && sess?.user) {
+      currentUser = sess.user;
       localStorage.setItem(emailKey(currentUser.id), currentUser.email);
       localStorage.setItem(uidByEmailKey(currentUser.email.toLowerCase()), currentUser.id);
       localStorage.setItem('tjp_last_uid', currentUser.id);
+      if (window.location.hash.includes('access_token')) {
+        history.replaceState(null,'',window.location.pathname);
+      }
       const pin = localStorage.getItem(pinKey(currentUser.id));
       if (pin) {
         document.getElementById('enterPinSub').textContent = currentUser.email;
@@ -2045,6 +2050,29 @@ async function initAuth() {
       }
     }
   });
+
+  // Vérifier s'il y a un compte connu pour afficher le bon écran
+  const lastUid = localStorage.getItem('tjp_last_uid');
+  if (lastUid && localStorage.getItem(pinKey(lastUid))) {
+    // Tenter refresh silencieux
+    try {
+      const { data } = await sb.auth.refreshSession();
+      if (data?.session?.user) {
+        currentUser = data.session.user;
+        document.getElementById('enterPinSub').textContent = currentUser.email;
+        showOverlay('overlayEnterPin');
+        setupEnterPin();
+        return;
+      }
+    } catch(e) {}
+    // Pas de session mais compte connu - demander email
+    currentUser = { id: lastUid, email: localStorage.getItem(emailKey(lastUid)) };
+    showOverlay('overlayEmailPin');
+    const inp = document.getElementById('returnEmail');
+    if (inp) inp.addEventListener('keydown', e => { if(e.key==='Enter') submitReturnEmail(); });
+  } else {
+    showOverlay('overlayGoogle');
+  }
 }
 
 // ══ SYNC ══
