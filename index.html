@@ -2043,24 +2043,28 @@ async function initAuth() {
   }
 
   let session = null;
+  let debugInfo = '';
 
   if (isOAuthReturn) {
     // detectSessionInUrl est désactivé : on extrait et applique le token nous-mêmes
     const params = new URLSearchParams(hash.replace('#', ''));
     const accessToken = params.get('access_token');
     const refreshToken = params.get('refresh_token');
+    debugInfo += 'hash len=' + hash.length + ' | access_token=' + (accessToken ? 'YES('+accessToken.length+')' : 'NO') + ' | refresh_token=' + (refreshToken ? 'YES' : 'NO') + '\\n';
     if (accessToken && refreshToken) {
       try {
         const { data, error } = await sb.auth.setSession({
           access_token: accessToken,
           refresh_token: refreshToken
         });
+        debugInfo += 'setSession error=' + (error ? error.message : 'none') + ' | session user=' + (data?.session?.user?.email || 'none');
         if (!error && data?.session?.user) {
           session = data.session;
         }
-      } catch(e) {}
+      } catch(e) { debugInfo += 'setSession EXCEPTION: ' + e.message; }
     }
   } else {
+    debugInfo += 'pas de retour OAuth (hash vide)';
     // Pas de retour OAuth : vérifier session existante
     try {
       const { data } = await sb.auth.getSession();
@@ -2069,6 +2073,12 @@ async function initAuth() {
   }
 
   if (wait) wait.remove();
+
+  // DEBUG VISIBLE
+  const dbg = document.createElement('div');
+  dbg.style.cssText = 'position:fixed;bottom:0;left:0;right:0;background:#000;color:#0f0;font-family:monospace;font-size:11px;padding:10px;z-index:99999;white-space:pre-wrap;max-height:40vh;overflow:auto;border-top:2px solid #0f0;';
+  dbg.textContent = 'DEBUG: ' + debugInfo;
+  document.body.appendChild(dbg);
 
   if (session?.user) {
     applyUser(session.user);
