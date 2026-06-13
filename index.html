@@ -2044,68 +2044,57 @@ async function initAuth() {
     }
   }
 
-  // Flow implicit : token dans le hash #access_token=...
-  if (window.location.hash.includes('access_token')) {
-    showOverlay(null);
-    const wait = document.createElement('div');
-    wait.style.cssText = 'position:fixed;inset:0;background:#0b0f1a;z-index:9999;display:flex;align-items:center;justify-content:center;font-family:monospace;font-size:14px;color:#6b7a99;';
-    wait.textContent = 'Connexion en cours...';
-    document.body.appendChild(wait);
+  // Extraire le token directement depuis le hash (sans passer par le storage Supabase)
+  const hash = window.location.hash;
+  if (hash.includes('access_token')) {
+    const params = new URLSearchParams(hash.replace('#', ''));
+    const accessToken = params.get('access_token');
+    const refreshToken = params.get('refresh_token') || '';
 
-    // Supabase detectSessionInUrl parse le hash automatiquement — on attend
-    await new Promise(r => setTimeout(r, 1000));
-    wait.remove();
+    if (accessToken) {
+      showOverlay(null);
+      const wait = document.createElement('div');
+      wait.style.cssText = 'position:fixed;inset:0;background:#0b0f1a;z-index:9999;display:flex;align-items:center;justify-content:center;font-family:monospace;font-size:14px;color:#6b7a99;';
+      wait.textContent = 'Connexion en cours...';
+      document.body.appendChild(wait);
 
-    try {
-      const { data } = await _sb.auth.getSession();
-      if (data?.session?.user) {
-        applyUser(data.session.user);
+      try {
+        // Décoder le JWT pour extraire les infos utilisateur directement
+        const payload = JSON.parse(atob(accessToken.split('.')[1].replace(/-/g,'+').replace(/_/g,'/')));
+        const user = {
+          id: payload.sub,
+          email: payload.email,
+          user_metadata: payload.user_metadata || {}
+        };
+
+        // Stocker les tokens dans localStorage pour les futurs appels Supabase
+        const storageKey = 'sb-' + window.SUPABASE_URL.split('//')[1].split('.')[0] + '-auth-token';
+        const sessionData = {
+          access_token: accessToken,
+          refresh_token: refreshToken,
+          expires_at: payload.exp,
+          token_type: 'bearer',
+          user: user
+        };
+        try {
+          localStorage.setItem(storageKey, JSON.stringify(sessionData));
+        } catch(e) {}
+
+        wait.remove();
+        applyUser(user);
         return;
+      } catch(e) {
+        wait.remove();
       }
-    } catch(e) {}
-
+    }
     showOverlay('overlayGoogle');
     return;
   }
 
-  // Flow PKCE : code dans ?code= (fallback)
-  const code = new URLSearchParams(window.location.search).get('code');
-  if (code) {
-    showOverlay(null);
-    const wait = document.createElement('div');
-    wait.style.cssText = 'position:fixed;inset:0;background:#0b0f1a;z-index:9999;display:flex;align-items:center;justify-content:center;font-family:monospace;font-size:14px;color:#6b7a99;';
-    wait.textContent = 'Connexion en cours...';
-    document.body.appendChild(wait);
-
-    try {
-      const { data, error } = await _sb.auth.exchangeCodeForSession(code);
-      wait.remove();
-      if (!error && data?.session?.user) {
-        applyUser(data.session.user);
-        return;
-      }
-    } catch(e) {}
-
-    wait.remove();
-    showOverlay('overlayGoogle');
-    return;
-  }
-
-  // Pas de retour OAuth — vérifier session existante
-  let session = null;
-  try {
-    const { data } = await _sb.auth.getSession();
-    session = data?.session;
-  } catch(e) {}
-
-  if (session?.user) {
-    applyUser(session.user);
-    return;
-  }
-
-  // Compte connu ? Tenter refresh silencieux
+  // Pas de hash — vérifier session en localStorage
   const lastUid = localStorage.getItem('tjp_last_uid');
   if (lastUid && localStorage.getItem(pinKey(lastUid))) {
+    // Tenter refresh via Supabase
     try {
       const { data } = await _sb.auth.refreshSession();
       if (data?.session?.user) {
@@ -2113,6 +2102,7 @@ async function initAuth() {
         return;
       }
     } catch(e) {}
+    // Session expirée mais compte connu
     currentUser = { id: lastUid, email: localStorage.getItem(emailKey(lastUid)) };
     showOverlay('overlayEmailPin');
     const inp = document.getElementById('returnEmail');
