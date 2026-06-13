@@ -720,22 +720,42 @@ tbody td{padding:6px 8px;vertical-align:middle;white-space:nowrap;}
 <div class="footer" style="display:none"></div>
 
 <script>
+// ══ SUPABASE CONFIG — client unique, flow implicit natif ══
+window.SUPABASE_URL = 'https://ghjashqgwlaofjubzrcp.supabase.co';
+window.SUPABASE_KEY = 'sb_publishable_v_Uc1c_TsGyA7ieZPfaGnw_Ajknc7af';
+window.sb = supabase.createClient(window.SUPABASE_URL, window.SUPABASE_KEY, {
+  auth: {
+    flowType: 'implicit',
+    detectSessionInUrl: true,
+    persistSession: true,
+    autoRefreshToken: true
+  }
+});
+function getSb() { return window.sb; }
+
+// ══ GOOGLE LOGIN ══
 async function signInWithGoogle() {
   const btn = document.getElementById('googleLoginBtn');
-  btn.disabled = true; btn.textContent = 'Connexion...';
+  const err = document.getElementById('googleErr');
+  err.style.display = 'none';
+  btn.disabled = true;
+  btn.textContent = 'Ouverture de Google...';
+
   const { error } = await sb.auth.signInWithOAuth({
     provider: 'google',
     options: {
-      redirectTo: window.location.href,
-      queryParams: { prompt: 'select_account consent' } // force re-auth Google à chaque fois
+      redirectTo: 'https://plutonicame.github.io/tjpro/',
+      queryParams: { prompt: 'select_account' }
     }
   });
+
   if (error) {
-    const err = document.getElementById('googleErr');
-    err.textContent = error.message; err.style.display = 'block';
     btn.disabled = false;
     btn.innerHTML = '<svg width="20" height="20" viewBox="0 0 48 48"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.18 1.48-4.97 2.31-8.16 2.31-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg> Continuer avec Google';
+    err.textContent = error.message;
+    err.style.display = 'block';
   }
+  // Si pas d'erreur, le navigateur redirige vers Google — la page se recharge ensuite
 }
 
 // ══ DATA GEN ══
@@ -1739,6 +1759,7 @@ function saveEditTrade(){markUserAction();
     <svg width="20" height="20" viewBox="0 0 48 48"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.18 1.48-4.97 2.31-8.16 2.31-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg>
     Continuer avec Google
   </button>
+  <div style="font-family:'DM Sans',sans-serif;font-size:11px;color:#3a4a6b;text-align:center;max-width:260px;margin-top:-8px;">Un popup Google va s'ouvrir — autorise-le si nécessaire</div>
   <div class="auth-err" id="googleErr"></div>
 </div>
 
@@ -1790,9 +1811,7 @@ function saveEditTrade(){markUserAction();
 <div id="syncStatus" style="position:fixed;bottom:16px;right:16px;background:#161d2e;border:1px solid #1e2d45;border-radius:6px;padding:6px 12px;font-family:'Space Mono',monospace;font-size:10px;color:#6b7a99;z-index:1000;display:none;"></div>
 
 <script>
-const SUPABASE_URL = 'https://ghjashqgwlaofjubzrcp.supabase.co';
-const SUPABASE_KEY = 'sb_publishable_v_Uc1c_TsGyA7ieZPfaGnw_Ajknc7af';
-const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+// (SUPABASE_URL, SUPABASE_KEY et sb définis dans le premier bloc script)
 
 let currentUser = null;
 let syncTimeout = null;
@@ -1990,33 +2009,15 @@ async function submitReturnEmail() {
 
 // ══ AUTH INIT ══
 async function initAuth() {
-  // Supabase détecte automatiquement le hash #access_token dans l'URL
-  // et crée une session - on attend que ce soit fait
-  
-  // D'abord vérifier s'il y a un hash OAuth dans l'URL (retour Google)
-  const hasOAuthHash = window.location.hash.includes('access_token') || 
-                       window.location.hash.includes('error');
-  
-  if (hasOAuthHash) {
-    // Attendre que Supabase traite le hash
-    await new Promise(r => setTimeout(r, 500));
-  }
-
-  let session = null;
-  try {
-    const result = await sb.auth.getSession();
-    session = result.data?.session;
-  } catch(e) {}
-
-  if (session?.user) {
-    // Session valide - sauvegarder et demander PIN
-    currentUser = session.user;
+  function applyUser(user) {
+    if (!user || currentUser) return;
+    currentUser = user;
     localStorage.setItem(emailKey(currentUser.id), currentUser.email);
     localStorage.setItem(uidByEmailKey(currentUser.email.toLowerCase()), currentUser.id);
     localStorage.setItem('tjp_last_uid', currentUser.id);
-    // Nettoyer le hash de l'URL
-    if (hasOAuthHash) history.replaceState(null,'',window.location.pathname);
-    
+    if (window.location.hash.includes('access_token')) {
+      history.replaceState(null, '', window.location.pathname);
+    }
     const pin = localStorage.getItem(pinKey(currentUser.id));
     if (pin) {
       document.getElementById('enterPinSub').textContent = currentUser.email;
@@ -2026,46 +2027,44 @@ async function initAuth() {
       showOverlay('overlayCreatePin');
       setupCreatePin();
     }
+  }
+
+  // Écran d'attente pendant le retour OAuth (Supabase parse le hash automatiquement)
+  const isOAuthReturn = window.location.hash.includes('access_token');
+  let wait = null;
+  if (isOAuthReturn) {
+    showOverlay(null);
+    wait = document.createElement('div');
+    wait.id = 'oauthWait';
+    wait.style.cssText = 'position:fixed;inset:0;background:#0b0f1a;z-index:9999;display:flex;align-items:center;justify-content:center;font-family:monospace;font-size:14px;color:#6b7a99;';
+    wait.textContent = 'Connexion en cours...';
+    document.body.appendChild(wait);
+  }
+
+  // getSession() déclenche/attend le parsing automatique du hash par Supabase
+  let session = null;
+  try {
+    const { data } = await sb.auth.getSession();
+    session = data?.session;
+  } catch(e) {}
+
+  if (wait) wait.remove();
+
+  if (session?.user) {
+    applyUser(session.user);
     return;
   }
 
-  // Pas de session - écouter les changements (pour le redirect OAuth)
-  sb.auth.onAuthStateChange((event, sess) => {
-    if ((event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') && sess?.user) {
-      currentUser = sess.user;
-      localStorage.setItem(emailKey(currentUser.id), currentUser.email);
-      localStorage.setItem(uidByEmailKey(currentUser.email.toLowerCase()), currentUser.id);
-      localStorage.setItem('tjp_last_uid', currentUser.id);
-      if (window.location.hash.includes('access_token')) {
-        history.replaceState(null,'',window.location.pathname);
-      }
-      const pin = localStorage.getItem(pinKey(currentUser.id));
-      if (pin) {
-        document.getElementById('enterPinSub').textContent = currentUser.email;
-        showOverlay('overlayEnterPin');
-        setupEnterPin();
-      } else {
-        showOverlay('overlayCreatePin');
-        setupCreatePin();
-      }
-    }
-  });
-
-  // Vérifier s'il y a un compte connu pour afficher le bon écran
+  // Pas de session — compte connu localement ?
   const lastUid = localStorage.getItem('tjp_last_uid');
   if (lastUid && localStorage.getItem(pinKey(lastUid))) {
-    // Tenter refresh silencieux
     try {
       const { data } = await sb.auth.refreshSession();
       if (data?.session?.user) {
-        currentUser = data.session.user;
-        document.getElementById('enterPinSub').textContent = currentUser.email;
-        showOverlay('overlayEnterPin');
-        setupEnterPin();
+        applyUser(data.session.user);
         return;
       }
     } catch(e) {}
-    // Pas de session mais compte connu - demander email
     currentUser = { id: lastUid, email: localStorage.getItem(emailKey(lastUid)) };
     showOverlay('overlayEmailPin');
     const inp = document.getElementById('returnEmail');
@@ -2325,16 +2324,21 @@ document.addEventListener('DOMContentLoaded', () => {
 
 
 
+// Variables pour le module Récap IA (fonctionnalité désactivée)
+let currentRecapData = null;
+function getIaConfig() { return { assets: [] }; }
+
 function exportRecapPdf() {
   if (!currentRecapData) return;
   const cfg = getIaConfig();
+  const tsEl = document.getElementById('recapTimestamp');
   let html = `<html><head><meta charset="UTF-8"><title>Récap Marchés TJPro</title>
   <style>body{font-family:Arial,sans-serif;max-width:900px;margin:40px auto;color:#1a1a2e;}
   h1{color:#4f8ef7;}h2{color:#0d7377;border-bottom:1px solid #eee;padding-bottom:6px;}
   pre{white-space:pre-wrap;font-family:inherit;line-height:1.7;}
   .asset{page-break-before:always;margin-bottom:40px;}</style></head><body>
   <h1>Récap Marchés — Trading Journal Pro</h1>
-  <p style="color:#666">${document.getElementById('recapTimestamp').textContent}</p>`;
+  <p style="color:#666">${tsEl ? tsEl.textContent : new Date().toLocaleString('fr-FR')}</p>`;
   cfg.assets.forEach(a => {
     if (currentRecapData[a]) html += `<div class="asset"><h2>${a}</h2><pre>${currentRecapData[a]}</pre></div>`;
   });
@@ -2347,14 +2351,12 @@ function exportRecapPdf() {
 
 // Init au chargement de la page Récap
 
-// Init initial
+// Animation shake pour les PIN incorrects
 document.addEventListener('DOMContentLoaded', () => {
-  // loadIaConfigUI removed
+  const shakeStyle = document.createElement('style');
+  shakeStyle.textContent = '@keyframes shake{0%,100%{transform:translateX(0)}25%{transform:translateX(-6px)}75%{transform:translateX(6px)}}';
+  document.head.appendChild(shakeStyle);
 });
-
-const shakeStyle = document.createElement('style');
-shakeStyle.textContent = '@keyframes shake{0%,100%{transform:translateX(0)}25%{transform:translateX(-6px)}75%{transform:translateX(6px)}}';
-document.head.appendChild(shakeStyle);
 
 // ══════════════════════════════════════
 // TOP 5 / PIRES 5 TRADES
