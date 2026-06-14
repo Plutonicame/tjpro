@@ -1820,6 +1820,7 @@ let currentUser = null;
 let syncTimeout = null;
 
 function showOverlay(id) {
+  console.log('[TJP DEBUG] showOverlay(' + id + ') called');
   document.querySelectorAll('.auth-overlay').forEach(el => el.classList.remove('active'));
   if (id) document.getElementById(id).classList.add('active');
 }
@@ -1905,6 +1906,7 @@ function setupEnterPin() {
 }
 
 async function afterPinValidated() {
+  console.log('[TJP DEBUG] afterPinValidated() START. currentUser=', currentUser?.email);
   // Afficher écran de chargement
   showOverlay(null);
   const loadEl = document.createElement('div');
@@ -1971,6 +1973,7 @@ async function afterPinValidated() {
 }
 
 async function resetPin() {
+  console.log('[TJP DEBUG] resetPin() called! Stack:', new Error().stack);
   stopRealtime();
   if (window._pollInterval) { clearInterval(window._pollInterval); window._pollInterval = null; }
   currentUser = null;
@@ -2012,7 +2015,9 @@ async function submitReturnEmail() {
 
 // ══ AUTH INIT ══
 async function initAuth() {
+  console.log('[TJP DEBUG] initAuth() called. _oauthHash=', window._oauthHash, 'currentUser=', currentUser);
   function applyUser(user) {
+    console.log('[TJP DEBUG] applyUser called with:', user?.email, '| currentUser already set?', !!currentUser);
     if (!user || currentUser) return;
     currentUser = user;
     localStorage.setItem(emailKey(currentUser.id), currentUser.email);
@@ -2073,6 +2078,8 @@ async function initAuth() {
   }
 
   if (wait) wait.remove();
+
+  console.log('[TJP DEBUG] initAuth result:', debugInfo, '| session:', session);
 
   // DEBUG VISIBLE
   const dbg = document.createElement('div');
