@@ -1625,11 +1625,11 @@ function renderEditImages(existing){
   const wrap=document.getElementById('e-images-wrap');
   if(!wrap)return;
   wrap.innerHTML=(existing||[]).map((src,i)=>`<div style="position:relative;display:inline-block;margin:4px;">
-    <img src="${src}" style="width:80px;height:60px;object-fit:cover;border-radius:6px;border:1px solid var(--border);">
+    <img src="${src}" style="width:80px;height:60px;object-fit:cover;border-radius:6px;border:1px solid var(--border);cursor:zoom-in;" onclick="openFullscreen(this.src)">
     <button onclick="removeExistingImg(${i})" style="position:absolute;top:2px;right:2px;background:#ef4444;color:#fff;border:none;border-radius:3px;padding:1px 5px;cursor:pointer;font-size:10px;">×</button>
   </div>`).join('')+
   (window._editImages||[]).map((src,i)=>`<div style="position:relative;display:inline-block;margin:4px;">
-    <img src="${src}" style="width:80px;height:60px;object-fit:cover;border-radius:6px;border:1px solid #4f8ef7;">
+    <img src="${src}" style="width:80px;height:60px;object-fit:cover;border-radius:6px;border:1px solid #4f8ef7;cursor:zoom-in;" onclick="openFullscreen(this.src)">
     <button onclick="removeNewImg(${i})" style="position:absolute;top:2px;right:2px;background:#ef4444;color:#fff;border:none;border-radius:3px;padding:1px 5px;cursor:pointer;font-size:10px;">×</button>
   </div>`).join('');
 }
