@@ -2412,7 +2412,7 @@ function renderTop5() {
   function tradeRow(t) {
     const pct = CAPITAL() > 0 ? ((t.res||0)/CAPITAL()*100).toFixed(2) : '0.00';
     const col = (t.res||0) >= 0 ? 'var(--green)' : 'var(--red)';
-    return `<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid var(--border);">
+    return `<div class="top5-row" style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid var(--border);cursor:pointer;transition:background .15s;" onclick="openEditTrade(${t.id})" onmouseover="this.style.background='var(--row-hover)'" onmouseout="this.style.background='transparent'">
       <div>
         <div style="font-family:var(--mono);font-size:11px;">${t.paire||'—'} <span style="color:var(--muted);font-size:10px;">${t.date||''}</span></div>
         <div style="font-size:10px;color:var(--muted);">${t.session||''} ${t.tf||''}</div>
