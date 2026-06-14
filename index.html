@@ -39,7 +39,7 @@
   --badge-p-bg:rgba(59,130,246,.1);--badge-p-bd:rgba(59,130,246,.3);--badge-p-tx:#3b82f6;
   --badge-r-bg:rgba(245,158,11,.1);--badge-r-bd:rgba(245,158,11,.3);--badge-r-tx:#f59e0b;
   --eq-line:#00e5a0;--eq-fill-top:rgba(0,229,160,.32);--eq-fill-bot:rgba(0,229,160,0);--eq-bg:#161d2e;--eq-axis:#64748b;--eq-grid:rgba(100,116,139,.1);
-  --pnl-bar-pos:#3b82f6;--pnl-bar-neg:#ef4444;--pnl-line-pos:#3b82f6;--pnl-line-neg:#ef4444;--pnl-fill-pos-top:rgba(59,130,246,.35);--pnl-fill-pos-bot:rgba(59,130,246,0);--pnl-fill-neg-top:rgba(239,68,68,0);--pnl-fill-neg-bot:rgba(239,68,68,.35);--pnl-bg:#161d2e;--pnl-axis:#64748b;--pnl-grid:rgba(100,116,139,.1);
+  --pnl-bar-pos:#3b82f6;--pnl-bar-neg:#ef4444;--pnl-bg:#161d2e;--pnl-axis:#64748b;--pnl-grid:rgba(100,116,139,.1);
   --risk-line:#f59e0b;--risk-fill-top:rgba(245,158,11,.25);--risk-fill-bot:rgba(245,158,11,0);--risk-base:rgba(100,116,139,.5);--risk-bg:#161d2e;--risk-axis:#f59e0b;--risk-grid:rgba(100,116,139,.1);--risk-euro-tx:#3b82f6;
   --pie-win:rgba(0,229,160,.85);--pie-lose:rgba(239,68,68,.85);--pie-neutral:rgba(100,116,139,.6);
   --mgmt-bg:#161d2e;--mgmt-yes:#00e5a0;--mgmt-no:#ef4444;--mgmt-yes-alpha:rgba(0,229,160,.35);--mgmt-no-alpha:rgba(239,68,68,.35);--mgmt-yes-bd:#00e5a0;--mgmt-no-bd:#ef4444;--mgmt-axis:#64748b;--mgmt-grid:rgba(100,116,139,.1);
@@ -930,34 +930,38 @@ function computeRiskHistory(){
   let rp=base,ws=0,ls2=0;
   let runCap=CAPITAL();
   let highestEq=runCap;
-  let inDrawdown=false; // true = on a baissé le risque, attente du rattrapage
+  let appliedSteps=0; // nombre de paliers de -0.5% déjà appliqués pour le drawdown en cours
   const hist=[{date:'Départ',rp:base,ws:0,ls:0}];
   sorted.forEach(t=>{
     const res=t.res||0;
     runCap+=res;
     if(smart){
-      // Mettre à jour le plus haut SANS remonter le risque automatiquement
-      if(runCap>highestEq) highestEq=runCap;
-      // Calculer drawdown depuis le plus haut
-      const dd=highestEq>0?((highestEq-runCap)/highestEq)*100:0;
-      const ddSteps=Math.floor(dd/5); // chaque palier de 5% = -0.5%
-      if(ddSteps>0&&!inDrawdown){
-        // Chaque palier de 5% de drawdown = -0.5% de risk
-        for(let _i=0;_i<ddSteps;_i++) rp=Math.max(0.01,Math.round((rp-0.5)*100)/100);
-        inDrawdown=true;
-        ws=0;ls2++;
-      } else if(res>0){
-        if(inDrawdown&&runCap>=highestEq){
-          // Rattrapage : retour au plus haut → +0.5%
+      if(runCap>highestEq){
+        // Nouveau plus haut atteint
+        const wasInDrawdown=appliedSteps>0;
+        highestEq=runCap;
+        appliedSteps=0;
+        if(wasInDrawdown){
+          // Rattrapage : retour au plus haut après un drawdown → +0.5%
           rp=Math.min(RMAX(),Math.round((rp+0.5)*100)/100);
-          inDrawdown=false;ws=0;
-        } else if(!inDrawdown){
-          // 3 gains consécutifs → +0.5%
+          ws=0;
+        } else if(res>0){
+          // Gains consécutifs (hors drawdown) → +0.5% tous les 3 gains
           ws++;
           if(ws%3===0){rp=Math.min(RMAX(),Math.round((rp+0.5)*100)/100);}
         }
-      } else if(res<0){
-        if(!inDrawdown) ws=0; // reset streak sur perte (si pas encore en drawdown)
+      } else {
+        // En drawdown (ou égal au plus haut sans le dépasser)
+        const dd=highestEq>0?((highestEq-runCap)/highestEq)*100:0;
+        const ddSteps=Math.floor(dd/5); // chaque palier de 5% = -0.5%
+        if(ddSteps>appliedSteps){
+          const newSteps=ddSteps-appliedSteps;
+          for(let _i=0;_i<newSteps;_i++) rp=Math.max(0.01,Math.round((rp-0.5)*100)/100);
+          appliedSteps=ddSteps;
+          ws=0;ls2++;
+        } else if(res<0){
+          ws=0; // reset streak sur perte
+        }
       }
     }
     hist.push({date:t.date,heure:t.heure||'',rp,ws,ls:ls2});
@@ -976,20 +980,31 @@ function drawRiskChart(period){
   const grC=gc('--risk-grid')||'rgba(100,116,139,.1)';
   const lineC=gc('--risk-line')||'#f59e0b';
   const baseC=gc('--risk-base')||'rgba(100,116,139,.5)';
-  const rmax=RMAX(),base=RBASE();
+  const rmax=RMAX(),base=RBASE(),smart=SMART();
   let rp=base,ws=0,ls2=0;
-  let runCap=CAPITAL(),highestEq=CAPITAL(),inDrawdown=false;
+  let runCap=CAPITAL(),highestEq=CAPITAL(),appliedSteps=0;
   const labels=['Départ'],riskData=[base];
   tr.forEach(t=>{
     const res=t.res||0;runCap+=res;
-    if(runCap>highestEq)highestEq=runCap;
-    const dd=highestEq>0?((highestEq-runCap)/highestEq)*100:0;
-    const ddSteps=Math.floor(dd/5);
-    if(ddSteps>0&&!inDrawdown){for(let _i=0;_i<ddSteps;_i++)rp=Math.max(0.01,Math.round((rp-0.5)*100)/100);inDrawdown=true;ws=0;ls2++;}
-    else if(res>0){
-      if(inDrawdown&&runCap>=highestEq){rp=Math.min(rmax,Math.round((rp+0.5)*100)/100);inDrawdown=false;ws=0;}
-      else if(!inDrawdown){ws++;if(ws%3===0)rp=Math.min(rmax,Math.round((rp+0.5)*100)/100);}
-    }else if(res<0&&!inDrawdown){ws=0;}
+    if(smart){
+      if(runCap>highestEq){
+        const wasInDrawdown=appliedSteps>0;
+        highestEq=runCap;
+        appliedSteps=0;
+        if(wasInDrawdown){
+          rp=Math.min(rmax,Math.round((rp+0.5)*100)/100);
+          ws=0;
+        } else if(res>0){ws++;if(ws%3===0)rp=Math.min(rmax,Math.round((rp+0.5)*100)/100);}
+      } else {
+        const dd=highestEq>0?((highestEq-runCap)/highestEq)*100:0;
+        const ddSteps=Math.floor(dd/5);
+        if(ddSteps>appliedSteps){
+          const newSteps=ddSteps-appliedSteps;
+          for(let _i=0;_i<newSteps;_i++)rp=Math.max(0.01,Math.round((rp-0.5)*100)/100);
+          appliedSteps=ddSteps;ws=0;ls2++;
+        } else if(res<0){ws=0;}
+      }
+    }
     labels.push(t.date);riskData.push(rp);
   });
   const ctx=document.getElementById('cRisk').getContext('2d');
@@ -1019,7 +1034,7 @@ function showPage(id,btn){
   document.querySelectorAll('.nav-tab').forEach(t=>t.classList.remove('active'));
   const pg=document.getElementById('page-'+id);if(pg)pg.classList.add('active');
   if(btn)btn.classList.add('active');
-  if(id==='trackrecord'){setTimeout(()=>{refreshAllCharts();renderTop5();drawTFChart();},80);}
+  if(id==='trackrecord'){setTimeout(()=>{refreshAllCharts();renderTop5();},80);}
   if(id==='calendrier')renderCalendar();
   if(id==='modifs'){setTimeout(()=>{renderModifs();setupPencil();},50);}
 }
@@ -1238,8 +1253,8 @@ function renderCalendar(){
 
 // ══ CHARTS ══
 const CH={};
-const ST={eq:'tout',pnl:'tout',pie:'tout',risk:'tout',mgmt:'tout',conf:'tout',pairs:'tout',sessions:'tout',jours:'tout'};
-const MODE={conf:false,pairs:false,sessions:false,jours:false};
+const ST={eq:'tout',pnl:'tout',pie:'tout',risk:'tout',mgmt:'tout',conf:'tout',pairs:'tout',sessions:'tout',jours:'tout',tf:'tout'};
+const MODE={conf:false,pairs:false,sessions:false,jours:false,tf:false};
 
 function filterT(period){
   const now=new Date(),y=now.getFullYear(),m=now.getMonth(),q=Math.floor(m/3);
@@ -1311,8 +1326,8 @@ function drawEquity(period){
 function drawPnl(period){
   const tr=filterT(period);destroy('pnl');
   if(!tr.length)return;
-  const posC=gc('--pnl-bar-pos')||gc('--pnl-line-pos')||'#3b82f6';
-  const negC=gc('--pnl-bar-neg')||gc('--pnl-line-neg')||'#ef4444';
+  const posC=gc('--pnl-bar-pos')||'#3b82f6';
+  const negC=gc('--pnl-bar-neg')||'#ef4444';
   const axC=gc('--pnl-axis')||'#64748b';
   const grC=gc('--pnl-grid')||'rgba(100,116,139,.1)';
   const sorted=[...tr].sort((a,b)=>a.date.localeCompare(b.date)||(a.heure||'').localeCompare(b.heure||''));
@@ -1418,10 +1433,11 @@ function toggleMode(k){MODE[k]=!MODE[k];document.getElementById('tgl-'+k).classL
   if(k==='conf')drawComp('cConf','conf','conf',ST.conf,MODE.conf,true);
   else if(k==='pairs')drawComp('cPairs','pairs','paire',ST.pairs,MODE.pairs);
   else if(k==='sessions')drawComp('cSessions','sessions','session',ST.sessions,MODE.sessions);
-  else if(k==='jours')drawJours(ST.jours);}
+  else if(k==='jours')drawJours(ST.jours);
+  else if(k==='tf')drawComp('cTF','tf','tf',ST.tf,MODE.tf,true);}
 
 function buildCompCharts(){
-  const COMP=[{id:'cConf',key:'conf',title:'PAR CONFLUENCE',multi:true,h:260},{id:'cPairs',key:'pairs',title:'PAR PAIRE / ACTIF',h:220},{id:'cSessions',key:'sessions',title:'PAR SESSION',h:200},{id:'cJours',key:'jours',title:'PAR JOUR DE SEMAINE',h:180}];
+  const COMP=[{id:'cConf',key:'conf',title:'PAR CONFLUENCE',multi:true,h:260},{id:'cPairs',key:'pairs',title:'PAR PAIRE / ACTIF',h:220},{id:'cSessions',key:'sessions',title:'PAR SESSION',h:200},{id:'cJours',key:'jours',title:'PAR JOUR DE SEMAINE',h:180},{id:'cTF',key:'tf',title:'PAR TIMEFRAME',multi:true,h:200}];
   document.getElementById('compCharts').innerHTML=COMP.map(c=>`
     <div class="chart-card" style="background:var(--comp-bg)">
       <div class="chart-header">
@@ -1452,10 +1468,11 @@ function bindPBtns(){
       else if(c==='pairs')drawComp('cPairs','pairs','paire',p,MODE.pairs);
       else if(c==='sessions')drawComp('cSessions','sessions','session',p,MODE.sessions);
       else if(c==='jours')drawJours(p);
+      else if(c==='tf')drawComp('cTF','tf','tf',p,MODE.tf,true);
     });
   });
 }
-function refreshAllCharts(){updateKPIs();drawEquity(ST.eq);drawPnl(ST.pnl);drawPie(ST.pie);drawRiskChart(ST.risk);drawMgmt(ST.mgmt);drawComp('cConf','conf','conf',ST.conf,MODE.conf,true);drawComp('cPairs','pairs','paire',ST.pairs,MODE.pairs);drawComp('cSessions','sessions','session',ST.sessions,MODE.sessions);drawJours(ST.jours);}
+function refreshAllCharts(){updateKPIs();drawEquity(ST.eq);drawPnl(ST.pnl);drawPie(ST.pie);drawRiskChart(ST.risk);drawMgmt(ST.mgmt);drawComp('cConf','conf','conf',ST.conf,MODE.conf,true);drawComp('cPairs','pairs','paire',ST.pairs,MODE.pairs);drawComp('cSessions','sessions','session',ST.sessions,MODE.sessions);drawJours(ST.jours);drawComp('cTF','tf','tf',ST.tf,MODE.tf,true);}
 
 // ══ COLOR PICKER ══
 let cpCB=null,cpH=0,cpS=1,cpL=.5,cpCX=1,cpCY=0,cpDrag=false;
@@ -1512,9 +1529,7 @@ const TV=[
   // Couleurs indépendantes pour résultats journal
   {v:'--result-pos',l:'Résultats positifs (journal)',g:'Texte'},{v:'--result-neg',l:'Résultats négatifs (journal)',g:'Texte'},{v:'--state-capital',l:'Capital actuel (modif.)',g:'État actuel'},{v:'--state-winstreak',l:'Win streak (modif.)',g:'État actuel'},{v:'--state-tf',l:'Timeframes (journal)',g:'État actuel'},{v:'--risk-euro-tx',l:'Risk €/trade couleur',g:'État actuel'},
   {v:'--eq-bg',l:'Fond',g:'Équity'},{v:'--eq-line',l:'Courbe',g:'Équity'},{v:'--eq-fill-top',l:'Dégradé haut',g:'Équity'},{v:'--eq-fill-bot',l:'Dégradé bas',g:'Équity'},{v:'--eq-axis',l:'Axes',g:'Équity'},{v:'--eq-grid',l:'Grille',g:'Équity'},
-  {v:'--pnl-bg',l:'Fond',g:'P&L'},
-  
-  
+  {v:'--pnl-bg',l:'Fond',g:'P&L'},{v:'--pnl-bar-pos',l:'Positif',g:'P&L'},{v:'--pnl-bar-neg',l:'Négatif',g:'P&L'},
   {v:'--pnl-axis',l:'Axes',g:'P&L'},{v:'--pnl-grid',l:'Grille',g:'P&L'},
   {v:'--risk-bg',l:'Fond',g:'Risk'},{v:'--risk-line',l:'Courbe',g:'Risk'},{v:'--risk-fill-top',l:'Dégradé haut',g:'Risk'},{v:'--risk-fill-bot',l:'Dégradé bas',g:'Risk'},{v:'--risk-base',l:'Ligne de base',g:'Risk'},{v:'--risk-axis',l:'Axes',g:'Risk'},{v:'--risk-grid',l:'Grille',g:'Risk'},
   {v:'--pie-win',l:'Gagnants',g:'Win Rate'},{v:'--pie-lose',l:'Perdants',g:'Win Rate'},{v:'--pie-neutral',l:'Nuls',g:'Win Rate'},
@@ -2203,7 +2218,6 @@ function applyCloudData(data) {
   setTimeout(()=>{
     refreshAllCharts();
     renderTop5();
-    drawTFChart();
     if(document.getElementById('page-modifs')?.classList.contains('active')) renderModifs();
     applyPencilEdits();
   }, 200);
@@ -2414,70 +2428,6 @@ function renderTop5() {
   const w5 = document.getElementById('worst5trades');
   if (t5) t5.innerHTML = top5.length ? top5.map(tradeRow).join('') : '<div style="color:var(--muted);font-size:12px;">Aucun trade</div>';
   if (w5) w5.innerHTML = worst5.length ? worst5.map(tradeRow).join('') : '<div style="color:var(--muted);font-size:12px;">Aucun trade</div>';
-}
-
-// ══ GRAPHIQUE TIMEFRAMES ══
-function drawTFChart() {
-  const trades = APP.trades;
-  if (!trades.length) return;
-  const tfMap = {};
-  trades.forEach(t => {
-    const tfs = (t.tf||'').split(',').map(s=>s.trim()).filter(Boolean);
-    tfs.forEach(tf => {
-      if (!tfMap[tf]) tfMap[tf] = {wins:0,losses:0,pnl:0,count:0};
-      tfMap[tf].count++;
-      tfMap[tf].pnl += t.res||0;
-      if ((t.res||0) > 0) tfMap[tf].wins++;
-      else if ((t.res||0) < 0) tfMap[tf].losses++;
-    });
-  });
-  const labels = Object.keys(tfMap);
-  if (!labels.length) return;
-  const pnls = labels.map(tf => tfMap[tf].pnl);
-  const wrs = labels.map(tf => tfMap[tf].count > 0 ? Math.round(tfMap[tf].wins/tfMap[tf].count*100) : 0);
-  const posC = gc('--pnl-bar-pos')||'#3b82f6';
-  const negC = gc('--pnl-bar-neg')||'#ef4444';
-  const axC = gc('--pnl-axis')||'#64748b';
-  const grC = gc('--pnl-grid')||'rgba(100,116,139,.1)';
-
-  // Insérer le graphique TF dans la page track record
-  let tfWrap = document.getElementById('tfChart');
-  if (!tfWrap) {
-    const compDiv = document.getElementById('compCharts');
-    if (compDiv) {
-      const card = document.createElement('div');
-      card.className = 'card';
-      card.style.marginTop = '16px';
-      card.innerHTML = `<div class="card-header"><div class="card-title" data-editable>PERFORMANCE PAR TIMEFRAME</div></div>
-        <div class="card-body"><div class="chart-body" id="tfChart" style="height:200px;"><canvas id="cTF"></canvas></div></div>`;
-      compDiv.insertBefore(card, compDiv.firstChild);
-      tfWrap = document.getElementById('tfChart');
-    }
-  }
-  if (!tfWrap) return;
-
-  destroy('tf');
-  const ctx = document.getElementById('cTF')?.getContext('2d');
-  if (!ctx) return;
-  CH['tf'] = new Chart(ctx, {
-    type: 'bar',
-    data: {
-      labels,
-      datasets: [
-        { label: 'P&L (€)', data: pnls, backgroundColor: pnls.map(v=>v>=0?posC:negC), yAxisID: 'y' },
-        { label: 'Win Rate (%)', data: wrs, type: 'line', borderColor: gc('--eq-line')||'#00e5a0', pointRadius: 4, fill: false, yAxisID: 'y2' }
-      ]
-    },
-    options: {
-      responsive: true, maintainAspectRatio: false,
-      plugins: { legend: { labels: { color: axC, font: { size: 10 } } } },
-      scales: {
-        x: { grid: { color: grC }, ticks: { color: axC } },
-        y: { grid: { color: grC }, ticks: { color: axC, callback: v=>(v>=0?'+':'')+v+'€' }, position: 'left' },
-        y2: { ticks: { color: axC, callback: v=>v+'%' }, position: 'right', grid: { display: false }, min: 0, max: 100 }
-      }
-    }
-  });
 }
 
 // ══════════════════════════════════════
