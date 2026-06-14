@@ -2379,99 +2379,6 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 // ══════════════════════════════════════
-// TOP 5 / PIRES 5 TRADES
-// ══════════════════════════════════════
-function renderTop5(){
-  const trades = [...APP.trades].filter(t=>t.res!==undefined&&t.res!==null);
-  if(!trades.length){
-    document.getElementById('top5trades').innerHTML='<div style="color:var(--muted);font-size:12px;">Aucun trade</div>';
-    document.getElementById('worst5trades').innerHTML='<div style="color:var(--muted);font-size:12px;">Aucun trade</div>';
-    return;
-  }
-  const sorted = [...trades].sort((a,b)=>b.res-a.res);
-  const top5 = sorted.slice(0,5);
-  const worst5 = sorted.slice(-5).reverse();
-  const medals = ['🥇','🥈','🥉','',''];
-  const badEmojis = ['💸','📉','😬','❌','🚨'];
-  const rowTop = (t,i) => `<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid var(--border);">
-    <div style="display:flex;align-items:center;gap:8px;">
-      <span style="font-size:16px;">${medals[i]}</span>
-      <div>
-        <div style="font-family:var(--mono);font-size:11px;color:var(--text);">${t.paire||'—'} <span style="color:var(--muted);font-size:10px;">${t.date||''}</span></div>
-        <div style="font-size:10px;color:var(--muted);">${t.session||''} ${t.dir||''}</div>
-      </div>
-    </div>
-    <div style="font-family:var(--mono);font-size:13px;font-weight:700;color:var(--green);">+${t.res?.toLocaleString('fr-FR')}€</div>
-  </div>`;
-  const rowWorst = (t,i) => `<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid var(--border);">
-    <div style="display:flex;align-items:center;gap:8px;">
-      <span style="font-size:16px;">${badEmojis[i]}</span>
-      <div>
-        <div style="font-family:var(--mono);font-size:11px;color:var(--text);">${t.paire||'—'} <span style="color:var(--muted);font-size:10px;">${t.date||''}</span></div>
-        <div style="font-size:10px;color:var(--muted);">${t.session||''} ${t.dir||''}</div>
-      </div>
-    </div>
-    <div style="font-family:var(--mono);font-size:13px;font-weight:700;color:var(--red);">${t.res?.toLocaleString('fr-FR')}€</div>
-  </div>`;
-  document.getElementById('top5trades').innerHTML = top5.map((t,i)=>rowTop(t,i)).join('');
-  document.getElementById('worst5trades').innerHTML = worst5.map((t,i)=>rowWorst(t,i)).join('');
-}
-
-// ══════════════════════════════════════
-// GRAPHIQUE TIMEFRAMES
-// ══════════════════════════════════════
-function drawTFChart(){
-  const trades = APP.trades.filter(t=>t.tf&&t.tf.trim());
-  if(!trades.length) return;
-  // Compter les TF
-  const tfCount = {};
-  const tfPnl = {};
-  trades.forEach(t=>{
-    const tfs = t.tf.split(',').map(s=>s.trim()).filter(Boolean);
-    tfs.forEach(tf=>{
-      tfCount[tf]=(tfCount[tf]||0)+1;
-      tfPnl[tf]=(tfPnl[tf]||0)+(t.res||0);
-    });
-  });
-  const labels = Object.keys(tfCount).sort((a,b)=>tfCount[b]-tfCount[a]);
-  const counts = labels.map(tf=>tfCount[tf]);
-  const pnls = labels.map(tf=>tfPnl[tf]);
-  const colors = pnls.map(v=>v>=0?gc('--green')||'#00e5a0':gc('--red')||'#ef4444');
-
-  // Injecter le canvas si pas présent
-  let wrap = document.getElementById('tfChartWrap');
-  if(!wrap){
-    const tr = document.getElementById('page-trackrecord');
-    if(!tr) return;
-    const compCharts = document.getElementById('compCharts');
-    const card = document.createElement('div');
-    card.className = 'card';
-    card.style.marginTop = '14px';
-    card.innerHTML = `<div class="card-header"><div class="card-title" data-editable>TIMEFRAMES</div><div class="period-btns"></div></div>
-      <div class="card-body chart-body" id="tfChartWrap"><canvas id="cTF"></canvas></div>`;
-    compCharts.insertAdjacentElement('beforebegin', card);
-    wrap = document.getElementById('tfChartWrap');
-  }
-  if(CH['tf']) CH['tf'].destroy();
-  const ctx = document.getElementById('cTF')?.getContext('2d');
-  if(!ctx) return;
-  CH['tf'] = new Chart(ctx,{
-    type:'bar',
-    data:{labels,datasets:[
-      {label:'Trades',data:counts,backgroundColor:gc('--btn-p-bg')||'#00e5a0',borderRadius:4,yAxisID:'y'},
-      {label:'P&L',data:pnls,backgroundColor:colors,borderRadius:4,yAxisID:'y2'}
-    ]},
-    options:{responsive:true,maintainAspectRatio:false,
-      plugins:{legend:{display:true,labels:{color:gc('--text')||'#e2e8f0',font:{size:10}}}},
-      scales:{
-        y:{position:'left',ticks:{color:gc('--muted')||'#64748b',font:{size:9}},grid:{color:'rgba(100,116,139,.1)'}},
-        y2:{position:'right',ticks:{color:gc('--muted')||'#64748b',font:{size:9},callback:v=>(v>=0?'+':'')+v+'€'},grid:{display:false}}
-      }
-    }
-  });
-}
-
-// ══════════════════════════════════════
 // POINTS CLÉS IA INTERNE
 // ══════════════════════════════════════
 let _pcHistory = [];
@@ -2481,140 +2388,6 @@ function showPcStatus(msg, color='var(--muted)'){
   if(!el) return;
   el.textContent = msg; el.style.color = color; el.style.display = 'block';
 }
-
-async function generatePointsCles(){
-  const btn = document.getElementById('pcGenBtn');
-  if(!btn) return;
-  if(!APP.trades.length){ 
-    document.getElementById('pcStatus').textContent='Aucun trade dans le journal.';
-    document.getElementById('pcStatus').style.color='var(--red)';
-    document.getElementById('pcStatus').style.display='block';
-    return; 
-  }
-
-  btn.disabled=true; btn.textContent='Analyse...';
-  document.getElementById('pcStatus').textContent='Analyse de tes '+APP.trades.length+' trades...';
-  document.getElementById('pcStatus').style.color='var(--muted)';
-  document.getElementById('pcStatus').style.display='block';
-  document.getElementById('pcContent').style.display='none';
-
-  // ── Calculs statistiques complets ──
-  const trades=APP.trades;
-  const total=trades.length;
-  const winners=trades.filter(t=>t.res>0);
-  const losers=trades.filter(t=>t.res<0);
-  const neutral=trades.filter(t=>t.res===0);
-  const totalPnl=trades.reduce((s,t)=>s+(t.res||0),0);
-  const winRate=(winners.length/total*100).toFixed(1);
-  const avgWin=winners.length?(winners.reduce((s,t)=>s+t.res,0)/winners.length).toFixed(2):0;
-  const avgLoss=losers.length?(losers.reduce((s,t)=>s+t.res,0)/losers.length).toFixed(2):0;
-  const grossWin=winners.reduce((s,t)=>s+t.res,0);
-  const grossLoss=Math.abs(losers.reduce((s,t)=>s+t.res,0));
-  const pf=grossLoss>0?(grossWin/grossLoss).toFixed(2):'∞';
-  
-  // Par paire
-  const byPaire={};
-  trades.forEach(t=>{if(!t.paire)return;if(!byPaire[t.paire])byPaire[t.paire]={pnl:0,n:0,w:0,l:0};byPaire[t.paire].pnl+=t.res||0;byPaire[t.paire].n++;if(t.res>0)byPaire[t.paire].w++;if(t.res<0)byPaire[t.paire].l++;});
-  const pairSort=Object.entries(byPaire).sort((a,b)=>b[1].pnl-a[1].pnl);
-  
-  // Par session
-  const bySess={};
-  trades.forEach(t=>{if(!t.session)return;if(!bySess[t.session])bySess[t.session]={pnl:0,n:0,w:0};bySess[t.session].pnl+=t.res||0;bySess[t.session].n++;if(t.res>0)bySess[t.session].w++;});
-  const sessSort=Object.entries(bySess).sort((a,b)=>b[1].pnl-a[1].pnl);
-  
-  // Par jour de semaine
-  const byDay={};
-  const jours=['Dim','Lun','Mar','Mer','Jeu','Ven','Sam'];
-  trades.forEach(t=>{if(!t.date)return;const d=jours[new Date(t.date).getDay()]||'?';if(!byDay[d])byDay[d]={pnl:0,n:0,w:0};byDay[d].pnl+=t.res||0;byDay[d].n++;if(t.res>0)byDay[d].w++;});
-  const daySort=Object.entries(byDay).sort((a,b)=>b[1].pnl-a[1].pnl);
-  const worstDays=Object.entries(byDay).filter(([,d])=>d.pnl<0).sort((a,b)=>a[1].pnl-b[1].pnl);
-  
-  // Par timeframe
-  const byTF={};
-  trades.forEach(t=>{if(!t.tf)return;t.tf.split(',').forEach(tf=>{const s=tf.trim();if(!s)return;if(!byTF[s])byTF[s]={pnl:0,n:0,w:0};byTF[s].pnl+=t.res||0;byTF[s].n++;if(t.res>0)byTF[s].w++;});});
-  const tfSort=Object.entries(byTF).sort((a,b)=>b[1].pnl-a[1].pnl);
-  
-  // Par confluence
-  const byConf={};
-  trades.forEach(t=>{if(!t.conf)return;t.conf.split(',').forEach(c=>{const s=c.trim();if(!s)return;if(!byConf[s])byConf[s]={pnl:0,n:0,w:0};byConf[s].pnl+=t.res||0;byConf[s].n++;if(t.res>0)byConf[s].w++;});});
-  const confSort=Object.entries(byConf).sort((a,b)=>b[1].pnl-a[1].pnl);
-  
-  // Streak max
-  let maxWS=0,curWS=0,maxLS=0,curLS=0;
-  trades.forEach(t=>{if(t.res>0){curWS++;maxWS=Math.max(maxWS,curWS);curLS=0;}else if(t.res<0){curLS++;maxLS=Math.max(maxLS,curLS);curWS=0;}});
-  
-  // Capital et drawdown
-  const capInit=CAPITAL();
-  let peak=capInit,runCap=capInit,maxDD=0;
-  trades.forEach(t=>{runCap+=t.res||0;if(runCap>peak)peak=runCap;const dd=(peak-runCap)/peak*100;if(dd>maxDD)maxDD=dd;});
-  const capNow=runCap;
-
-  // Générer l'analyse locale intelligente
-  const cards=[];
-
-  // 1. Points Forts
-  const pf1=[];
-  if(parseFloat(winRate)>=55)pf1.push(`Win rate solide : ${winRate}% sur ${total} trades`);
-  if(parseFloat(pf)>=1.5)pf1.push(`Profit factor excellent : ${pf}`);
-  if(totalPnl>0)pf1.push(`Capital en hausse : +${totalPnl.toFixed(2)}€ (+${(totalPnl/capInit*100).toFixed(1)}%)`);
-  if(maxWS>=3)pf1.push(`Série gagnante max : ${maxWS} trades consécutifs`);
-  if(pairSort[0]&&pairSort[0][1].pnl>0)pf1.push(`${pairSort[0][0]} : meilleure paire (+${pairSort[0][1].pnl.toFixed(0)}€, ${(pairSort[0][1].w/pairSort[0][1].n*100).toFixed(0)}% WR)`);
-  if(sessSort[0]&&sessSort[0][1].pnl>0)pf1.push(`Session ${sessSort[0][0]} la plus rentable (+${sessSort[0][1].pnl.toFixed(0)}€)`);
-  if(!pf1.length)pf1.push(`${total} trades enregistrés et analysés`);
-  cards.push({titre:'Points Forts',icone:'💪',color:'var(--green)',points:pf1.slice(0,4)});
-
-  // 2. Points Faibles
-  const pf2=[];
-  if(parseFloat(winRate)<50)pf2.push(`Win rate faible : ${winRate}% — viser 50%+`);
-  if(parseFloat(pf)<1)pf2.push(`Profit factor < 1 (${pf}) : les pertes dépassent les gains`);
-  if(totalPnl<0)pf2.push(`Capital en baisse : ${totalPnl.toFixed(2)}€`);
-  if(maxLS>=3)pf2.push(`Série perdante max : ${maxLS} trades — risque de revenge trading`);
-  const worstPaire=pairSort[pairSort.length-1];
-  if(worstPaire&&worstPaire[1].pnl<0)pf2.push(`${worstPaire[0]} : paire la moins rentable (${worstPaire[1].pnl.toFixed(0)}€)`);
-  if(maxDD>10)pf2.push(`Drawdown max : ${maxDD.toFixed(1)}% — revoir la gestion du risque`);
-  if(Math.abs(parseFloat(avgLoss))>Math.abs(parseFloat(avgWin))*1.5)pf2.push(`Pertes moyennes (${avgLoss}€) trop grandes vs gains (${avgWin}€)`);
-  if(!pf2.length)pf2.push("Continuer a journaliser pour identifier les axes d'amelioration");
-  cards.push({titre:'Points Faibles',icone:'⚠️',color:'var(--red)',points:pf2.slice(0,4)});
-
-  // 3. Ce qui marche
-  const pw=[];
-  tfSort.filter(([,d])=>d.pnl>0).slice(0,3).forEach(([tf,d])=>pw.push(`TF ${tf} : ${(d.w/d.n*100).toFixed(0)}% WR, +${d.pnl.toFixed(0)}€ sur ${d.n} trades`));
-  confSort.filter(([,d])=>d.pnl>0).slice(0,3).forEach(([c,d])=>pw.push(`Confluence "${c}" : ${(d.w/d.n*100).toFixed(0)}% WR, +${d.pnl.toFixed(0)}€`));
-  daySort.filter(([,d])=>d.pnl>0).slice(0,2).forEach(([day,d])=>pw.push(`${day} : jour rentable (+${d.pnl.toFixed(0)}€, ${(d.w/d.n*100).toFixed(0)}% WR)`));
-  if(!pw.length)pw.push('Ajouter des TF et confluences aux trades pour cette analyse');
-  cards.push({titre:'Ce qui marche',icone:'✅',color:'var(--green)',points:pw.slice(0,4)});
-
-  // 4. À améliorer / Arrêter
-  const pa=[];
-  tfSort.filter(([,d])=>d.pnl<0).forEach(([tf,d])=>pa.push(`Réduire trading sur TF ${tf} (${d.pnl.toFixed(0)}€, ${(d.w/d.n*100).toFixed(0)}% WR)`));
-  confSort.filter(([,d])=>d.pnl<0).slice(0,2).forEach(([c,d])=>pa.push(`Confluence "${c}" peu fiable : ${d.pnl.toFixed(0)}€`));
-  worstDays.slice(0,2).forEach(([day,d])=>pa.push(`Éviter de trader le ${day} (${d.pnl.toFixed(0)}€, ${(d.w/d.n*100).toFixed(0)}% WR)`));
-  pairSort.filter(([,d])=>d.pnl<0).slice(0,2).forEach(([p,d])=>pa.push(`Arrêter ou réduire ${p} (${d.pnl.toFixed(0)}€)`));
-  if(!pa.length)pa.push('Toutes les configurations sont rentables — continuer ainsi');
-  cards.push({titre:'À améliorer / Arrêter',icone:'🎯',color:'var(--gold)',points:pa.slice(0,4)});
-
-  // 5. Meilleures confluences
-  const mc=[];
-  confSort.slice(0,5).forEach(([c,d])=>mc.push(`"${c}" : ${(d.w/d.n*100).toFixed(0)}% WR sur ${d.n} trades, ${d.pnl>0?'+':''}${d.pnl.toFixed(0)}€`));
-  if(!mc.length)mc.push('Ajouter des confluences lors de la saisie des trades');
-  cards.push({titre:'Meilleures confluences',icone:'🔑',color:'var(--blue)',points:mc.slice(0,5)});
-
-  // 6. Recommandations
-  const rec=[];
-  if(parseFloat(winRate)<50)rec.push(`Améliorer la sélection des entrées — viser ${(parseFloat(winRate)+10).toFixed(0)}% WR`);
-  if(worstDays.length)rec.push(`Ne pas trader le${worstDays.length>1?'s':''} ${worstDays.slice(0,2).map(([d])=>d).join(', ')} — jours déficitaires`);
-  if(Math.abs(parseFloat(avgLoss))>parseFloat(avgWin))rec.push(`Couper les pertes plus tôt — ratio actuel gains/pertes défavorable`);
-  if(confSort.filter(([,d])=>d.pnl>0).length>0)rec.push(`Se concentrer sur : ${confSort.filter(([,d])=>d.pnl>0).slice(0,2).map(([c])=>c).join(', ')}`);
-  if(tfSort.filter(([,d])=>d.pnl<0).length>0)rec.push(`Éviter TF : ${tfSort.filter(([,d])=>d.pnl<0).map(([tf])=>tf).join(', ')}`);
-  if(maxDD>15)rec.push(`Drawdown max ${maxDD.toFixed(1)}% — envisager règle stop journalier`);
-  if(!rec.length)rec.push('Continuer la stratégie actuelle et augmenter progressivement le capital');
-  cards.push({titre:'Recommandations',icone:'📋',color:'var(--text)',points:rec.slice(0,4)});
-
-  renderPcCards(cards);
-  btn.disabled=false; btn.textContent='Analyser ma stratégie';
-}
-
-
 
 // ══ TOP 5 / PIRES 5 TRADES ══
 function renderTop5() {
@@ -2919,6 +2692,145 @@ async function generatePointsCles() {
   renderPcHistory();
 
   btn.disabled = false; btn.textContent = 'Analyser ma strategie';
+}
+
+// ══════════════════════════════════════
+// QUESTIONS LIBRES SUR LE JOURNAL (analyse locale)
+// ══════════════════════════════════════
+function askPcQuestion() {
+  const input = document.getElementById('pcQuestion');
+  const out = document.getElementById('pcQuestionAnswer');
+  if (!input || !out) return;
+
+  const q = input.value.trim();
+  if (!q) return;
+
+  const trades = APP.trades || [];
+  if (!trades.length) {
+    out.textContent = 'Aucun trade dans le journal pour répondre à cette question.';
+    out.style.display = 'block';
+    return;
+  }
+
+  const qLower = q.toLowerCase();
+  const jours = ['dimanche','lundi','mardi','mercredi','jeudi','vendredi','samedi'];
+  const joursAbbr = ['Dim','Lun','Mar','Mer','Jeu','Ven','Sam'];
+
+  const stat = (arr, key) => {
+    const m = {};
+    arr.forEach(t => {
+      const vals = t[key] ? (key==='tf'||key==='conf' ? t[key].split(',') : [t[key]]) : [];
+      vals.forEach(v => {
+        v = v.trim(); if (!v) return;
+        if (!m[v]) m[v] = {pnl:0,n:0,w:0};
+        m[v].pnl += t.res||0; m[v].n++; if((t.res||0)>0) m[v].w++;
+      });
+    });
+    return Object.entries(m).sort((a,b)=>b[1].pnl-a[1].pnl);
+  };
+
+  let answer = '';
+
+  // Détection du jour mentionné
+  const dayIdx = jours.findIndex(j => qLower.includes(j));
+  if (dayIdx !== -1) {
+    const dayAbbr = joursAbbr[dayIdx];
+    const dayTrades = trades.filter(t => t.date && jours[new Date(t.date).getDay()] === jours[dayIdx]);
+    if (!dayTrades.length) {
+      answer = `Aucun trade enregistré le ${jours[dayIdx]}.`;
+    } else {
+      const byPaire = stat(dayTrades, 'paire');
+      const pnl = dayTrades.reduce((s,t)=>s+(t.res||0),0);
+      const wr = (dayTrades.filter(t=>(t.res||0)>0).length / dayTrades.length * 100).toFixed(0);
+      answer = `<strong>${jours[dayIdx].charAt(0).toUpperCase()+jours[dayIdx].slice(1)}</strong> : ${dayTrades.length} trade(s), `
+        + `P&L total ${pnl>=0?'+':''}${pnl.toFixed(2)}€, win rate ${wr}%.`;
+      if (byPaire.length) {
+        answer += `<br>Meilleure paire ce jour-là : ${byPaire[0][0]} (${byPaire[0][1].pnl>=0?'+':''}${byPaire[0][1].pnl.toFixed(0)}€).`;
+      }
+    }
+  }
+  // Meilleure paire
+  else if (qLower.includes('meilleure paire') || qLower.includes('meilleur pair') || (qLower.includes('paire') && (qLower.includes('mieux') || qLower.includes('meilleure')))) {
+    const byPaire = stat(trades, 'paire');
+    if (!byPaire.length) {
+      answer = 'Aucune paire renseignée dans le journal.';
+    } else {
+      const [p, d] = byPaire[0];
+      answer = `Ta meilleure paire est <strong>${p}</strong> avec ${d.pnl>=0?'+':''}${d.pnl.toFixed(2)}€ sur ${d.n} trade(s), soit ${(d.w/d.n*100).toFixed(0)}% de win rate.`;
+    }
+  }
+  // Pire paire
+  else if (qLower.includes('pire paire') || qLower.includes('moins bonne paire') || (qLower.includes('paire') && qLower.includes('pire'))) {
+    const byPaire = stat(trades, 'paire');
+    if (!byPaire.length) {
+      answer = 'Aucune paire renseignée dans le journal.';
+    } else {
+      const [p, d] = byPaire[byPaire.length-1];
+      answer = `Ta paire la moins performante est <strong>${p}</strong> avec ${d.pnl>=0?'+':''}${d.pnl.toFixed(2)}€ sur ${d.n} trade(s), soit ${(d.w/d.n*100).toFixed(0)}% de win rate.`;
+    }
+  }
+  // Meilleure session
+  else if (qLower.includes('session')) {
+    const bySess = stat(trades, 'session');
+    if (!bySess.length) {
+      answer = 'Aucune session renseignée dans le journal.';
+    } else {
+      const best = bySess[0];
+      const worst = bySess[bySess.length-1];
+      answer = `Meilleure session : <strong>${best[0]}</strong> (${best[1].pnl>=0?'+':''}${best[1].pnl.toFixed(2)}€, ${(best[1].w/best[1].n*100).toFixed(0)}% WR).`;
+      if (bySess.length > 1) {
+        answer += `<br>Session la moins bonne : <strong>${worst[0]}</strong> (${worst[1].pnl>=0?'+':''}${worst[1].pnl.toFixed(2)}€).`;
+      }
+    }
+  }
+  // Timeframe
+  else if (qLower.includes('timeframe') || qLower.includes(' tf ') || qLower.startsWith('tf') || qLower.includes('tf ')) {
+    const byTF = stat(trades, 'tf');
+    if (!byTF.length) {
+      answer = 'Aucun timeframe renseigné dans le journal.';
+    } else {
+      const best = byTF[0];
+      answer = `Meilleur timeframe : <strong>${best[0]}</strong> (${best[1].pnl>=0?'+':''}${best[1].pnl.toFixed(2)}€, ${(best[1].w/best[1].n*100).toFixed(0)}% WR sur ${best[1].n} trades).`;
+      const worst = byTF[byTF.length-1];
+      if (byTF.length > 1 && worst[1].pnl < 0) {
+        answer += `<br>À éviter : <strong>${worst[0]}</strong> (${worst[1].pnl.toFixed(2)}€).`;
+      }
+    }
+  }
+  // Confluence
+  else if (qLower.includes('confluence')) {
+    const byConf = stat(trades, 'conf');
+    if (!byConf.length) {
+      answer = 'Aucune confluence renseignée dans le journal.';
+    } else {
+      const best = byConf[0];
+      answer = `Confluence la plus rentable : <strong>"${best[0]}"</strong> (${best[1].pnl>=0?'+':''}${best[1].pnl.toFixed(2)}€, ${(best[1].w/best[1].n*100).toFixed(0)}% WR sur ${best[1].n} trades).`;
+    }
+  }
+  // Win rate global
+  else if (qLower.includes('win rate') || qLower.includes('taux de réussite') || qLower.includes('pourcentage de gain')) {
+    const wr = (trades.filter(t=>(t.res||0)>0).length / trades.length * 100).toFixed(1);
+    answer = `Ton win rate global est de <strong>${wr}%</strong> sur ${trades.length} trades.`;
+  }
+  // Profit factor
+  else if (qLower.includes('profit factor')) {
+    const gw = trades.filter(t=>(t.res||0)>0).reduce((s,t)=>s+t.res,0);
+    const gl = Math.abs(trades.filter(t=>(t.res||0)<0).reduce((s,t)=>s+t.res,0));
+    const pf = gl > 0 ? (gw/gl).toFixed(2) : '∞';
+    answer = `Ton profit factor est de <strong>${pf}</strong> (gains bruts : ${gw.toFixed(2)}€, pertes brutes : ${gl.toFixed(2)}€).`;
+  }
+  // P&L total
+  else if (qLower.includes('pnl') || qLower.includes('p&l') || qLower.includes('résultat') || qLower.includes('gain') || qLower.includes('perte totale')) {
+    const totalPnl = trades.reduce((s,t)=>s+(t.res||0),0);
+    answer = `Ton P&L total est de <strong>${totalPnl>=0?'+':''}${totalPnl.toFixed(2)}€</strong> sur ${trades.length} trades.`;
+  }
+  // Fallback
+  else {
+    answer = `Je n'ai pas pu identifier précisément ta question. Essaie avec des mots-clés comme : "meilleure paire", "pire paire", "session", "timeframe", "confluence", "win rate", "profit factor", "P&L", ou le nom d'un jour de la semaine (ex: "lundi").`;
+  }
+
+  out.innerHTML = answer;
+  out.style.display = 'block';
 }
 
 </script>
