@@ -793,7 +793,7 @@ const BASE=[
   {id:1,date:"2023-05-22",heure:"14:24",paire:"USDJPY",session:"Chevauchement LN",conf:"BOS,FVG",tf:"M5",dir:"LONG",rrCible:3.4,res:126,mgmt:"Oui",reprend:"Peut-être",notes:""},
   {id:2,date:"2023-05-22",heure:"16:39",paire:"EURUSD",session:"Pre-Marche",conf:"OB,CHOCH",tf:"M15,Daily,H4",dir:"LONG",rrCible:3.4,res:226,mgmt:"Non",reprend:"Oui",notes:""},
   {id:10,date:"2023-07-10",heure:"09:26",paire:"USDJPY",session:"Londres",conf:"EMA Cross",tf:"H4,M15",dir:"LONG",rrCible:2.9,res:341,mgmt:"Non",reprend:"Oui",notes:""},
-  {id:11,date:"2023-07-10",heure:"15:53",paire:"DAX40",session:"CL",conf:"FVG",tf:"H1,H4",dir:"LONG",rrCible:1.9,res:-207,mgmt:"Oui",reprend:"Peut-être",notes:""},
+  {id:11,date:"2023-07-10",heure:"15:53",paire:"DAX40",session:"Chevauchement LN",conf:"FVG",tf:"H1,H4",dir:"LONG",rrCible:1.9,res:-207,mgmt:"Oui",reprend:"Peut-être",notes:""},
   {id:20,date:"2023-10-15",heure:"14:14",paire:"GBPUSD",session:"New York",conf:"OB,Liquidité",tf:"M5,H1",dir:"SHORT",rrCible:2.4,res:250,mgmt:"Oui",reprend:"Peut-être",notes:""},
   {id:30,date:"2024-01-20",heure:"08:59",paire:"EURUSD",session:"Pre-Marche",conf:"FVG,OB,BOS",tf:"M5,H4",dir:"LONG",rrCible:3.3,res:437,mgmt:"Oui",reprend:"Oui",notes:""},
   {id:40,date:"2024-04-08",heure:"09:26",paire:"USDJPY",session:"Londres",conf:"OB",tf:"H4,M15",dir:"LONG",rrCible:2.9,res:340,mgmt:"Non",reprend:"Oui",notes:""},
@@ -977,6 +977,10 @@ function computeRR(t){const re=Math.max(1,Math.round(CAPITAL()*RBASE()/100));ret
 function getCurrentCap(){return APP.trades.reduce((s,t)=>s+(t.res||0),CAPITAL());}
 function getCurrentRiskPct(){return computeRiskHistory().finalRp;}
 function getCurrentRiskEur(){return Math.round(getCurrentCap()*getCurrentRiskPct()/100*100)/100;}
+// Formate un pourcentage de risque selon le réglage "Affichage risk : Décimales"
+function fmtRiskPct(v){
+  return RDEC() ? v.toFixed(2)+'%' : (Math.round(v*100)/100)+'%';
+}
 
 // ══ RISK CHART ══
 function drawRiskChart(period){
@@ -1148,7 +1152,7 @@ function updateNavBadges(){
   const tTxt=APP.trades.length+' trades';
   const pTxt='P&L '+(pnl>=0?'+':'')+pnl.toLocaleString('fr-FR')+'€';
   const pCol=pnl>=0?'var(--green)':'var(--red)';
-  const rTxt='Risk '+getCurrentRiskEur().toLocaleString('fr-FR')+'€ ('+getCurrentRiskPct()+'%)';
+  const rTxt='Risk '+getCurrentRiskEur().toLocaleString('fr-FR')+'€ ('+fmtRiskPct(getCurrentRiskPct())+')';
   // Desktop
   document.getElementById('navTrades').textContent=tTxt;
   const nb=document.getElementById('navPnl');nb.textContent=pTxt;nb.style.color=pCol;
@@ -1160,7 +1164,7 @@ function updateNavBadges(){
 }
 
 // ══ MODIFS ══
-function toggleDecimal(){const c=RDEC();lss('tj_risk_decimal',!c);document.getElementById('tglDec').classList.toggle('on',!c);renderModifs();updateNavBadges();if(typeof currentUser!=="undefined"&&currentUser&&!_isSyncing){clearTimeout(window._pushTimer);window._pushTimer=setTimeout(pushToCloud,300);}}
+function toggleDecimal(){const c=RDEC();lss('tj_risk_decimal',!c);document.getElementById('tglDec').classList.toggle('on',!c);renderModifs();updateNavBadges();updateKPIs();if(typeof currentUser!=="undefined"&&currentUser&&!_isSyncing){clearTimeout(window._pushTimer);window._pushTimer=setTimeout(pushToCloud,300);}}
 function toggleSmartRisk(){const c=SMART();lss('tj_smart_risk',!c);document.getElementById('tglSmart').classList.toggle('on',!c);document.getElementById('smartLbl').textContent=!c?'Activé':'Désactivé';document.getElementById('riskCard').style.display=!c?'':'none';renderModifs();updateNavBadges();refreshAllCharts();if(typeof currentUser!=="undefined"&&currentUser&&!_isSyncing){clearTimeout(window._pushTimer);window._pushTimer=setTimeout(pushToCloud,300);}}
 function saveCapitalRisk(){
   lss('tj_capital',parseFloat(document.getElementById('capInput').value)||10000);
@@ -1202,7 +1206,7 @@ function renderModifs(){
   const smart=SMART();document.getElementById('tglSmart').classList.toggle('on',smart);document.getElementById('smartLbl').textContent=smart?'Activé':'Désactivé';document.getElementById('riskCard').style.display=smart?'':'none';
   const{finalRp,finalWs,finalLs}=computeRiskHistory();
   document.getElementById('disp0').textContent=getCurrentCap().toLocaleString('fr-FR')+'€';
-  document.getElementById('disp1').textContent=finalRp+'%';document.getElementById('disp2').textContent=getCurrentRiskEur().toLocaleString('fr-FR')+'€';
+  document.getElementById('disp1').textContent=fmtRiskPct(finalRp);document.getElementById('disp2').textContent=getCurrentRiskEur().toLocaleString('fr-FR')+'€';
   document.getElementById('disp3').textContent=finalWs+' T';document.getElementById('disp4').textContent=finalLs+' T';
   const MK=[{key:'paires',label:'Paires / Actifs',cv:'--mt-paires'},{key:'sessions',label:'Sessions',cv:'--mt-sessions'},{key:'confluences',label:'Confluences',cv:'--mt-confluences'},{key:'timeframes',label:'Timeframes',cv:'--mt-timeframes'},{key:'mgmt_opts',label:'Management',cv:'--mt-mgmt'},{key:'reprend_opts',label:'Reprendrais-tu ?',cv:'--mt-reprend'}];
   document.getElementById('modGrid').innerHTML=MK.map(({key,label,cv})=>`
@@ -1310,7 +1314,7 @@ function updateKPIs(){
    const k5el=document.getElementById('k5');
    if(k5el){k5el.textContent=(totalPO>0?'-':'')+fr(totalPO)+' €';k5el.style.color=totalPO>0?'var(--gold)':'var(--muted)';}
   }
-  document.getElementById('k6').textContent=t.length;document.getElementById('k7').textContent=re.toLocaleString('fr-FR')+'€ ('+rp+'%)';
+  document.getElementById('k6').textContent=t.length;document.getElementById('k7').textContent=re.toLocaleString('fr-FR')+'€ ('+fmtRiskPct(rp)+')';
   document.getElementById('k8').textContent=worst+' trades';
   for(let i=1;i<=9;i++){const c=gc(`--kpi${i}`);const bar=document.getElementById('kb'+i);const val=document.getElementById(`k${i-1}`);if(bar)bar.style.background=c;if(val)val.style.color=c;}
 }
@@ -1485,6 +1489,16 @@ let cpCB=null,cpH=0,cpS=1,cpL=.5,cpCX=1,cpCY=0,cpDrag=false;
 const cpMem=ls('cp_mem',[]);
 function hsl2hex(h,s,l){const a=s*Math.min(l,1-l);const f=n=>{const k=(n+h/30)%12;const c=l-a*Math.max(-1,Math.min(k-3,9-k,1));return Math.round(255*c).toString(16).padStart(2,'0');};return'#'+f(0)+f(8)+f(4);}
 function hex2hsl(hex){let r=parseInt(hex.slice(1,3),16)/255,g=parseInt(hex.slice(3,5),16)/255,b=parseInt(hex.slice(5,7),16)/255;const mx=Math.max(r,g,b),mn=Math.min(r,g,b);let h,s,l=(mx+mn)/2;if(mx===mn){h=s=0;}else{const d=mx-mn;s=l>.5?d/(2-mx-mn):d/(mx+mn);switch(mx){case r:h=((g-b)/d+(g<b?6:0))/6;break;case g:h=((b-r)/d+2)/6;break;case b:h=((r-g)/d+4)/6;break;}}return[h*360,s,l];}
+// Convertit rgb()/rgba() en #hex pour le color picker (ignore l'alpha)
+function rgba2hex(c){
+  if(!c)return null;
+  c=c.trim();
+  if(c.startsWith('#'))return c;
+  const m=c.match(/rgba?\(\s*([\d.]+)\s*,\s*([\d.]+)\s*,\s*([\d.]+)/);
+  if(!m)return null;
+  const h=n=>Math.max(0,Math.min(255,Math.round(parseFloat(n)))).toString(16).padStart(2,'0');
+  return '#'+h(m[1])+h(m[2])+h(m[3]);
+}
 function drawSpec(){const c=document.getElementById('cpCanvas'),w=document.getElementById('cpWrap');c.width=w.offsetWidth||316;c.height=144;const ctx=c.getContext('2d');const gW=ctx.createLinearGradient(0,0,c.width,0);gW.addColorStop(0,'#fff');gW.addColorStop(1,`hsl(${cpH},100%,50%)`);ctx.fillStyle=gW;ctx.fillRect(0,0,c.width,c.height);const gB=ctx.createLinearGradient(0,0,0,c.height);gB.addColorStop(0,'rgba(0,0,0,0)');gB.addColorStop(1,'#000');ctx.fillStyle=gB;ctx.fillRect(0,0,c.width,c.height);}
 function upCur(){const c=document.getElementById('cpCursor');c.style.left=(cpCX*100)+'%';c.style.top=(cpCY*100)+'%';}
 function upPrev(){const hex=hsl2hex(cpH,cpS,cpL);document.getElementById('cpSwatch').style.background=hex;document.getElementById('cpHex').value=hex;}
@@ -1552,10 +1566,30 @@ function renderTE(){
   const groups={};TV.forEach(tv=>{if(!groups[tv.g])groups[tv.g]=[];groups[tv.g].push(tv);});
   document.getElementById('teGrid').innerHTML=Object.entries(groups).map(([g,items])=>`<div>
     <div class="te-sec-title">${g}</div>
-    ${items.map(tv=>`<div class="te-row"><div class="te-label">${tv.l}</div><div class="te-swatch" style="background:${teVals[tv.v]}" onclick="teOCP('${tv.v}','${tv.l}')"></div></div>`).join('')}
+    ${items.map(tv=>`<div class="te-row"><div class="te-label">${tv.l}</div><div class="te-swatch" style="background:${rgba2hex(teVals[tv.v])||teVals[tv.v]}" onclick="teOCP('${tv.v}','${tv.l}')"></div></div>`).join('')}
   </div>`).join('');
 }
-function teOCP(v,l){const prev=teVals[v]||'#000000';openCP(l,prev.trim().startsWith('#')?prev.trim():'#000000',hex=>{teHist.push({...teVals});teVals[v]=hex;renderTE();});}
+// Extrait l'alpha d'une couleur rgba(), ou null si pas de canal alpha / hex
+function getAlpha(c){
+  if(!c)return null;
+  const m=c.trim().match(/rgba\([^)]+,\s*([\d.]+)\s*\)/);
+  return m?parseFloat(m[1]):null;
+}
+// Convertit hex + alpha en rgba()
+function hexToRgbaWithAlpha(hex,alpha){
+  const r=parseInt(hex.slice(1,3),16),g=parseInt(hex.slice(3,5),16),b=parseInt(hex.slice(5,7),16);
+  return `rgba(${r},${g},${b},${alpha})`;
+}
+function teOCP(v,l){
+  const prev=teVals[v]||'#000000';
+  const hex=rgba2hex(prev)||'#000000';
+  const alpha=getAlpha(prev);
+  openCP(l,hex,newHex=>{
+    teHist.push({...teVals});
+    teVals[v]=alpha!==null?hexToRgbaWithAlpha(newHex,alpha):newHex;
+    renderTE();
+  });
+}
 function applyTheme(){Object.entries(teVals).forEach(([v,c])=>document.documentElement.style.setProperty(v,c));lss('tj_theme_vars',teVals);refreshAllCharts();if(typeof currentUser!=="undefined"&&currentUser&&!_isSyncing){clearTimeout(window._pushTimer);window._pushTimer=setTimeout(pushToCloud,300);}}
 function undoTheme(){if(!teHist.length)return;teVals=teHist.pop();renderTE();applyTheme();}
 function askResetTheme(){showConfirm('Réinitialiser','Supprimer toutes les personnalisations ?',()=>{teVals={};lss('tj_theme_vars',{});document.documentElement.removeAttribute('style');renderTE();refreshAllCharts();if(typeof currentUser!=="undefined"&&currentUser&&!_isSyncing){clearTimeout(window._pushTimer);window._pushTimer=setTimeout(pushToCloud,300);}});}
@@ -1685,6 +1719,7 @@ function saveEditTrade(){markUserAction();
   t.res      = parseFloat(document.getElementById('e-res').value)||0;
   t.mgmt     = document.getElementById('e-mgmt').value;
   t.reprend  = document.getElementById('e-reprend').value;
+  const notesEl = document.getElementById('e-notes'); t.notes = notesEl ? notesEl.value : (t.notes||'');
   const starsEl = document.getElementById('e-stars'); t.stars = starsEl ? parseFloat(starsEl.value)||0 : 0;
   t.tf  = Array.from(document.querySelectorAll('#e-tf-wrap .chip.sel')).map(c=>c.dataset.v).join(',');
   t.conf= Array.from(document.querySelectorAll('#e-conf-wrap .chip.sel')).map(c=>c.dataset.v).join(',');
@@ -1737,6 +1772,7 @@ function saveEditTrade(){markUserAction();
       </div>
       <div class="fg span2"><label>Timeframes</label><div class="chip-wrap" id="e-tf-wrap"></div></div>
       <div class="fg spanall"><label>Confluences</label><div class="chip-wrap" id="e-conf-wrap"></div></div>
+      <div class="fg spanall"><label>Notes</label><textarea id="e-notes" placeholder="Setup, émotions..."></textarea></div>
       <div class="fg spanall"><label>Images du trade</label>
         <div id="e-images-wrap" style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:8px;"></div>
         <input type="file" id="e-img-input" accept="image/*" multiple style="display:none" onchange="addEditImage()">
