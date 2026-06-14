@@ -193,6 +193,11 @@ tbody td{padding:6px 8px;vertical-align:middle;white-space:nowrap;}
 .tgl-thumb{width:16px;height:16px;background:var(--tgl-thumb);border-radius:50%;position:absolute;top:2px;left:2px;transition:left .2s;}
 .tgl-track.on .tgl-thumb{left:20px;}
 .two-col{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px;}
+.pc-chat-messages{display:flex;flex-direction:column;gap:8px;max-height:360px;overflow-y:auto;padding:4px;}
+.pc-msg{max-width:85%;padding:8px 12px;border-radius:10px;font-size:13px;line-height:1.6;word-wrap:break-word;}
+.pc-msg-user{align-self:flex-end;background:var(--green);color:#0b0f1a;border-bottom-right-radius:2px;}
+.pc-msg-bot{align-self:flex-start;background:var(--surface);border:1px solid var(--border);color:var(--text);border-bottom-left-radius:2px;}
+.pc-msg-empty{align-self:center;color:var(--muted);font-size:12px;text-align:center;padding:20px 0;}
 
 /* CALENDAR */
 .cal-outer{display:flex;flex-direction:column;gap:12px;}
@@ -546,15 +551,15 @@ tbody td{padding:6px 8px;vertical-align:middle;white-space:nowrap;}
   <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px;align-items:center;">
     <button class="btn btn-p" onclick="generatePointsCles()" id="pcGenBtn" style="white-space:nowrap;">Analyser ma strategie</button>
   </div>
-  <!-- Zone de questions -->
+  <!-- Zone de chat IA -->
   <div class="card" style="margin-bottom:14px;">
-    <div class="card-header"><div class="card-title" data-editable>POSER UNE QUESTION</div></div>
+    <div class="card-header"><div class="card-title" data-editable>ASSISTANT JOURNAL</div></div>
     <div class="card-body">
-      <div style="display:flex;gap:8px;">
-        <input type="text" id="pcQuestion" placeholder="Ex: Quelle est ma meilleure paire sur le lundi ?" style="flex:1;font-size:13px;" onkeydown="if(event.key==='Enter')askPcQuestion()">
-        <button class="btn btn-p" onclick="askPcQuestion()" style="white-space:nowrap;">Demander</button>
+      <div id="pcChatMessages" class="pc-chat-messages"></div>
+      <div style="display:flex;gap:8px;margin-top:10px;">
+        <input type="text" id="pcQuestion" placeholder="Ex: Quels sont mes points forts ?" style="flex:1;font-size:13px;" onkeydown="if(event.key==='Enter')sendPcMessage()">
+        <button class="btn btn-p" onclick="sendPcMessage()" style="white-space:nowrap;">Envoyer</button>
       </div>
-      <div id="pcQuestionAnswer" style="display:none;margin-top:10px;padding:10px;background:var(--surface);border-radius:6px;border:1px solid var(--border);font-size:13px;line-height:1.7;color:var(--text);"></div>
     </div>
   </div>
   <div id="pcStatus" style="display:none;font-family:var(--mono);font-size:11px;color:var(--muted);padding:8px 12px;background:var(--surface);border-radius:6px;border:1px solid var(--border);margin-bottom:10px;"></div>
@@ -1037,6 +1042,7 @@ function showPage(id,btn){
   if(id==='trackrecord'){setTimeout(()=>{refreshAllCharts();renderTop5();},80);}
   if(id==='calendrier')renderCalendar();
   if(id==='modifs'){setTimeout(()=>{renderModifs();setupPencil();},50);}
+  if(id==='pointscles')renderPcChat();
 }
 
 // ══ FORM ══
@@ -2645,142 +2651,221 @@ async function generatePointsCles() {
 }
 
 // ══════════════════════════════════════
-// QUESTIONS LIBRES SUR LE JOURNAL (analyse locale)
+// ASSISTANT JOURNAL — CHAT IA LOCAL
 // ══════════════════════════════════════
-function askPcQuestion() {
+let pcChatHistory = JSON.parse(localStorage.getItem('tjp_pc_chat')||'[]');
+
+function renderPcChat(){
+  const box = document.getElementById('pcChatMessages');
+  if(!box) return;
+  if(!pcChatHistory.length){
+    box.innerHTML = '<div class="pc-msg-empty">Pose-moi une question sur tes trades : "Quels sont mes points forts ?", "Quel jour suis-je le plus performant ?", "Analyse mes trades"...</div>';
+    return;
+  }
+  box.innerHTML = pcChatHistory.map(m=>`<div class="pc-msg ${m.role==='user'?'pc-msg-user':'pc-msg-bot'}">${m.text}</div>`).join('');
+  box.scrollTop = box.scrollHeight;
+}
+
+function pcPushMsg(role, text){
+  pcChatHistory.push({role, text});
+  if(pcChatHistory.length > 60) pcChatHistory = pcChatHistory.slice(-60);
+  localStorage.setItem('tjp_pc_chat', JSON.stringify(pcChatHistory));
+  renderPcChat();
+}
+
+function sendPcMessage(){
   const input = document.getElementById('pcQuestion');
-  const out = document.getElementById('pcQuestionAnswer');
-  if (!input || !out) return;
-
+  if(!input) return;
   const q = input.value.trim();
-  if (!q) return;
+  if(!q) return;
+  input.value = '';
+  pcPushMsg('user', escapeHtml(q));
+  const answer = pcAnalyze(q);
+  pcPushMsg('bot', answer);
+}
 
+function escapeHtml(s){
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+// Helper de statistiques par clé (paire, session, tf, conf...)
+function pcStat(arr, key){
+  const m = {};
+  arr.forEach(t => {
+    const vals = t[key] ? (key==='tf'||key==='conf' ? t[key].split(',') : [t[key]]) : [];
+    vals.forEach(v => {
+      v = v.trim(); if (!v) return;
+      if (!m[v]) m[v] = {pnl:0,n:0,w:0};
+      m[v].pnl += t.res||0; m[v].n++; if((t.res||0)>0) m[v].w++;
+    });
+  });
+  return Object.entries(m).sort((a,b)=>b[1].pnl-a[1].pnl);
+}
+
+// Moteur d'analyse local : interprète la question et répond
+function pcAnalyze(q){
   const trades = APP.trades || [];
   if (!trades.length) {
-    out.textContent = 'Aucun trade dans le journal pour répondre à cette question.';
-    out.style.display = 'block';
-    return;
+    return 'Ton journal est vide pour le moment — ajoute des trades pour que je puisse les analyser.';
   }
 
   const qLower = q.toLowerCase();
   const jours = ['dimanche','lundi','mardi','mercredi','jeudi','vendredi','samedi'];
-  const joursAbbr = ['Dim','Lun','Mar','Mer','Jeu','Ven','Sam'];
 
-  const stat = (arr, key) => {
-    const m = {};
-    arr.forEach(t => {
-      const vals = t[key] ? (key==='tf'||key==='conf' ? t[key].split(',') : [t[key]]) : [];
-      vals.forEach(v => {
-        v = v.trim(); if (!v) return;
-        if (!m[v]) m[v] = {pnl:0,n:0,w:0};
-        m[v].pnl += t.res||0; m[v].n++; if((t.res||0)>0) m[v].w++;
-      });
-    });
-    return Object.entries(m).sort((a,b)=>b[1].pnl-a[1].pnl);
-  };
+  const total = trades.length;
+  const winners = trades.filter(t=>(t.res||0)>0);
+  const losers = trades.filter(t=>(t.res||0)<0);
+  const totalPnl = trades.reduce((s,t)=>s+(t.res||0),0);
+  const wr = total > 0 ? (winners.length/total*100).toFixed(1) : 0;
+  const gw = winners.reduce((s,t)=>s+t.res,0);
+  const gl = Math.abs(losers.reduce((s,t)=>s+t.res,0));
+  const pf = gl > 0 ? (gw/gl).toFixed(2) : '∞';
 
-  let answer = '';
+  const byPaire = pcStat(trades,'paire');
+  const bySess = pcStat(trades,'session');
+  const byTF = pcStat(trades,'tf');
+  const byConf = pcStat(trades,'conf');
+  const byDay = pcStat(trades.map(t=>({...t,day:t.date?jours[new Date(t.date).getDay()]:'?'})),'day');
 
-  // Détection du jour mentionné
+  // ── Salutations ──
+  if (/^(salut|bonjour|bonsoir|hey|hello|coucou|yo)\b/.test(qLower)) {
+    return `Salut ! Je suis ton assistant journal. Demande-moi par exemple tes points forts, tes points faibles, ton meilleur ou pire jour, ta meilleure paire, ou "analyse mes trades" pour un résumé complet.`;
+  }
+
+  // ── Analyse complète ──
+  if (qLower.includes('analyse') && (qLower.includes('trade') || qLower.includes('journal') || qLower.includes('strategie') || qLower.includes('stratégie'))) {
+    let r = `<strong>Résumé sur ${total} trades :</strong><br>`;
+    r += `Win rate : ${wr}% • P&L total : ${totalPnl>=0?'+':''}${totalPnl.toFixed(2)}€ • Profit factor : ${pf}<br><br>`;
+    if (byPaire.length) r += `Meilleure paire : <strong>${byPaire[0][0]}</strong> (${byPaire[0][1].pnl>=0?'+':''}${byPaire[0][1].pnl.toFixed(0)}€)`;
+    if (byPaire.length > 1 && byPaire[byPaire.length-1][1].pnl < 0) r += `, pire paire : <strong>${byPaire[byPaire.length-1][0]}</strong> (${byPaire[byPaire.length-1][1].pnl.toFixed(0)}€)`;
+    r += '.<br>';
+    if (bySess.length) r += `Meilleure session : <strong>${bySess[0][0]}</strong> (${bySess[0][1].pnl>=0?'+':''}${bySess[0][1].pnl.toFixed(0)}€).<br>`;
+    const bestDay = byDay[0], worstDay = [...byDay].sort((a,b)=>a[1].pnl-b[1].pnl)[0];
+    if (bestDay) r += `Meilleur jour : <strong>${bestDay[0]}</strong> (${bestDay[1].pnl>=0?'+':''}${bestDay[1].pnl.toFixed(0)}€)`;
+    if (worstDay && worstDay[1].pnl < 0) r += `, pire jour : <strong>${worstDay[0]}</strong> (${worstDay[1].pnl.toFixed(0)}€)`;
+    r += '.<br><br>';
+    r += parseFloat(wr) < 50 ? `À travailler : ton win rate est sous les 50%, concentre-toi sur la qualité des entrées.` :
+         parseFloat(pf) < 1.2 ? `À travailler : ton profit factor est faible, essaie de couper les pertes plus tôt.` :
+         `Ta stratégie est globalement solide, continue sur cette voie.`;
+    return r;
+  }
+
+  // ── Points forts ──
+  if (qLower.includes('point fort') || qLower.includes('points fort') || qLower.includes('mes forces') || qLower.includes('ce qui marche')) {
+    const pts = [];
+    if (parseFloat(wr) >= 50) pts.push(`Win rate solide de ${wr}% sur ${total} trades`);
+    if (parseFloat(pf) >= 1.2) pts.push(`Profit factor de ${pf}, tes gains dépassent tes pertes`);
+    if (totalPnl > 0) pts.push(`Compte en hausse de ${totalPnl>=0?'+':''}${totalPnl.toFixed(2)}€`);
+    byPaire.filter(([,d])=>d.pnl>0).slice(0,2).forEach(([p,d])=>pts.push(`${p} est rentable : ${d.pnl>=0?'+':''}${d.pnl.toFixed(0)}€ sur ${d.n} trades (${(d.w/d.n*100).toFixed(0)}% WR)`));
+    bySess.filter(([,d])=>d.pnl>0).slice(0,1).forEach(([s,d])=>pts.push(`La session ${s} te réussit bien (${d.pnl>=0?'+':''}${d.pnl.toFixed(0)}€)`));
+    byConf.filter(([,d])=>d.pnl>0&&d.n>=2).slice(0,2).forEach(([c,d])=>pts.push(`La confluence "${c}" fonctionne (${(d.w/d.n*100).toFixed(0)}% WR sur ${d.n} trades)`));
+    if (!pts.length) return `Je n'ai pas encore identifié de point fort net — continue à logger tes trades pour affiner l'analyse.`;
+    return `<strong>Tes points forts :</strong><br>• ${pts.slice(0,5).join('<br>• ')}`;
+  }
+
+  // ── Points faibles ──
+  if (qLower.includes('point faible') || qLower.includes('points faible') || qLower.includes('mes faiblesse') || qLower.includes('ce qui ne marche pas') || qLower.includes('a ameliorer') || qLower.includes('à améliorer')) {
+    const pts = [];
+    if (parseFloat(wr) < 50) pts.push(`Win rate de ${wr}%, sous la barre des 50%`);
+    if (parseFloat(pf) < 1) pts.push(`Profit factor de ${pf} : tes pertes dépassent tes gains`);
+    if (totalPnl < 0) pts.push(`Compte en baisse de ${totalPnl.toFixed(2)}€`);
+    byPaire.filter(([,d])=>d.pnl<0).slice(0,2).forEach(([p,d])=>pts.push(`${p} est déficitaire : ${d.pnl.toFixed(0)}€ sur ${d.n} trades (${(d.w/d.n*100).toFixed(0)}% WR)`));
+    byTF.filter(([,d])=>d.pnl<0).slice(0,2).forEach(([tf,d])=>pts.push(`Le timeframe ${tf} te coûte ${d.pnl.toFixed(0)}€`));
+    const worstDays = [...byDay].sort((a,b)=>a[1].pnl-b[1].pnl).filter(([,d])=>d.pnl<0).slice(0,2);
+    worstDays.forEach(([day,d])=>pts.push(`Le ${day} est ton jour le moins bon (${d.pnl.toFixed(0)}€)`));
+    byConf.filter(([,d])=>d.pnl<0&&d.n>=2).slice(0,2).forEach(([c,d])=>pts.push(`La confluence "${c}" ne fonctionne pas bien (${d.pnl.toFixed(0)}€)`));
+    if (!pts.length) return `Rien de problématique détecté pour le moment, continue comme ça !`;
+    return `<strong>Tes points à améliorer :</strong><br>• ${pts.slice(0,5).join('<br>• ')}`;
+  }
+
+  // ── Meilleur/pire jour de la semaine (général) ──
+  if ((qLower.includes('meilleur jour') || qLower.includes('plus performant') || qLower.includes('jour suis-je') || qLower.includes('quel jour'))) {
+    if (!byDay.length) return `Pas assez de données pour déterminer ton meilleur jour.`;
+    const best = byDay[0];
+    let r = `Ton meilleur jour est <strong>${best[0]}</strong> avec ${best[1].pnl>=0?'+':''}${best[1].pnl.toFixed(2)}€ sur ${best[1].n} trade(s), soit ${(best[1].w/best[1].n*100).toFixed(0)}% de win rate.`;
+    const worst = [...byDay].sort((a,b)=>a[1].pnl-b[1].pnl)[0];
+    if (worst && worst[0] !== best[0]) {
+      r += `<br>Ton jour le moins bon est <strong>${worst[0]}</strong> (${worst[1].pnl>=0?'+':''}${worst[1].pnl.toFixed(2)}€).`;
+    }
+    return r;
+  }
+  if (qLower.includes('pire jour') || qLower.includes('moins bon jour') || qLower.includes('jour a eviter') || qLower.includes('jour à éviter')) {
+    if (!byDay.length) return `Pas assez de données pour déterminer ton pire jour.`;
+    const worst = [...byDay].sort((a,b)=>a[1].pnl-b[1].pnl)[0];
+    return `Ton jour le moins performant est <strong>${worst[0]}</strong> avec ${worst[1].pnl>=0?'+':''}${worst[1].pnl.toFixed(2)}€ sur ${worst[1].n} trade(s), soit ${(worst[1].w/worst[1].n*100).toFixed(0)}% de win rate.`;
+  }
+
+  // ── Jour spécifique mentionné ──
   const dayIdx = jours.findIndex(j => qLower.includes(j));
   if (dayIdx !== -1) {
-    const dayAbbr = joursAbbr[dayIdx];
     const dayTrades = trades.filter(t => t.date && jours[new Date(t.date).getDay()] === jours[dayIdx]);
     if (!dayTrades.length) {
-      answer = `Aucun trade enregistré le ${jours[dayIdx]}.`;
-    } else {
-      const byPaire = stat(dayTrades, 'paire');
-      const pnl = dayTrades.reduce((s,t)=>s+(t.res||0),0);
-      const wr = (dayTrades.filter(t=>(t.res||0)>0).length / dayTrades.length * 100).toFixed(0);
-      answer = `<strong>${jours[dayIdx].charAt(0).toUpperCase()+jours[dayIdx].slice(1)}</strong> : ${dayTrades.length} trade(s), `
-        + `P&L total ${pnl>=0?'+':''}${pnl.toFixed(2)}€, win rate ${wr}%.`;
-      if (byPaire.length) {
-        answer += `<br>Meilleure paire ce jour-là : ${byPaire[0][0]} (${byPaire[0][1].pnl>=0?'+':''}${byPaire[0][1].pnl.toFixed(0)}€).`;
-      }
+      return `Aucun trade enregistré le ${jours[dayIdx]}.`;
     }
-  }
-  // Meilleure paire
-  else if (qLower.includes('meilleure paire') || qLower.includes('meilleur pair') || (qLower.includes('paire') && (qLower.includes('mieux') || qLower.includes('meilleure')))) {
-    const byPaire = stat(trades, 'paire');
-    if (!byPaire.length) {
-      answer = 'Aucune paire renseignée dans le journal.';
-    } else {
-      const [p, d] = byPaire[0];
-      answer = `Ta meilleure paire est <strong>${p}</strong> avec ${d.pnl>=0?'+':''}${d.pnl.toFixed(2)}€ sur ${d.n} trade(s), soit ${(d.w/d.n*100).toFixed(0)}% de win rate.`;
-    }
-  }
-  // Pire paire
-  else if (qLower.includes('pire paire') || qLower.includes('moins bonne paire') || (qLower.includes('paire') && qLower.includes('pire'))) {
-    const byPaire = stat(trades, 'paire');
-    if (!byPaire.length) {
-      answer = 'Aucune paire renseignée dans le journal.';
-    } else {
-      const [p, d] = byPaire[byPaire.length-1];
-      answer = `Ta paire la moins performante est <strong>${p}</strong> avec ${d.pnl>=0?'+':''}${d.pnl.toFixed(2)}€ sur ${d.n} trade(s), soit ${(d.w/d.n*100).toFixed(0)}% de win rate.`;
-    }
-  }
-  // Meilleure session
-  else if (qLower.includes('session')) {
-    const bySess = stat(trades, 'session');
-    if (!bySess.length) {
-      answer = 'Aucune session renseignée dans le journal.';
-    } else {
-      const best = bySess[0];
-      const worst = bySess[bySess.length-1];
-      answer = `Meilleure session : <strong>${best[0]}</strong> (${best[1].pnl>=0?'+':''}${best[1].pnl.toFixed(2)}€, ${(best[1].w/best[1].n*100).toFixed(0)}% WR).`;
-      if (bySess.length > 1) {
-        answer += `<br>Session la moins bonne : <strong>${worst[0]}</strong> (${worst[1].pnl>=0?'+':''}${worst[1].pnl.toFixed(2)}€).`;
-      }
-    }
-  }
-  // Timeframe
-  else if (qLower.includes('timeframe') || qLower.includes(' tf ') || qLower.startsWith('tf') || qLower.includes('tf ')) {
-    const byTF = stat(trades, 'tf');
-    if (!byTF.length) {
-      answer = 'Aucun timeframe renseigné dans le journal.';
-    } else {
-      const best = byTF[0];
-      answer = `Meilleur timeframe : <strong>${best[0]}</strong> (${best[1].pnl>=0?'+':''}${best[1].pnl.toFixed(2)}€, ${(best[1].w/best[1].n*100).toFixed(0)}% WR sur ${best[1].n} trades).`;
-      const worst = byTF[byTF.length-1];
-      if (byTF.length > 1 && worst[1].pnl < 0) {
-        answer += `<br>À éviter : <strong>${worst[0]}</strong> (${worst[1].pnl.toFixed(2)}€).`;
-      }
-    }
-  }
-  // Confluence
-  else if (qLower.includes('confluence')) {
-    const byConf = stat(trades, 'conf');
-    if (!byConf.length) {
-      answer = 'Aucune confluence renseignée dans le journal.';
-    } else {
-      const best = byConf[0];
-      answer = `Confluence la plus rentable : <strong>"${best[0]}"</strong> (${best[1].pnl>=0?'+':''}${best[1].pnl.toFixed(2)}€, ${(best[1].w/best[1].n*100).toFixed(0)}% WR sur ${best[1].n} trades).`;
-    }
-  }
-  // Win rate global
-  else if (qLower.includes('win rate') || qLower.includes('taux de réussite') || qLower.includes('pourcentage de gain')) {
-    const wr = (trades.filter(t=>(t.res||0)>0).length / trades.length * 100).toFixed(1);
-    answer = `Ton win rate global est de <strong>${wr}%</strong> sur ${trades.length} trades.`;
-  }
-  // Profit factor
-  else if (qLower.includes('profit factor')) {
-    const gw = trades.filter(t=>(t.res||0)>0).reduce((s,t)=>s+t.res,0);
-    const gl = Math.abs(trades.filter(t=>(t.res||0)<0).reduce((s,t)=>s+t.res,0));
-    const pf = gl > 0 ? (gw/gl).toFixed(2) : '∞';
-    answer = `Ton profit factor est de <strong>${pf}</strong> (gains bruts : ${gw.toFixed(2)}€, pertes brutes : ${gl.toFixed(2)}€).`;
-  }
-  // P&L total
-  else if (qLower.includes('pnl') || qLower.includes('p&l') || qLower.includes('résultat') || qLower.includes('gain') || qLower.includes('perte totale')) {
-    const totalPnl = trades.reduce((s,t)=>s+(t.res||0),0);
-    answer = `Ton P&L total est de <strong>${totalPnl>=0?'+':''}${totalPnl.toFixed(2)}€</strong> sur ${trades.length} trades.`;
-  }
-  // Fallback
-  else {
-    answer = `Je n'ai pas pu identifier précisément ta question. Essaie avec des mots-clés comme : "meilleure paire", "pire paire", "session", "timeframe", "confluence", "win rate", "profit factor", "P&L", ou le nom d'un jour de la semaine (ex: "lundi").`;
+    const pBy = pcStat(dayTrades, 'paire');
+    const pnl = dayTrades.reduce((s,t)=>s+(t.res||0),0);
+    const dwr = (dayTrades.filter(t=>(t.res||0)>0).length / dayTrades.length * 100).toFixed(0);
+    let r = `<strong>${jours[dayIdx].charAt(0).toUpperCase()+jours[dayIdx].slice(1)}</strong> : ${dayTrades.length} trade(s), P&L total ${pnl>=0?'+':''}${pnl.toFixed(2)}€, win rate ${dwr}%.`;
+    if (pBy.length) r += `<br>Meilleure paire ce jour-là : ${pBy[0][0]} (${pBy[0][1].pnl>=0?'+':''}${pBy[0][1].pnl.toFixed(0)}€).`;
+    return r;
   }
 
-  out.innerHTML = answer;
-  out.style.display = 'block';
+  // ── Meilleure / pire paire ──
+  if (qLower.includes('meilleure paire') || qLower.includes('meilleur pair') || (qLower.includes('paire') && (qLower.includes('mieux') || qLower.includes('meilleure')))) {
+    if (!byPaire.length) return 'Aucune paire renseignée dans le journal.';
+    const [p, d] = byPaire[0];
+    return `Ta meilleure paire est <strong>${p}</strong> avec ${d.pnl>=0?'+':''}${d.pnl.toFixed(2)}€ sur ${d.n} trade(s), soit ${(d.w/d.n*100).toFixed(0)}% de win rate.`;
+  }
+  if (qLower.includes('pire paire') || qLower.includes('moins bonne paire') || (qLower.includes('paire') && qLower.includes('pire'))) {
+    if (!byPaire.length) return 'Aucune paire renseignée dans le journal.';
+    const [p, d] = byPaire[byPaire.length-1];
+    return `Ta paire la moins performante est <strong>${p}</strong> avec ${d.pnl>=0?'+':''}${d.pnl.toFixed(2)}€ sur ${d.n} trade(s), soit ${(d.w/d.n*100).toFixed(0)}% de win rate.`;
+  }
+
+  // ── Session ──
+  if (qLower.includes('session')) {
+    if (!bySess.length) return 'Aucune session renseignée dans le journal.';
+    const best = bySess[0];
+    const worst = bySess[bySess.length-1];
+    let r = `Meilleure session : <strong>${best[0]}</strong> (${best[1].pnl>=0?'+':''}${best[1].pnl.toFixed(2)}€, ${(best[1].w/best[1].n*100).toFixed(0)}% WR).`;
+    if (bySess.length > 1) r += `<br>Session la moins bonne : <strong>${worst[0]}</strong> (${worst[1].pnl>=0?'+':''}${worst[1].pnl.toFixed(2)}€).`;
+    return r;
+  }
+
+  // ── Timeframe ──
+  if (qLower.includes('timeframe') || /\btf\b/.test(qLower)) {
+    if (!byTF.length) return 'Aucun timeframe renseigné dans le journal.';
+    const best = byTF[0];
+    let r = `Meilleur timeframe : <strong>${best[0]}</strong> (${best[1].pnl>=0?'+':''}${best[1].pnl.toFixed(2)}€, ${(best[1].w/best[1].n*100).toFixed(0)}% WR sur ${best[1].n} trades).`;
+    const worst = byTF[byTF.length-1];
+    if (byTF.length > 1 && worst[1].pnl < 0) r += `<br>À éviter : <strong>${worst[0]}</strong> (${worst[1].pnl.toFixed(2)}€).`;
+    return r;
+  }
+
+  // ── Confluence ──
+  if (qLower.includes('confluence')) {
+    if (!byConf.length) return 'Aucune confluence renseignée dans le journal.';
+    const best = byConf[0];
+    return `Confluence la plus rentable : <strong>"${best[0]}"</strong> (${best[1].pnl>=0?'+':''}${best[1].pnl.toFixed(2)}€, ${(best[1].w/best[1].n*100).toFixed(0)}% WR sur ${best[1].n} trades).`;
+  }
+
+  // ── Win rate global ──
+  if (qLower.includes('win rate') || qLower.includes('taux de réussite') || qLower.includes('taux de reussite') || qLower.includes('pourcentage de gain')) {
+    return `Ton win rate global est de <strong>${wr}%</strong> sur ${total} trades.`;
+  }
+
+  // ── Profit factor ──
+  if (qLower.includes('profit factor')) {
+    return `Ton profit factor est de <strong>${pf}</strong> (gains bruts : ${gw.toFixed(2)}€, pertes brutes : ${gl.toFixed(2)}€).`;
+  }
+
+  // ── P&L total ──
+  if (qLower.includes('pnl') || qLower.includes('p&l') || qLower.includes('résultat') || qLower.includes('resultat') || qLower.includes('gain') || qLower.includes('perte totale')) {
+    return `Ton P&L total est de <strong>${totalPnl>=0?'+':''}${totalPnl.toFixed(2)}€</strong> sur ${total} trades.`;
+  }
+
+  // ── Fallback ──
+  return `Je n'ai pas pu identifier précisément ta question. Essaie par exemple : "points forts", "points faibles", "quel jour suis-je le plus performant", "meilleure paire", "session", "timeframe", "confluence", "win rate", "profit factor", "analyse mes trades".`;
 }
 
 </script>
