@@ -2695,7 +2695,7 @@ function renderPcChat(){
   const box = document.getElementById('pcChatMessages');
   if(!box) return;
   if(!pcChatHistory.length){
-    box.innerHTML = '<div class="pc-msg-empty">Pose-moi une question sur tes trades : "Quels sont mes points forts ?", "Quel jour suis-je le plus performant ?", "Analyse mes trades"...</div>';
+    box.innerHTML = '<div class="pc-msg-empty">Pose-moi une question sur tes trades : "Résumé", "Quels sont mes points forts ?", "Quel jour suis-je le plus performant ?", "Mon RR moyen ?", "Que disent mes notes ?"...</div>';
     return;
   }
   box.innerHTML = pcChatHistory.map(m=>`<div class="pc-msg ${m.role==='user'?'pc-msg-user':'pc-msg-bot'}">${m.text}</div>`).join('');
@@ -2738,6 +2738,95 @@ function pcStat(arr, key){
   return Object.entries(m).sort((a,b)=>b[1].pnl-a[1].pnl);
 }
 
+// Génère un résumé global combinant performance, RR, notes et images
+function pcGlobalSummary(trades){
+  const total = trades.length;
+  const winners = trades.filter(t=>(t.res||0)>0);
+  const losers = trades.filter(t=>(t.res||0)<0);
+  const totalPnl = trades.reduce((s,t)=>s+(t.res||0),0);
+  const wr = total > 0 ? (winners.length/total*100).toFixed(1) : 0;
+  const gw = winners.reduce((s,t)=>s+t.res,0);
+  const gl = Math.abs(losers.reduce((s,t)=>s+t.res,0));
+  const pf = gl > 0 ? (gw/gl).toFixed(2) : '∞';
+
+  const byPaire = pcStat(trades,'paire');
+  const bySess = pcStat(trades,'session');
+  const jours = ['dimanche','lundi','mardi','mercredi','jeudi','vendredi','samedi'];
+  const byDay = pcStat(trades.map(t=>({...t,day:t.date?jours[new Date(t.date).getDay()]:'?'})),'day');
+
+  // Drawdown
+  const cap = CAPITAL();
+  let peak=cap,runCap=cap,maxDD=0;
+  [...trades].sort((a,b)=>(a.date||'').localeCompare(b.date||'')).forEach(t=>{
+    runCap+=t.res||0; if(runCap>peak)peak=runCap;
+    const dd=(peak-runCap)/peak*100; if(dd>maxDD)maxDD=dd;
+  });
+
+  // RR
+  const withRR = trades.filter(t=>t.rrCible>0);
+  const rrMoy = withRR.length ? (withRR.reduce((s,t)=>s+computeRR(t),0)/withRR.length).toFixed(2) : null;
+
+  // Notes
+  const withNotes = trades.filter(t=>t.notes && t.notes.trim());
+  const stop = new Set(['les','des','que','qui','pour','dans','avec','sur','une','j\'ai','j’ai','mais','plus','pas','est','été','etais','était','trade','trop','bien','fait','j\'avais']);
+  const freq = {};
+  withNotes.forEach(t=>{
+    t.notes.toLowerCase().split(/[^a-zà-ÿ']+/).forEach(w=>{
+      if (w.length<4 || stop.has(w)) return;
+      freq[w]=(freq[w]||0)+1;
+    });
+  });
+  const topWords = Object.entries(freq).sort((a,b)=>b[1]-a[1]).filter(([,n])=>n>=2).slice(0,4).map(([w])=>w);
+
+  // Images
+  const withImg = trades.filter(t=>t.images && t.images.length);
+
+  // ── Construction du résumé ──
+  let r = `<strong>📊 Résumé global — ${total} trades</strong><br>`;
+  r += `Win rate : <strong>${wr}%</strong> • P&L total : <strong>${totalPnl>=0?'+':''}${totalPnl.toFixed(2)}€</strong> • Profit factor : <strong>${pf}</strong> • Drawdown max : <strong>${maxDD.toFixed(1)}%</strong><br>`;
+  if (rrMoy !== null) r += `RR réalisé moyen : <strong>${rrMoy}R</strong> sur ${withRR.length} trade(s) avec RR cible.<br>`;
+  r += '<br>';
+
+  if (byPaire.length) {
+    r += `Meilleure paire : <strong>${byPaire[0][0]}</strong> (${byPaire[0][1].pnl>=0?'+':''}${byPaire[0][1].pnl.toFixed(0)}€)`;
+    if (byPaire.length>1 && byPaire[byPaire.length-1][1].pnl<0) r += `, pire paire : <strong>${byPaire[byPaire.length-1][0]}</strong> (${byPaire[byPaire.length-1][1].pnl.toFixed(0)}€)`;
+    r += '.<br>';
+  }
+  if (bySess.length) r += `Meilleure session : <strong>${bySess[0][0]}</strong> (${bySess[0][1].pnl>=0?'+':''}${bySess[0][1].pnl.toFixed(0)}€).<br>`;
+  if (byDay.length) {
+    const bestDay = byDay[0], worstDay=[...byDay].sort((a,b)=>a[1].pnl-b[1].pnl)[0];
+    r += `Meilleur jour : <strong>${bestDay[0]}</strong> (${bestDay[1].pnl>=0?'+':''}${bestDay[1].pnl.toFixed(0)}€)`;
+    if (worstDay && worstDay[1].pnl<0) r += `, pire jour : <strong>${worstDay[0]}</strong> (${worstDay[1].pnl.toFixed(0)}€)`;
+    r += '.<br>';
+  }
+  r += '<br>';
+
+  // Notes
+  if (withNotes.length) {
+    r += `📝 ${withNotes.length}/${total} trades commentés`;
+    if (topWords.length) r += ` — thèmes récurrents : ${topWords.join(', ')}`;
+    r += '.<br>';
+  } else {
+    r += `📝 Aucune note rédigée pour le moment — commenter tes trades aiderait l'analyse.<br>`;
+  }
+
+  // Images
+  if (withImg.length) {
+    const winWithImg = withImg.filter(t=>(t.res||0)>0).length;
+    r += `📷 ${withImg.length}/${total} trades avec capture(s) — ${(winWithImg/withImg.length*100).toFixed(0)}% de ces trades documentés sont gagnants.<br>`;
+  } else {
+    r += `📷 Aucune capture d'écran ajoutée aux trades.<br>`;
+  }
+
+  r += '<br><strong>Action prioritaire :</strong> ';
+  r += parseFloat(wr)<50 ? `améliorer la sélection des entrées (win rate sous 50%).` :
+       parseFloat(pf)<1.2 ? `couper les pertes plus tôt pour améliorer le profit factor.` :
+       maxDD>15 ? `mettre en place un stop journalier, le drawdown max est élevé.` :
+       `continuer sur cette voie, la stratégie est globalement solide.`;
+
+  return r;
+}
+
 // Moteur d'analyse local : interprète la question et répond
 function pcAnalyze(q){
   const trades = APP.trades || [];
@@ -2765,7 +2854,72 @@ function pcAnalyze(q){
 
   // ── Salutations ──
   if (/^(salut|bonjour|bonsoir|hey|hello|coucou|yo)\b/.test(qLower)) {
-    return `Salut ! Je suis ton assistant journal. Demande-moi par exemple tes points forts, tes points faibles, ton meilleur ou pire jour, ta meilleure paire, ou "analyse mes trades" pour un résumé complet.`;
+    return `Salut ! Je suis ton assistant journal. Demande-moi par exemple tes points forts, tes points faibles, ton meilleur ou pire jour, ta meilleure paire, tes notes, ton RR, tes images, ou "résumé" pour une synthèse complète de tout le journal.`;
+  }
+
+  // ── Résumé global (notes + RR + images + perf) ──
+  if (qLower.includes('résumé') || qLower.includes('resume') || qLower.includes('synthese') || qLower.includes('synthèse')) {
+    return pcGlobalSummary(trades);
+  }
+
+  // ── RR (Risk Reward) ──
+  if (qLower.includes(' rr') || qLower.startsWith('rr') || qLower.includes('risk reward') || qLower.includes('risque rendement') || qLower.includes('ratio')) {
+    const withRR = trades.filter(t=>t.rrCible>0);
+    if (!withRR.length) return `Aucun RR cible renseigné dans le journal.`;
+    const rrReal = withRR.map(t=>computeRR(t));
+    const rrMoy = (rrReal.reduce((a,b)=>a+b,0)/rrReal.length).toFixed(2);
+    const rrCibleMoy = (withRR.reduce((s,t)=>s+(t.rrCible||0),0)/withRR.length).toFixed(2);
+    const atteint = withRR.filter(t=>computeRR(t) >= (t.rrCible||0)).length;
+    let r = `RR cible moyen : <strong>${rrCibleMoy}R</strong> • RR réalisé moyen : <strong>${rrMoy}R</strong>.<br>`;
+    r += `Objectif atteint ou dépassé sur ${atteint}/${withRR.length} trades (${(atteint/withRR.length*100).toFixed(0)}%).`;
+    return r;
+  }
+
+  // ── Notes / commentaires ──
+  if (qLower.includes('note') || qLower.includes('commentaire') || qLower.includes('remarque')) {
+    const withNotes = trades.filter(t=>t.notes && t.notes.trim());
+    if (!withNotes.length) return `Aucune note rédigée dans tes trades pour le moment.`;
+    const stop = new Set(['les','des','que','qui','pour','dans','avec','sur','une','j\'ai','j’ai','mais','plus','pas','est','été','etais','était','trade','trop','bien','fait']);
+    const freq = {};
+    withNotes.forEach(t=>{
+      t.notes.toLowerCase().split(/[^a-zà-ÿ']+/).forEach(w=>{
+        if (w.length<4 || stop.has(w)) return;
+        freq[w]=(freq[w]||0)+1;
+      });
+    });
+    const topWords = Object.entries(freq).sort((a,b)=>b[1]-a[1]).filter(([,n])=>n>=2).slice(0,5).map(([w])=>w);
+    const winNotes = withNotes.filter(t=>(t.res||0)>0).length;
+    const loseNotes = withNotes.filter(t=>(t.res||0)<0).length;
+    let r = `${withNotes.length} trade(s) avec une note sur ${total} (${winNotes} gagnants, ${loseNotes} perdants).<br>`;
+    if (topWords.length) r += `Mots/thèmes qui reviennent souvent dans tes notes : ${topWords.join(', ')}.<br>`;
+    const lastNoted = [...withNotes].sort((a,b)=>(b.date||'').localeCompare(a.date||''))[0];
+    if (lastNoted) r += `Dernière note (${lastNoted.date||'?'}, ${lastNoted.paire||''}) : "${lastNoted.notes.slice(0,140)}${lastNoted.notes.length>140?'…':''}"`;
+    return r;
+  }
+
+  // ── Images / screenshots ──
+  if (qLower.includes('image') || qLower.includes('screenshot') || qLower.includes('capture') || qLower.includes('photo')) {
+    const withImg = trades.filter(t=>t.images && t.images.length);
+    if (!withImg.length) return `Aucun trade n'a de capture d'écran associée.`;
+    const totalImg = withImg.reduce((s,t)=>s+t.images.length,0);
+    const winWithImg = withImg.filter(t=>(t.res||0)>0).length;
+    return `${withImg.length} trade(s) sur ${total} ont au moins une capture (${totalImg} image(s) au total). Parmi eux, ${winWithImg} sont gagnants (${(winWithImg/withImg.length*100).toFixed(0)}%). Pense à documenter aussi tes trades perdants pour mieux repérer les erreurs visuelles récurrentes.`;
+  }
+
+  // ── Gestion (mgmt) / reprise de trade ──
+  if (qLower.includes('gestion') || qLower.includes('mgmt') || qLower.includes('reprise') || qLower.includes('reprendre')) {
+    const byMgmt = pcStat(trades,'mgmt');
+    const byReprend = pcStat(trades,'reprend');
+    let r = '';
+    if (byMgmt.length) {
+      r += `Gestion de trade la plus rentable : <strong>${byMgmt[0][0]}</strong> (${byMgmt[0][1].pnl>=0?'+':''}${byMgmt[0][1].pnl.toFixed(0)}€, ${(byMgmt[0][1].w/byMgmt[0][1].n*100).toFixed(0)}% WR).<br>`;
+    }
+    if (byReprend.length) {
+      const totPnl = byReprend.reduce((s,[,d])=>s+d.pnl,0);
+      const totN = byReprend.reduce((s,[,d])=>s+d.n,0);
+      r += `Sur les trades repris (${totN} au total), le résultat global est ${totPnl>=0?'+':''}${totPnl.toFixed(0)}€.`;
+    }
+    return r || `Pas assez de données de gestion/reprise renseignées dans le journal.`;
   }
 
   // ── Analyse complète ──
@@ -2901,7 +3055,7 @@ function pcAnalyze(q){
   }
 
   // ── Fallback ──
-  return `Je n'ai pas pu identifier précisément ta question. Essaie par exemple : "points forts", "points faibles", "quel jour suis-je le plus performant", "meilleure paire", "session", "timeframe", "confluence", "win rate", "profit factor", "analyse mes trades".`;
+  return `Je n'ai pas pu identifier précisément ta question. Essaie par exemple : "résumé", "points forts", "points faibles", "quel jour suis-je le plus performant", "meilleure paire", "session", "timeframe", "confluence", "RR", "notes", "images", "gestion", "win rate", "profit factor".`;
 }
 
 </script>
