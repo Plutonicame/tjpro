@@ -198,6 +198,8 @@ tbody td{padding:6px 8px;vertical-align:middle;white-space:nowrap;}
 .pc-msg-user{align-self:flex-end;background:var(--green);color:#0b0f1a;border-bottom-right-radius:2px;}
 .pc-msg-bot{align-self:flex-start;background:var(--surface);border:1px solid var(--border);color:var(--text);border-bottom-left-radius:2px;}
 .pc-msg-empty{align-self:center;color:var(--muted);font-size:12px;text-align:center;padding:20px 0;}
+.pc-thinking{display:inline-flex;align-items:center;gap:6px;opacity:.7;animation:pcPulse 1.4s ease-in-out infinite;}
+@keyframes pcPulse{0%,100%{opacity:.45;}50%{opacity:.85;}}
 
 /* CALENDAR */
 .cal-outer{display:flex;flex-direction:column;gap:12px;}
@@ -2709,15 +2711,77 @@ function pcPushMsg(role, text){
   renderPcChat();
 }
 
-function sendPcMessage(){
+// URL de la fonction Supabase qui fait le pont vers Gemini (clé secrète côté serveur)
+const PC_AI_ENDPOINT = 'https://ghjashqgwlaofjubzrcp.supabase.co/functions/v1/pc-ai-agent';
+const PC_SUPABASE_ANON_KEY = 'sb_publishable_v_Uc1c_TsGyA7ieZPfaGnw_Ajknc7af';
+
+// Prépare une version compacte des trades à envoyer à l'IA (sans données binaires lourdes)
+function pcPrepareTradesForAI(trades){
+  return (trades||[]).map(t=>({
+    date: t.date || null,
+    paire: t.paire || null,
+    session: t.session || null,
+    tf: t.tf || null,
+    conf: t.conf || null,
+    res: typeof t.res === 'number' ? t.res : null,
+    rrCible: t.rrCible || null,
+    rrReel: (typeof computeRR === 'function') ? computeRR(t) : null,
+    mgmt: t.mgmt || null,
+    reprend: t.reprend || null,
+    notes: t.notes ? String(t.notes).slice(0, 500) : null,
+    nbImages: (t.images && t.images.length) ? t.images.length : 0,
+    stars: t.stars || null
+  }));
+}
+
+async function pcAskAI(question, trades){
+  const res = await fetch(PC_AI_ENDPOINT, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': 'Bearer ' + PC_SUPABASE_ANON_KEY
+    },
+    body: JSON.stringify({
+      question,
+      trades: pcPrepareTradesForAI(trades)
+    })
+  });
+  if(!res.ok) throw new Error('HTTP ' + res.status);
+  const data = await res.json();
+  if(data.error) throw new Error(data.error);
+  return data.answer;
+}
+
+async function sendPcMessage(){
   const input = document.getElementById('pcQuestion');
   if(!input) return;
   const q = input.value.trim();
   if(!q) return;
   input.value = '';
   pcPushMsg('user', escapeHtml(q));
-  const answer = pcAnalyze(q);
-  pcPushMsg('bot', answer);
+
+  const thinkingId = 'pc-thinking-' + Date.now();
+  pcChatHistory.push({role:'bot', text:`<span id="${thinkingId}" class="pc-thinking">🤔 Réflexion en cours...</span>`});
+  renderPcChat();
+
+  const trades = APP.trades || [];
+  let answer;
+  try {
+    answer = await pcAskAI(q, trades);
+  } catch(err) {
+    console.warn('Agent IA indisponible, bascule sur le moteur local :', err);
+    answer = pcAnalyze(q) + '<br><br><span style="opacity:.6;font-size:.85em;">(réponse générée en local, l\'assistant IA est momentanément indisponible)</span>';
+  }
+
+  // Remplace le message "réflexion en cours" par la vraie réponse
+  const idx = pcChatHistory.findIndex(m => m.text.includes(thinkingId));
+  if(idx !== -1){
+    pcChatHistory[idx] = {role:'bot', text: answer};
+    localStorage.setItem('tjp_pc_chat', JSON.stringify(pcChatHistory));
+    renderPcChat();
+  } else {
+    pcPushMsg('bot', answer);
+  }
 }
 
 function escapeHtml(s){
