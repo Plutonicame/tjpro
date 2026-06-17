@@ -2017,6 +2017,10 @@ function setupEnterPin() {
 }
 
 async function afterPinValidated() {
+  // Nouvelle session de connexion : on démarre une conversation IA fraîche,
+  // la précédente reste consultable dans l'historique des conversations.
+  pcStartFreshSessionConversation();
+
   // Afficher écran de chargement
   showOverlay(null);
   const loadEl = document.createElement('div');
@@ -2678,22 +2682,44 @@ async function generatePointsCles() {
   const positifs = [];
   const negatifs = [];
 
-  // Positifs
+  // Positifs — Performance globale
   const pp = [];
   if (parseFloat(wr) >= 50) pp.push(`Win rate de ${wr}% sur ${total} trades`);
   if (parseFloat(pf) >= 1.5) pp.push(`Profit factor excellent : ${pf}`);
   if (totalPnl > 0) pp.push(`Compte en hausse : +${totalPnl.toFixed(2)}€ (+${(totalPnl/cap*100).toFixed(1)}%)`);
   if (maxWS >= 3) pp.push(`Serie gagnante max : ${maxWS} trades consecutifs`);
-  byPaire.filter(([,d])=>d.pnl>0).slice(0,2).forEach(([p,d])=>pp.push(`${p} rentable : +${d.pnl.toFixed(0)}€, ${(d.w/d.n*100).toFixed(0)}% WR`));
-  bySess.filter(([,d])=>d.pnl>0).slice(0,2).forEach(([s,d])=>pp.push(`Session ${s} performante : +${d.pnl.toFixed(0)}€`));
-  byConf.filter(([,d])=>d.pnl>0&&d.n>=2).slice(0,3).forEach(([c,d])=>pp.push(`Confluence "${c}" fiable : ${(d.w/d.n*100).toFixed(0)}% WR`));
-  byDay.filter(([,d])=>d.pnl>0).slice(0,2).forEach(([day,d])=>pp.push(`${day} : jour rentable (+${d.pnl.toFixed(0)}€)`));
   if (pp.length) positifs.push({titre:'PERFORMANCE GLOBALE',points:pp.slice(0,4)});
 
-  const ptf = byTF.filter(([,d])=>d.pnl>0).slice(0,3).map(([tf,d])=>`TF ${tf} : ${(d.w/d.n*100).toFixed(0)}% WR, +${d.pnl.toFixed(0)}€ (${d.n} trades)`);
+  // Positifs — Paires rentables
+  const pppaire = byPaire.filter(([,d])=>d.pnl>0).slice(0,4).map(([p,d])=>`${p} : +${d.pnl.toFixed(0)}€, ${(d.w/d.n*100).toFixed(0)}% WR sur ${d.n} trades`);
+  if (pppaire.length) positifs.push({titre:'PAIRES RENTABLES',points:pppaire});
+
+  // Positifs — Sessions performantes
+  const ppsess = bySess.filter(([,d])=>d.pnl>0).slice(0,3).map(([s,d])=>`Session ${s} : +${d.pnl.toFixed(0)}€, ${(d.w/d.n*100).toFixed(0)}% WR sur ${d.n} trades`);
+  if (ppsess.length) positifs.push({titre:'SESSIONS PERFORMANTES',points:ppsess});
+
+  // Positifs — Timeframes efficaces
+  const ptf = byTF.filter(([,d])=>d.pnl>0).slice(0,4).map(([tf,d])=>`TF ${tf} : ${(d.w/d.n*100).toFixed(0)}% WR, +${d.pnl.toFixed(0)}€ (${d.n} trades)`);
   if (ptf.length) positifs.push({titre:'TIMEFRAMES EFFICACES',points:ptf});
 
-  // Négatifs
+  // Positifs — Confluences qui marchent (analyse dédiée et complète)
+  const ppconf = byConf.filter(([,d])=>d.pnl>0&&d.n>=2).slice(0,4).map(([c,d])=>`"${c}" : ${(d.w/d.n*100).toFixed(0)}% WR, +${d.pnl.toFixed(0)}€ sur ${d.n} trades`);
+  if (ppconf.length) positifs.push({titre:'CONFLUENCES QUI FONCTIONNENT',points:ppconf});
+
+  // Positifs — Jours où il est rentable de trader davantage
+  const bestDays = byDay.filter(([,d])=>d.pnl>0 && d.n>=1).sort((a,b)=>b[1].pnl-a[1].pnl).slice(0,4)
+    .map(([day,d])=>`${day} : +${d.pnl.toFixed(0)}€, ${(d.w/d.n*100).toFixed(0)}% WR sur ${d.n} trades — bon jour pour augmenter le volume`);
+  if (bestDays.length) positifs.push({titre:'JOURS OU TRADER DAVANTAGE',points:bestDays});
+
+  // Positifs — Régularité / discipline (basé sur drawdown et séries)
+  const ppreg = [];
+  if (maxDD <= 10 && total >= 5) ppreg.push(`Drawdown maitrise : ${maxDD.toFixed(1)}% max, bonne gestion du risque`);
+  if (maxLS <= 2 && total >= 5) ppreg.push(`Pas de serie de pertes problematique (max ${maxLS} pertes d'affilee)`);
+  const mgmtStat = stat(trades,'mgmt').filter(([k])=>k && k.toLowerCase()!=='non');
+  mgmtStat.filter(([,d])=>d.pnl>0&&d.n>=2).slice(0,2).forEach(([m,d])=>ppreg.push(`Gestion "${m}" rentable : +${d.pnl.toFixed(0)}€, ${(d.w/d.n*100).toFixed(0)}% WR`));
+  if (ppreg.length) positifs.push({titre:'DISCIPLINE & REGULARITE',points:ppreg});
+
+  // Négatifs — Problèmes identifiés
   const pn = [];
   if (parseFloat(wr) < 50) pn.push(`Win rate faible : ${wr}% — viser 50%+`);
   if (parseFloat(pf) < 1) pn.push(`Profit factor < 1 (${pf}) : les pertes depassent les gains`);
@@ -2706,19 +2732,23 @@ async function generatePointsCles() {
   const pnpaire = byPaire.filter(([,d])=>d.pnl<0).slice(0,3).map(([p,d])=>`Reduire ou arreter ${p} : ${d.pnl.toFixed(0)}€, ${(d.w/d.n*100).toFixed(0)}% WR`);
   if (pnpaire.length) negatifs.push({titre:'PAIRES A EVITER',points:pnpaire});
 
+  const pnsess = bySess.filter(([,d])=>d.pnl<0).slice(0,3).map(([s,d])=>`Session ${s} deficitaire : ${d.pnl.toFixed(0)}€, ${(d.w/d.n*100).toFixed(0)}% WR sur ${d.n} trades`);
+  if (pnsess.length) negatifs.push({titre:'SESSIONS A EVITER',points:pnsess});
+
   const pntf = byTF.filter(([,d])=>d.pnl<0).slice(0,3).map(([tf,d])=>`Arreter TF ${tf} : ${d.pnl.toFixed(0)}€, ${(d.w/d.n*100).toFixed(0)}% WR`);
   if (pntf.length) negatifs.push({titre:'TIMEFRAMES DEFICITAIRES',points:pntf});
 
-  const pnday = worstDay.slice(0,2).map(([day,d])=>`Ne pas trader le ${day} : ${d.pnl.toFixed(0)}€, ${(d.w/d.n*100).toFixed(0)}% WR`);
+  const pnday = worstDay.slice(0,3).map(([day,d])=>`Ne pas trader le ${day} : ${d.pnl.toFixed(0)}€, ${(d.w/d.n*100).toFixed(0)}% WR sur ${d.n} trades`);
   if (pnday.length) negatifs.push({titre:'JOURS A EVITER',points:pnday});
 
-  const pnconf = byConf.filter(([,d])=>d.pnl<0&&d.n>=2).slice(0,3).map(([c,d])=>`Confluence "${c}" peu fiable : ${d.pnl.toFixed(0)}€`);
+  const pnconf = byConf.filter(([,d])=>d.pnl<0&&d.n>=2).slice(0,4).map(([c,d])=>`"${c}" peu fiable : ${d.pnl.toFixed(0)}€, ${(d.w/d.n*100).toFixed(0)}% WR sur ${d.n} trades`);
   if (pnconf.length) negatifs.push({titre:'CONFLUENCES INEFFICACES',points:pnconf});
 
   // Résumé
   const resume = `<strong>Win Rate :</strong> ${wr}% | <strong>P&L :</strong> ${totalPnl>0?'+':''}${totalPnl.toFixed(2)}€ | <strong>Profit Factor :</strong> ${pf} | <strong>Drawdown max :</strong> ${maxDD.toFixed(1)}%<br><br>` +
     (byPaire[0] ? `<strong>Meilleure paire :</strong> ${byPaire[0][0]} (+${byPaire[0][1].pnl.toFixed(0)}€)` + (byPaire[byPaire.length-1][1].pnl<0 ? ` | <strong>Pire paire :</strong> ${byPaire[byPaire.length-1][0]} (${byPaire[byPaire.length-1][1].pnl.toFixed(0)}€)` : '') + '<br>' : '') +
     (bySess[0] ? `<strong>Meilleure session :</strong> ${bySess[0][0]} (+${bySess[0][1].pnl.toFixed(0)}€)<br>` : '') +
+    (bestDays.length ? `<strong>Jours a privilegier :</strong> ${byDay.filter(([,d])=>d.pnl>0).sort((a,b)=>b[1].pnl-a[1].pnl).slice(0,2).map(([d])=>d).join(', ')}<br>` : '') +
     (worstDay.length ? `<strong>Jours a eviter :</strong> ${worstDay.slice(0,2).map(([d])=>d).join(', ')}<br>` : '') +
     `<br><strong>Action prioritaire :</strong> ${
       parseFloat(wr)<50 ? 'Ameliorer la selection des entrees pour atteindre 50%+ de win rate.' :
@@ -2866,6 +2896,20 @@ function pcSelectConversation(id){
   pcSetActiveConvId(id);
   renderPcChat();
   pcCloseConvPanel();
+}
+
+// Démarre une conversation IA fraîche à chaque nouvelle connexion (PIN validé).
+// L'ancienne conversation active reste dans pcConversations, donc visible dans l'historique.
+function pcStartFreshSessionConversation(){
+  // Ne crée une nouvelle conversation que si l'actuelle contient déjà des messages
+  // (évite d'empiler des conversations vides si l'utilisateur se reconnecte sans avoir rien tapé)
+  const active = pcConversations.find(c => c.id === pcActiveConvId);
+  if (active && active.messages && active.messages.length === 0) return;
+  const conv = { id: 'conv-' + Date.now(), title: 'Nouvelle conversation', messages: [], updatedAt: Date.now() };
+  pcConversations.unshift(conv);
+  pcSaveConversations(pcConversations);
+  pcActiveConvId = conv.id;
+  pcSetActiveConvId(conv.id);
 }
 
 function pcNewConversation(){
