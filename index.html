@@ -60,7 +60,7 @@
   --mt-mgmt:#ec4899;--mt-reprend:#64748b;
   --row-hover:rgba(0,229,160,.07);
   --kpi1:#00e5a0;--kpi2:#3b82f6;--kpi3:#8b5cf6;--kpi4:#f59e0b;
-  --kpi5:#ec4899;--kpi6:#00e5a0;--kpi7:#64748b;--kpi8:#f59e0b;--kpi9:#ef4444;
+  --kpi5:#ec4899;--kpi6:#00e5a0;--kpi7:#64748b;--kpi8:#f59e0b;--kpi9:#ef4444;--kpi10:#ef4444;
   /* Couleurs SÉPARÉES pour résultats/pourcentages journal */
   --result-pos:#00e5a0;--result-neg:#ef4444;
   --state-capital:#00e5a0;--state-winstreak:#00e5a0;--state-tf:#3b82f6;
@@ -171,7 +171,7 @@ tbody td{padding:6px 8px;vertical-align:middle;white-space:nowrap;}
 .empty-state{text-align:center;padding:28px;color:var(--muted);font-size:13px;}
 
 /* KPI */
-.kpi-strip{display:grid;grid-template-columns:repeat(9,1fr);gap:1px;background:var(--border);margin-bottom:16px;border-radius:8px;overflow:hidden;}
+.kpi-strip{display:grid;grid-template-columns:repeat(10,1fr);gap:1px;background:var(--border);margin-bottom:16px;border-radius:8px;overflow:hidden;}
 .kpi-card{background:var(--card);padding:11px 9px 10px;position:relative;}
 .kpi-bar{position:absolute;bottom:0;left:0;right:0;height:3px;}
 .kpi-icon{font-size:16px;margin-bottom:2px;display:block;}
@@ -200,6 +200,28 @@ tbody td{padding:6px 8px;vertical-align:middle;white-space:nowrap;}
 .pc-msg-empty{align-self:center;color:var(--muted);font-size:12px;text-align:center;padding:20px 0;}
 .pc-thinking{display:inline-flex;align-items:center;gap:6px;opacity:.7;animation:pcPulse 1.4s ease-in-out infinite;}
 @keyframes pcPulse{0%,100%{opacity:.45;}50%{opacity:.85;}}
+
+/* Menu de conversations type ChatGPT */
+.pc-chat-bar{display:flex;align-items:center;gap:8px;margin-bottom:10px;}
+.pc-icon-btn{background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:6px;width:36px;height:36px;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:16px;flex-shrink:0;}
+.pc-icon-btn:hover{border-color:var(--green);color:var(--green);}
+.pc-chat-title-bar{flex:1;font-family:var(--mono);font-size:12px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+
+.pc-conv-overlay{display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.6);z-index:600;}
+.pc-conv-overlay.open{display:block;}
+.pc-conv-panel{position:fixed;top:0;left:0;bottom:0;width:280px;max-width:80vw;background:var(--bg);border-right:1px solid var(--border);z-index:601;transform:translateX(-100%);transition:transform .25s ease;display:flex;flex-direction:column;}
+.pc-conv-panel.open{transform:translateX(0);}
+.pc-conv-header{padding:14px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;gap:8px;}
+.pc-conv-header-title{font-family:var(--mono);font-size:12px;letter-spacing:2px;color:var(--green);text-transform:uppercase;}
+.pc-conv-new{margin:10px 14px;padding:10px 12px;background:var(--btn-p-bg);color:var(--btn-p-tx);border:none;border-radius:6px;font-family:var(--mono);font-size:12px;font-weight:700;cursor:pointer;display:flex;align-items:center;gap:8px;justify-content:center;}
+.pc-conv-list{flex:1;overflow-y:auto;padding:0 8px 14px;display:flex;flex-direction:column;gap:4px;}
+.pc-conv-item{display:flex;align-items:center;gap:8px;padding:10px 10px;border-radius:6px;cursor:pointer;font-size:13px;color:var(--text);}
+.pc-conv-item:hover{background:var(--surface);}
+.pc-conv-item.active{background:var(--surface);border:1px solid var(--border);}
+.pc-conv-item-title{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.pc-conv-item-del{flex-shrink:0;opacity:.5;font-size:14px;padding:4px 6px;border-radius:4px;}
+.pc-conv-item-del:hover{opacity:1;color:var(--red);background:rgba(255,0,0,.08);}
+.pc-conv-empty{color:var(--muted);font-size:12px;padding:14px;text-align:center;}
 
 /* CALENDAR */
 .cal-outer{display:flex;flex-direction:column;gap:12px;}
@@ -291,7 +313,7 @@ tbody td{padding:6px 8px;vertical-align:middle;white-space:nowrap;}
   .nav-mobile{display:none;}
   .hamburger{display:none;}
   .two-col{grid-template-columns:1fr 1fr;}
-  .kpi-strip{grid-template-columns:repeat(9,1fr);}
+  .kpi-strip{grid-template-columns:repeat(10,1fr);}
 }
 @media(max-width:1100px){
   /* ── MOBILE / ÉCRAN VERTICAL ── */
@@ -484,6 +506,7 @@ tbody td{padding:6px 8px;vertical-align:middle;white-space:nowrap;}
     <div class="kpi-card"><div class="kpi-bar" id="kb7"></div><div class="kpi-icon" data-editable>🔢</div><div class="kpi-label" data-editable>Trades</div><div class="kpi-value" id="k6">—</div></div>
     <div class="kpi-card"><div class="kpi-bar" id="kb8"></div><div class="kpi-icon" data-editable>⚠️</div><div class="kpi-label" data-editable>Risk Actuel</div><div class="kpi-value" id="k7">—</div></div>
     <div class="kpi-card"><div class="kpi-bar" id="kb9"></div><div class="kpi-icon" data-editable>🔴</div><div class="kpi-label" data-editable>Pire Série</div><div class="kpi-value" id="k8">—</div></div>
+    <div class="kpi-card"><div class="kpi-bar" id="kb10"></div><div class="kpi-icon" data-editable>📉</div><div class="kpi-label" data-editable>Drawdown Max</div><div class="kpi-value" id="k9">—</div></div>
   </div>
 
   <div class="chart-card" style="background:var(--eq-bg)">
@@ -557,6 +580,11 @@ tbody td{padding:6px 8px;vertical-align:middle;white-space:nowrap;}
   <div class="card" style="margin-bottom:14px;">
     <div class="card-header"><div class="card-title" data-editable>ASSISTANT JOURNAL</div></div>
     <div class="card-body">
+      <div class="pc-chat-bar">
+        <button class="pc-icon-btn" onclick="pcOpenConvPanel()" title="Mes conversations">☰</button>
+        <div class="pc-chat-title-bar" id="pcChatTitleBar">Nouvelle conversation</div>
+        <button class="pc-icon-btn" onclick="pcNewConversation()" title="Nouvelle conversation">+</button>
+      </div>
       <div id="pcChatMessages" class="pc-chat-messages"></div>
       <div style="display:flex;gap:8px;margin-top:10px;">
         <input type="text" id="pcQuestion" placeholder="Ex: Quels sont mes points forts ?" style="flex:1;font-size:13px;" onkeydown="if(event.key==='Enter')sendPcMessage()">
@@ -569,10 +597,17 @@ tbody td{padding:6px 8px;vertical-align:middle;white-space:nowrap;}
     <div style="font-family:var(--mono);font-size:9px;color:var(--muted);margin-bottom:10px;" id="pcTimestamp"></div>
     <div id="pcCards" style="display:grid;grid-template-columns:1fr 1fr;gap:12px;"></div>
   </div>
-  <div class="card" style="margin-top:16px;">
-    <div class="card-header"><div class="card-title" data-editable>HISTORIQUE ANALYSES</div></div>
-    <div class="card-body" id="pcHistory"><div style="color:var(--muted);font-size:12px;">Aucune analyse sauvegardée.</div></div>
+</div>
+
+<!-- Panneau latéral des conversations (façon ChatGPT) -->
+<div class="pc-conv-overlay" id="pcConvOverlay" onclick="pcCloseConvPanel()"></div>
+<div class="pc-conv-panel" id="pcConvPanel">
+  <div class="pc-conv-header">
+    <div class="pc-conv-header-title">Conversations</div>
+    <button class="pc-icon-btn" onclick="pcCloseConvPanel()" title="Fermer">✕</button>
   </div>
+  <button class="pc-conv-new" onclick="pcNewConversation()">+ Nouvelle conversation</button>
+  <div class="pc-conv-list" id="pcConvList"></div>
 </div>
 
 <!-- JOURNAL (sans champ Servi) -->
@@ -938,10 +973,15 @@ function computeRiskHistory(){
   let runCap=CAPITAL();
   let highestEq=runCap;
   let appliedSteps=0; // nombre de paliers de -0.5% déjà appliqués pour le drawdown en cours
-  const hist=[{date:'Départ',rp:base,ws:0,ls:0}];
+  // Vrai compteur de séries de gains/pertes consécutifs (indépendant du risk management ci-dessous)
+  let realWS=0,realLS=0,maxRealWS=0,maxRealLS=0;
+  const hist=[{date:'Départ',rp:base,ws:0,ls:0,realWs:0,realLs:0}];
   sorted.forEach(t=>{
     const res=t.res||0;
     runCap+=res;
+    // Vraie série de trades consécutifs gagnants/perdants, sur le résultat réel uniquement
+    if(res>0){realWS++;realLS=0;maxRealWS=Math.max(maxRealWS,realWS);}
+    else if(res<0){realLS++;realWS=0;maxRealLS=Math.max(maxRealLS,realLS);}
     if(smart){
       if(runCap>highestEq){
         // Nouveau plus haut atteint
@@ -971,9 +1011,9 @@ function computeRiskHistory(){
         }
       }
     }
-    hist.push({date:t.date,heure:t.heure||'',rp,ws,ls:ls2});
+    hist.push({date:t.date,heure:t.heure||'',rp,ws,ls:ls2,realWs:realWS,realLs:realLS});
   });
-  return{hist,finalRp:rp,finalWs:ws,finalLs:ls2};
+  return{hist,finalRp:rp,finalWs:ws,finalLs:ls2,finalRealWs:realWS,finalRealLs:realLS,maxRealWs:maxRealWS,maxRealLs:maxRealLS};
 }
 function computeRR(t){const re=Math.max(1,Math.round(CAPITAL()*RBASE()/100));return parseFloat((t.res/re).toFixed(2));}
 function getCurrentCap(){return APP.trades.reduce((s,t)=>s+(t.res||0),CAPITAL());}
@@ -1036,7 +1076,19 @@ function drawRiskChart(period){
     }
   });
 }
-function computeWorstLose(){const s=[...APP.trades].sort((a,b)=>a.date.localeCompare(b.date));let max=0,cur=0;s.forEach(t=>{if(t.res<0){cur++;max=Math.max(max,cur);}else if(t.res>0)cur=0;});return max;}
+function computeWorstLose(){const s=[...APP.trades].sort((a,b)=>a.date.localeCompare(b.date)||(a.heure||'').localeCompare(b.heure||''));let max=0,cur=0;s.forEach(t=>{if(t.res<0){cur++;max=Math.max(max,cur);}else if(t.res>0)cur=0;});return max;}
+// % maximum perdu d'affilée par rapport au plus haut du capital atteint (drawdown max)
+function computeMaxDrawdown(){
+  const s=[...APP.trades].sort((a,b)=>a.date.localeCompare(b.date)||(a.heure||'').localeCompare(b.heure||''));
+  let peak=CAPITAL(),runCap=CAPITAL(),maxDD=0;
+  s.forEach(t=>{
+    runCap+=t.res||0;
+    if(runCap>peak)peak=runCap;
+    const dd=peak>0?(peak-runCap)/peak*100:0;
+    if(dd>maxDD)maxDD=dd;
+  });
+  return maxDD;
+}
 function computePctBefore(tid){const s=[...APP.trades].sort((a,b)=>a.date.localeCompare(b.date)||(a.heure||'').localeCompare(b.heure||''));let cap=CAPITAL();for(const t of s){if(t.id===tid)return(t.res/cap)*100;cap+=(t.res||0);}return 0;}
 
 // ══ NAV ══
@@ -1206,10 +1258,10 @@ function renderModifs(){
   renderPayouts();
   document.getElementById('tglDec').classList.toggle('on',RDEC());
   const smart=SMART();document.getElementById('tglSmart').classList.toggle('on',smart);document.getElementById('smartLbl').textContent=smart?'Activé':'Désactivé';document.getElementById('riskCard').style.display=smart?'':'none';
-  const{finalRp,finalWs,finalLs}=computeRiskHistory();
+  const{finalRp,finalRealWs,finalRealLs}=computeRiskHistory();
   document.getElementById('disp0').textContent=getCurrentCap().toLocaleString('fr-FR')+'€';
   document.getElementById('disp1').textContent=fmtRiskPct(finalRp);document.getElementById('disp2').textContent=getCurrentRiskEur().toLocaleString('fr-FR')+'€';
-  document.getElementById('disp3').textContent=finalWs+' T';document.getElementById('disp4').textContent=finalLs+' T';
+  document.getElementById('disp3').textContent=finalRealWs+' T';document.getElementById('disp4').textContent=finalRealLs+' T';
   const MK=[{key:'paires',label:'Paires / Actifs',cv:'--mt-paires'},{key:'sessions',label:'Sessions',cv:'--mt-sessions'},{key:'confluences',label:'Confluences',cv:'--mt-confluences'},{key:'timeframes',label:'Timeframes',cv:'--mt-timeframes'},{key:'mgmt_opts',label:'Management',cv:'--mt-mgmt'},{key:'reprend_opts',label:'Reprendrais-tu ?',cv:'--mt-reprend'}];
   document.getElementById('modGrid').innerHTML=MK.map(({key,label,cv})=>`
     <div class="mod-col">
@@ -1318,7 +1370,8 @@ function updateKPIs(){
   }
   document.getElementById('k6').textContent=t.length;document.getElementById('k7').textContent=re.toLocaleString('fr-FR')+'€ ('+fmtRiskPct(rp)+')';
   document.getElementById('k8').textContent=worst+' trades';
-  for(let i=1;i<=9;i++){const c=gc(`--kpi${i}`);const bar=document.getElementById('kb'+i);const val=document.getElementById(`k${i-1}`);if(bar)bar.style.background=c;if(val)val.style.color=c;}
+  document.getElementById('k9').textContent=computeMaxDrawdown().toFixed(1)+'%';
+  for(let i=1;i<=10;i++){const c=gc(`--kpi${i}`);const bar=document.getElementById('kb'+i);const val=document.getElementById(`k${i-1}`);if(bar)bar.style.background=c;if(val)val.style.color=c;}
 }
 
 // EQUITY
@@ -1535,8 +1588,8 @@ const TV=[
   {v:'--badge-t-bg',l:'Badge Trades fond',g:'Navigation'},{v:'--badge-t-bd',l:'Badge Trades bord',g:'Navigation'},{v:'--badge-t-tx',l:'Badge Trades texte',g:'Navigation'},
   {v:'--badge-p-bg',l:'Badge P&L fond',g:'Navigation'},{v:'--badge-p-bd',l:'Badge P&L bord',g:'Navigation'},{v:'--badge-p-tx',l:'Badge P&L texte',g:'Navigation'},
   {v:'--badge-r-bg',l:'Badge Risk fond',g:'Navigation'},{v:'--badge-r-bd',l:'Badge Risk bord',g:'Navigation'},{v:'--badge-r-tx',l:'Badge Risk texte',g:'Navigation'},
-  {v:'--kpi1',l:'Barre KPI 1',g:'KPI'},{v:'--kpi2',l:'Barre KPI 2',g:'KPI'},{v:'--kpi3',l:'Barre KPI 3',g:'KPI'},{v:'--kpi4',l:'Barre KPI 4',g:'KPI'},{v:'--kpi5',l:'Barre KPI 5',g:'KPI'},{v:'--kpi6',l:'Barre KPI 6',g:'KPI'},{v:'--kpi7',l:'Barre KPI 7',g:'KPI'},{v:'--kpi8',l:'Barre KPI 8',g:'KPI'},{v:'--kpi9',l:'Barre KPI 9',g:'KPI'},
-  {v:'--auth-bg',l:'Connexion fond',g:'Connexion'},{v:'--auth-title',l:'Connexion titre',g:'Connexion'},{v:'--auth-sub',l:'Connexion sous-titre',g:'Connexion'},{v:'--auth-btn-bg',l:'Bouton continuer fond',g:'Connexion'},{v:'--auth-btn-tx',l:'Bouton continuer texte',g:'Connexion'},{v:'--auth-input-bg',l:'Champ email fond',g:'Connexion'},{v:'--auth-input-bd',l:'Champ email bordure',g:'Connexion'},{v:'--pin-btn-bg',l:'Touche PIN fond',g:'Connexion'},{v:'--pin-btn-bd',l:'Touche PIN bordure',g:'Connexion'},{v:'--pin-btn-tx',l:'Touche PIN texte',g:'Connexion'},{v:'--pin-dot-off',l:'Point PIN inactif',g:'Connexion'},{v:'--pin-dot-on',l:'Point PIN actif',g:'Connexion'},{v:'--btn-p-tx',l:'Bouton texte',g:'Boutons'},{v:'--btn-g-bg',l:'Ghost fond',g:'Boutons'},{v:'--btn-g-bd',l:'Ghost bordure',g:'Boutons'},{v:'--btn-img-bg',l:'Image fond',g:'Boutons'},{v:'--btn-img-bd',l:'Image bordure',g:'Boutons'},{v:'--btn-img-tx',l:'Image texte',g:'Boutons'},{v:'--btn-pin-bg',l:'PIN fond',g:'Boutons'},{v:'--btn-pin-bd',l:'PIN bordure',g:'Boutons'},{v:'--btn-pin-tx',l:'PIN texte',g:'Boutons'},{v:'--btn-deco-bg',l:'Déco fond',g:'Boutons'},{v:'--btn-deco-bd',l:'Déco bordure',g:'Boutons'},{v:'--btn-deco-tx',l:'Déco texte',g:'Boutons'},
+  {v:'--kpi1',l:'Barre KPI 1',g:'KPI'},{v:'--kpi2',l:'Barre KPI 2',g:'KPI'},{v:'--kpi3',l:'Barre KPI 3',g:'KPI'},{v:'--kpi4',l:'Barre KPI 4',g:'KPI'},{v:'--kpi5',l:'Barre KPI 5',g:'KPI'},{v:'--kpi6',l:'Barre KPI 6',g:'KPI'},{v:'--kpi7',l:'Barre KPI 7',g:'KPI'},{v:'--kpi8',l:'Barre KPI 8',g:'KPI'},{v:'--kpi9',l:'Barre KPI 9',g:'KPI'},{v:'--kpi10',l:'Barre KPI 10',g:'KPI'},
+  {v:'--auth-bg',l:'Connexion fond',g:'Connexion'},{v:'--auth-title',l:'Connexion titre',g:'Connexion'},{v:'--auth-sub',l:'Connexion sous-titre',g:'Connexion'},{v:'--auth-btn-bg',l:'Bouton continuer fond',g:'Connexion'},{v:'--auth-btn-tx',l:'Bouton continuer texte',g:'Connexion'},{v:'--auth-input-bg',l:'Champ email fond',g:'Connexion'},{v:'--auth-input-bd',l:'Champ email bordure',g:'Connexion'},{v:'--pin-btn-bg',l:'Touche PIN fond',g:'Connexion'},{v:'--pin-btn-bd',l:'Touche PIN bordure',g:'Connexion'},{v:'--pin-btn-tx',l:'Touche PIN texte',g:'Connexion'},{v:'--pin-dot-off',l:'Point PIN inactif',g:'Connexion'},{v:'--pin-dot-on',l:'Point PIN actif',g:'Connexion'},{v:'--btn-p-bg',l:'Bouton fond',g:'Boutons'},{v:'--btn-p-tx',l:'Bouton texte',g:'Boutons'},{v:'--btn-g-bg',l:'Ghost fond',g:'Boutons'},{v:'--btn-g-bd',l:'Ghost bordure',g:'Boutons'},{v:'--btn-img-bg',l:'Image fond',g:'Boutons'},{v:'--btn-img-bd',l:'Image bordure',g:'Boutons'},{v:'--btn-img-tx',l:'Image texte',g:'Boutons'},{v:'--btn-pin-bg',l:'PIN fond',g:'Boutons'},{v:'--btn-pin-bd',l:'PIN bordure',g:'Boutons'},{v:'--btn-pin-tx',l:'PIN texte',g:'Boutons'},{v:'--btn-deco-bg',l:'Déco fond',g:'Boutons'},{v:'--btn-deco-bd',l:'Déco bordure',g:'Boutons'},{v:'--btn-deco-tx',l:'Déco texte',g:'Boutons'},
   {v:'--tgl-off',l:'Toggle off',g:'Boutons'},{v:'--tgl-on',l:'Toggle on',g:'Boutons'},{v:'--tgl-thumb',l:'Toggle rond',g:'Boutons'},
   {v:'--tag-long-bg',l:'LONG fond',g:'Tags'},{v:'--tag-long-tx',l:'LONG texte',g:'Tags'},{v:'--tag-long-bd',l:'LONG bordure',g:'Tags'},
   {v:'--tag-short-bg',l:'SHORT fond',g:'Tags'},{v:'--tag-short-tx',l:'SHORT texte',g:'Tags'},{v:'--tag-short-bd',l:'SHORT bordure',g:'Tags'},
@@ -2612,7 +2665,7 @@ async function generatePointsCles() {
   const worstDay = byDay.filter(([,d])=>d.pnl<0).sort((a,b)=>a[1].pnl-b[1].pnl);
 
   let maxWS=0,curWS=0,maxLS=0,curLS=0;
-  [...trades].sort((a,b)=>a.date.localeCompare(b.date)).forEach(t=>{
+  [...trades].sort((a,b)=>a.date.localeCompare(b.date)||(a.heure||'').localeCompare(b.heure||'')).forEach(t=>{
     if((t.res||0)>0){curWS++;maxWS=Math.max(maxWS,curWS);curLS=0;}
     else if((t.res||0)<0){curLS++;maxLS=Math.max(maxLS,curLS);curWS=0;}
   });
@@ -2689,26 +2742,153 @@ async function generatePointsCles() {
 }
 
 // ══════════════════════════════════════
-// ASSISTANT JOURNAL — CHAT IA LOCAL
+// ASSISTANT JOURNAL — CHAT IA AVEC CONVERSATIONS MULTIPLES
 // ══════════════════════════════════════
-let pcChatHistory = JSON.parse(localStorage.getItem('tjp_pc_chat')||'[]');
+// Structure stockée : tjp_pc_conversations = [{ id, title, messages: [{role,text}], updatedAt }]
+// tjp_pc_active_conv = id de la conversation actuellement affichée
+
+function pcLoadConversations(){
+  try { return JSON.parse(localStorage.getItem('tjp_pc_conversations') || '[]'); }
+  catch(e) { return []; }
+}
+function pcSaveConversations(convs){
+  localStorage.setItem('tjp_pc_conversations', JSON.stringify(convs));
+}
+function pcGetActiveConvId(){
+  return localStorage.getItem('tjp_pc_active_conv') || null;
+}
+function pcSetActiveConvId(id){
+  localStorage.setItem('tjp_pc_active_conv', id || '');
+}
+
+let pcConversations = pcLoadConversations();
+let pcActiveConvId = pcGetActiveConvId();
+
+// Migration douce : si l'ancien format mono-conversation existe et qu'il n'y a pas encore
+// de conversations dans le nouveau système, on le convertit en première conversation.
+(function pcMigrateOldChat(){
+  const old = localStorage.getItem('tjp_pc_chat');
+  if (old && !pcConversations.length) {
+    try {
+      const oldMsgs = JSON.parse(old).filter(m => !/pc-thinking/.test(m.text));
+      if (oldMsgs.length) {
+        const conv = { id: 'conv-' + Date.now(), title: pcDeriveTitle(oldMsgs), messages: oldMsgs, updatedAt: Date.now() };
+        pcConversations = [conv];
+        pcSaveConversations(pcConversations);
+        pcActiveConvId = conv.id;
+        pcSetActiveConvId(conv.id);
+      }
+    } catch(e) {}
+    localStorage.removeItem('tjp_pc_chat');
+  }
+})();
+
+function pcDeriveTitle(messages){
+  const firstUser = messages.find(m => m.role === 'user');
+  if (!firstUser) return 'Nouvelle conversation';
+  const plain = firstUser.text.replace(/<[^>]+>/g, '').trim();
+  return plain.length > 40 ? plain.slice(0, 40) + '…' : (plain || 'Nouvelle conversation');
+}
+
+function pcGetActiveConv(){
+  return pcConversations.find(c => c.id === pcActiveConvId) || null;
+}
+
+function pcGetActiveMessages(){
+  const conv = pcGetActiveConv();
+  return conv ? conv.messages : [];
+}
+
+function pcUpdateChatTitleBar(){
+  const bar = document.getElementById('pcChatTitleBar');
+  if (!bar) return;
+  const conv = pcGetActiveConv();
+  bar.textContent = conv ? conv.title : 'Nouvelle conversation';
+}
 
 function renderPcChat(){
   const box = document.getElementById('pcChatMessages');
   if(!box) return;
-  if(!pcChatHistory.length){
+  const messages = pcGetActiveMessages();
+  pcUpdateChatTitleBar();
+  if(!messages.length){
     box.innerHTML = '<div class="pc-msg-empty">Pose-moi une question sur tes trades : "Résumé", "Quels sont mes points forts ?", "Quel jour suis-je le plus performant ?", "Mon RR moyen ?", "Que disent mes notes ?"...</div>';
     return;
   }
-  box.innerHTML = pcChatHistory.map(m=>`<div class="pc-msg ${m.role==='user'?'pc-msg-user':'pc-msg-bot'}">${m.text}</div>`).join('');
+  box.innerHTML = messages.map(m=>`<div class="pc-msg ${m.role==='user'?'pc-msg-user':'pc-msg-bot'}">${m.text}</div>`).join('');
   box.scrollTop = box.scrollHeight;
 }
 
 function pcPushMsg(role, text){
-  pcChatHistory.push({role, text});
-  if(pcChatHistory.length > 60) pcChatHistory = pcChatHistory.slice(-60);
-  localStorage.setItem('tjp_pc_chat', JSON.stringify(pcChatHistory));
+  let conv = pcGetActiveConv();
+  if (!conv) {
+    conv = { id: 'conv-' + Date.now(), title: 'Nouvelle conversation', messages: [], updatedAt: Date.now() };
+    pcConversations.unshift(conv);
+    pcActiveConvId = conv.id;
+    pcSetActiveConvId(conv.id);
+  }
+  conv.messages.push({role, text});
+  if (conv.messages.length > 60) conv.messages = conv.messages.slice(-60);
+  if (conv.title === 'Nouvelle conversation') conv.title = pcDeriveTitle(conv.messages);
+  conv.updatedAt = Date.now();
+  pcSaveConversations(pcConversations);
   renderPcChat();
+}
+
+// ─── Gestion du panneau latéral des conversations ───
+function pcOpenConvPanel(){
+  pcRenderConvList();
+  document.getElementById('pcConvOverlay').classList.add('open');
+  document.getElementById('pcConvPanel').classList.add('open');
+}
+function pcCloseConvPanel(){
+  document.getElementById('pcConvOverlay').classList.remove('open');
+  document.getElementById('pcConvPanel').classList.remove('open');
+}
+
+function pcRenderConvList(){
+  const list = document.getElementById('pcConvList');
+  if (!list) return;
+  if (!pcConversations.length) {
+    list.innerHTML = '<div class="pc-conv-empty">Aucune conversation pour le moment.</div>';
+    return;
+  }
+  const sorted = [...pcConversations].sort((a,b) => (b.updatedAt||0) - (a.updatedAt||0));
+  list.innerHTML = sorted.map(c => `
+    <div class="pc-conv-item ${c.id===pcActiveConvId?'active':''}" onclick="pcSelectConversation('${c.id}')">
+      <div class="pc-conv-item-title">${escapeHtml(c.title)}</div>
+      <div class="pc-conv-item-del" onclick="event.stopPropagation();pcDeleteConversation('${c.id}')" title="Supprimer">🗑</div>
+    </div>`).join('');
+}
+
+function pcSelectConversation(id){
+  pcActiveConvId = id;
+  pcSetActiveConvId(id);
+  renderPcChat();
+  pcCloseConvPanel();
+}
+
+function pcNewConversation(){
+  const conv = { id: 'conv-' + Date.now(), title: 'Nouvelle conversation', messages: [], updatedAt: Date.now() };
+  pcConversations.unshift(conv);
+  pcSaveConversations(pcConversations);
+  pcActiveConvId = conv.id;
+  pcSetActiveConvId(conv.id);
+  renderPcChat();
+  pcCloseConvPanel();
+}
+
+function pcDeleteConversation(id){
+  pcConversations = pcConversations.filter(c => c.id !== id);
+  pcSaveConversations(pcConversations);
+  if (pcActiveConvId === id) {
+    // Bascule sur la conversation la plus récente restante, ou repart à vide
+    const next = [...pcConversations].sort((a,b) => (b.updatedAt||0) - (a.updatedAt||0))[0];
+    pcActiveConvId = next ? next.id : null;
+    pcSetActiveConvId(pcActiveConvId);
+    renderPcChat();
+  }
+  pcRenderConvList();
 }
 
 // URL de la fonction Supabase qui fait le pont vers Gemini (clé secrète côté serveur)
@@ -2734,7 +2914,18 @@ function pcPrepareTradesForAI(trades){
   }));
 }
 
-async function pcAskAI(question, trades){
+// Convertit l'historique de chat (avec HTML) en texte brut pour l'IA, en excluant les indicateurs de chargement
+function pcHistoryForAI(history){
+  return (history||[])
+    .filter(m => !/pc-thinking/.test(m.text))
+    .slice(-10) // les derniers échanges suffisent pour le contexte
+    .map(m => ({
+      role: m.role === 'user' ? 'user' : 'assistant',
+      text: m.text.replace(/<br\s*\/?>/gi, '\n').replace(/<[^>]+>/g, '')
+    }));
+}
+
+async function pcAskAI(question, trades, history){
   const res = await fetch(PC_AI_ENDPOINT, {
     method: 'POST',
     headers: {
@@ -2743,7 +2934,8 @@ async function pcAskAI(question, trades){
     },
     body: JSON.stringify({
       question,
-      trades: pcPrepareTradesForAI(trades)
+      trades: pcPrepareTradesForAI(trades),
+      history: pcHistoryForAI(history)
     })
   });
   if(!res.ok) throw new Error('HTTP ' + res.status);
@@ -2758,26 +2950,32 @@ async function sendPcMessage(){
   const q = input.value.trim();
   if(!q) return;
   input.value = '';
+
+  // Capture l'historique AVANT d'ajouter le nouveau message, pour ne pas se citer soi-même
+  const historySnapshot = pcGetActiveMessages().slice();
+
   pcPushMsg('user', escapeHtml(q));
 
   const thinkingId = 'pc-thinking-' + Date.now();
-  pcChatHistory.push({role:'bot', text:`<span id="${thinkingId}" class="pc-thinking">🤔 Réflexion en cours...</span>`});
+  const conv = pcGetActiveConv();
+  conv.messages.push({role:'bot', text:`<span id="${thinkingId}" class="pc-thinking">🤔 Réflexion en cours...</span>`});
   renderPcChat();
 
   const trades = APP.trades || [];
   let answer;
   try {
-    answer = await pcAskAI(q, trades);
+    answer = await pcAskAI(q, trades, historySnapshot);
   } catch(err) {
     console.warn('Agent IA indisponible, bascule sur le moteur local :', err);
     answer = pcAnalyze(q) + '<br><br><span style="opacity:.6;font-size:.85em;">(réponse générée en local, l\'assistant IA est momentanément indisponible)</span>';
   }
 
   // Remplace le message "réflexion en cours" par la vraie réponse
-  const idx = pcChatHistory.findIndex(m => m.text.includes(thinkingId));
+  const idx = conv.messages.findIndex(m => m.text.includes(thinkingId));
   if(idx !== -1){
-    pcChatHistory[idx] = {role:'bot', text: answer};
-    localStorage.setItem('tjp_pc_chat', JSON.stringify(pcChatHistory));
+    conv.messages[idx] = {role:'bot', text: answer};
+    conv.updatedAt = Date.now();
+    pcSaveConversations(pcConversations);
     renderPcChat();
   } else {
     pcPushMsg('bot', answer);
@@ -2787,6 +2985,7 @@ async function sendPcMessage(){
 function escapeHtml(s){
   return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 }
+
 
 // Helper de statistiques par clé (paire, session, tf, conf...)
 function pcStat(arr, key){
