@@ -61,6 +61,7 @@
   --row-hover:rgba(0,229,160,.07);
   --kpi1:#00e5a0;--kpi2:#3b82f6;--kpi3:#8b5cf6;--kpi4:#f59e0b;
   --kpi5:#ec4899;--kpi6:#00e5a0;--kpi7:#64748b;--kpi8:#f59e0b;--kpi9:#ef4444;--kpi10:#ef4444;
+  --pc-positif:#00e5a0;--pc-negatif:#ef4444;
   /* Couleurs SÉPARÉES pour résultats/pourcentages journal */
   --result-pos:#00e5a0;--result-neg:#ef4444;
   --state-capital:#00e5a0;--state-winstreak:#00e5a0;--state-tf:#3b82f6;
@@ -223,6 +224,15 @@ tbody td{padding:6px 8px;vertical-align:middle;white-space:nowrap;}
 .pc-conv-item-del:hover{opacity:1;color:var(--red);background:rgba(255,0,0,.08);}
 .pc-conv-empty{color:var(--muted);font-size:12px;padding:14px;text-align:center;}
 
+/* Toast d'annulation de suppression de trade */
+.undo-toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(20px);background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:10px 14px;display:flex;align-items:center;gap:12px;font-size:13px;color:var(--text);box-shadow:0 4px 16px rgba(0,0,0,.3);z-index:700;opacity:0;pointer-events:none;transition:opacity .25s ease, transform .25s ease;}
+.undo-toast.show{opacity:1;transform:translateX(-50%) translateY(0);pointer-events:auto;}
+.undo-toast-btn{background:none;border:1px solid var(--green);color:var(--green);border-radius:6px;padding:5px 10px;font-size:12px;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;gap:5px;}
+.undo-toast-btn:hover .undo-toast-icon{transform:rotate(-360deg);}
+.undo-toast-btn:active{background:rgba(0,229,160,.1);}
+.undo-hist-btn{display:none;}
+.undo-hist-btn.visible{display:flex;}
+
 /* CALENDAR */
 .cal-outer{display:flex;flex-direction:column;gap:12px;}
 .cal-nav-surface{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:12px 18px;display:flex;align-items:center;justify-content:center;gap:16px;flex-wrap:wrap;}
@@ -346,6 +356,11 @@ tbody td{padding:6px 8px;vertical-align:middle;white-space:nowrap;}
   thead th{font-size:8px;padding:5px 5px;}
   tbody td{padding:5px 5px;}
   .two-col{grid-template-columns:1fr;}
+
+  /* Titre des graphiques toujours visible sur sa propre ligne (evite l'ecrasement par les boutons periode) */
+  .chart-header{flex-direction:column;align-items:flex-start;gap:6px;}
+  .chart-title{width:100%;}
+  .period-btns{width:100%;}
 }
 @media(max-width:400px){
   .kpi-strip{grid-template-columns:repeat(3,1fr);}
@@ -650,7 +665,7 @@ tbody td{padding:6px 8px;vertical-align:middle;white-space:nowrap;}
     </div>
   </div>
   <div class="card">
-    <div class="card-header"><div class="card-title" data-editable>HISTORIQUE <span id="tradeCount"></span></div></div>
+    <div class="card-header"><div class="card-title" data-editable>HISTORIQUE <span id="tradeCount"></span></div><button class="btn btn-g undo-hist-btn" id="undoHistBtn" onclick="undoDeleteTrade()" title="Annuler la dernière suppression" style="font-size:11px;padding:5px 10px;align-items:center;gap:5px;">↺ Annuler suppression</button></div>
     <div class="table-wrap">
       <table>
         <thead><tr><th>Date</th><th>Heure</th><th>Session</th><th>Paire</th><th>Dir.</th><th>TF</th><th>Confluences</th><th>RR Cible</th><th>RR Réalisé</th><th>Résultat</th><th>%</th><th>Mgmt</th><th>Reprend.</th><th>Note</th><th>📷</th><th></th></tr></thead>
@@ -1097,7 +1112,7 @@ function showPage(id,btn){
   document.querySelectorAll('.nav-tab').forEach(t=>t.classList.remove('active'));
   const pg=document.getElementById('page-'+id);if(pg)pg.classList.add('active');
   if(btn)btn.classList.add('active');
-  if(id==='trackrecord'){setTimeout(()=>{refreshAllCharts();renderTop5();},80);}
+  if(id==='trackrecord'){setTimeout(()=>{refreshAllCharts();renderTop5();},150);}
   if(id==='calendrier')renderCalendar();
   if(id==='modifs'){setTimeout(()=>{renderModifs();setupPencil();},50);}
   if(id==='pointscles')renderPcChat();
@@ -1121,7 +1136,51 @@ function addTrade(){markUserAction();
   APP.trades.unshift(t);saveState();renderTable();updateNavBadges();
   document.getElementById('alertSaved').classList.add('show');setTimeout(()=>document.getElementById('alertSaved').classList.remove('show'),2200);resetForm();
 }
-function deleteTrade(id){markUserAction();APP.trades=APP.trades.filter(t=>t.id!==parseInt(id,10));saveState();renderTable();updateNavBadges();clearTimeout(window._pushTimer);window._pushTimer=setTimeout(pushToCloud,0);}
+// Pile d'annulation pour les suppressions de trades (en mémoire, valable pour la session en cours)
+window._deletedTradesStack = window._deletedTradesStack || [];
+function pcUpdateUndoBtnVisibility(){
+  const btn = document.getElementById('undoHistBtn');
+  if (!btn) return;
+  btn.classList.toggle('visible', window._deletedTradesStack.length > 0);
+}
+function deleteTrade(id){
+  markUserAction();
+  const idx = APP.trades.findIndex(t=>t.id===parseInt(id,10));
+  if (idx === -1) return;
+  const removed = APP.trades[idx];
+  window._deletedTradesStack.push({trade: removed, index: idx});
+  if (window._deletedTradesStack.length > 20) window._deletedTradesStack.shift();
+  APP.trades.splice(idx, 1);
+  saveState();renderTable();updateNavBadges();
+  clearTimeout(window._pushTimer);window._pushTimer=setTimeout(pushToCloud,0);
+  pcShowUndoToast();
+  pcUpdateUndoBtnVisibility();
+}
+function undoDeleteTrade(){
+  const last = window._deletedTradesStack.pop();
+  if (!last) return;
+  markUserAction();
+  const insertAt = Math.min(last.index, APP.trades.length);
+  APP.trades.splice(insertAt, 0, last.trade);
+  saveState();renderTable();updateNavBadges();
+  clearTimeout(window._pushTimer);window._pushTimer=setTimeout(pushToCloud,0);
+  const toast = document.getElementById('undoToast');
+  if (toast) toast.classList.remove('show');
+  pcUpdateUndoBtnVisibility();
+}
+function pcShowUndoToast(){
+  let toast = document.getElementById('undoToast');
+  if (!toast) {
+    toast = document.createElement('div');
+    toast.id = 'undoToast';
+    toast.className = 'undo-toast';
+    toast.innerHTML = `<span>Trade supprimé</span><button class="undo-toast-btn" onclick="undoDeleteTrade()" title="Annuler la suppression"><span class="undo-toast-icon" style="display:inline-block;transition:transform .4s ease;">↺</span> Annuler</button>`;
+    document.body.appendChild(toast);
+  }
+  toast.classList.add('show');
+  clearTimeout(window._undoToastTimer);
+  window._undoToastTimer = setTimeout(()=>toast.classList.remove('show'), 6000);
+}
 function resetForm(){['f-date','f-heure','f-paire','f-session','f-dir','f-rrcible','f-res','f-mgmt','f-reprend','f-notes'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});document.querySelectorAll('#tf-wrap .chip,#conf-wrap .chip').forEach(c=>c.classList.remove('sel'));document.getElementById('f-date').value=new Date().toISOString().split('T')[0];initStarPicker('f-stars-picker','f-stars',0);window._formImages=[];renderFormImages();}
 function tagD(v){return v==='LONG'?'<span class="tag tag-long">LONG</span>':v==='SHORT'?'<span class="tag tag-short">SHORT</span>':v||'—';}
 function tagO(v){const m={Oui:'oui',Non:'non','Peut-être':'peut','N/A':'na'};return v?`<span class="tag tag-${m[v]||'na'}">${v}</span>`:'—';}
@@ -1589,6 +1648,7 @@ const TV=[
   {v:'--badge-p-bg',l:'Badge P&L fond',g:'Navigation'},{v:'--badge-p-bd',l:'Badge P&L bord',g:'Navigation'},{v:'--badge-p-tx',l:'Badge P&L texte',g:'Navigation'},
   {v:'--badge-r-bg',l:'Badge Risk fond',g:'Navigation'},{v:'--badge-r-bd',l:'Badge Risk bord',g:'Navigation'},{v:'--badge-r-tx',l:'Badge Risk texte',g:'Navigation'},
   {v:'--kpi1',l:'Barre KPI 1',g:'KPI'},{v:'--kpi2',l:'Barre KPI 2',g:'KPI'},{v:'--kpi3',l:'Barre KPI 3',g:'KPI'},{v:'--kpi4',l:'Barre KPI 4',g:'KPI'},{v:'--kpi5',l:'Barre KPI 5',g:'KPI'},{v:'--kpi6',l:'Barre KPI 6',g:'KPI'},{v:'--kpi7',l:'Barre KPI 7',g:'KPI'},{v:'--kpi8',l:'Barre KPI 8',g:'KPI'},{v:'--kpi9',l:'Barre KPI 9',g:'KPI'},{v:'--kpi10',l:'Barre KPI 10',g:'KPI'},
+{v:'--pc-positif',l:'Points Clés - Positif',g:'Points Clés'},{v:'--pc-negatif',l:'Points Clés - Négatif',g:'Points Clés'},
   {v:'--auth-bg',l:'Connexion fond',g:'Connexion'},{v:'--auth-title',l:'Connexion titre',g:'Connexion'},{v:'--auth-sub',l:'Connexion sous-titre',g:'Connexion'},{v:'--auth-btn-bg',l:'Bouton continuer fond',g:'Connexion'},{v:'--auth-btn-tx',l:'Bouton continuer texte',g:'Connexion'},{v:'--auth-input-bg',l:'Champ email fond',g:'Connexion'},{v:'--auth-input-bd',l:'Champ email bordure',g:'Connexion'},{v:'--pin-btn-bg',l:'Touche PIN fond',g:'Connexion'},{v:'--pin-btn-bd',l:'Touche PIN bordure',g:'Connexion'},{v:'--pin-btn-tx',l:'Touche PIN texte',g:'Connexion'},{v:'--pin-dot-off',l:'Point PIN inactif',g:'Connexion'},{v:'--pin-dot-on',l:'Point PIN actif',g:'Connexion'},{v:'--btn-p-bg',l:'Bouton fond',g:'Boutons'},{v:'--btn-p-tx',l:'Bouton texte',g:'Boutons'},{v:'--btn-g-bg',l:'Ghost fond',g:'Boutons'},{v:'--btn-g-bd',l:'Ghost bordure',g:'Boutons'},{v:'--btn-img-bg',l:'Image fond',g:'Boutons'},{v:'--btn-img-bd',l:'Image bordure',g:'Boutons'},{v:'--btn-img-tx',l:'Image texte',g:'Boutons'},{v:'--btn-pin-bg',l:'PIN fond',g:'Boutons'},{v:'--btn-pin-bd',l:'PIN bordure',g:'Boutons'},{v:'--btn-pin-tx',l:'PIN texte',g:'Boutons'},{v:'--btn-deco-bg',l:'Déco fond',g:'Boutons'},{v:'--btn-deco-bd',l:'Déco bordure',g:'Boutons'},{v:'--btn-deco-tx',l:'Déco texte',g:'Boutons'},
   {v:'--tgl-off',l:'Toggle off',g:'Boutons'},{v:'--tgl-on',l:'Toggle on',g:'Boutons'},{v:'--tgl-thumb',l:'Toggle rond',g:'Boutons'},
   {v:'--tag-long-bg',l:'LONG fond',g:'Tags'},{v:'--tag-long-tx',l:'LONG texte',g:'Tags'},{v:'--tag-long-bd',l:'LONG bordure',g:'Tags'},
@@ -2568,16 +2628,16 @@ function renderPcCards(data) {
 
   // Bloc positifs
   if (data.positifs && data.positifs.length) {
-    html2 += `<div class="card" style="border:1px solid var(--green);margin:0;">
-      <div class="card-header" style="background:rgba(0,229,160,.07);">
-        <div class="card-title" style="color:var(--green)" data-editable>✅ POINTS CLÉS POSITIFS</div>
+    html2 += `<div class="card" style="border:1px solid var(--pc-positif);margin:0;">
+      <div class="card-header" style="background:color-mix(in srgb, var(--pc-positif) 7%, transparent);">
+        <div class="card-title" style="color:var(--pc-positif)" data-editable>✅ POINTS CLÉS POSITIFS</div>
       </div>
       <div class="card-body">
         ${data.positifs.map(item=>`
           <div style="margin-bottom:10px;">
-            <div style="font-family:var(--mono);font-size:10px;color:var(--green);margin-bottom:4px;">${item.titre}</div>
+            <div style="font-family:var(--mono);font-size:10px;color:var(--pc-positif);margin-bottom:4px;">${item.titre}</div>
             ${(item.points||[]).map(p=>`<div style="display:flex;gap:6px;align-items:flex-start;margin-bottom:3px;">
-              <span style="color:var(--green);font-size:10px;margin-top:2px;">▸</span>
+              <span style="color:var(--pc-positif);font-size:10px;margin-top:2px;">▸</span>
               <span style="font-size:12px;color:var(--text);line-height:1.5;">${p}</span>
             </div>`).join('')}
           </div>`).join('')}
@@ -2587,16 +2647,16 @@ function renderPcCards(data) {
 
   // Bloc négatifs
   if (data.negatifs && data.negatifs.length) {
-    html2 += `<div class="card" style="border:1px solid var(--red);margin:0;">
-      <div class="card-header" style="background:rgba(239,68,68,.07);">
-        <div class="card-title" style="color:var(--red)" data-editable>⚠️ POINTS CLÉS À AMÉLIORER</div>
+    html2 += `<div class="card" style="border:1px solid var(--pc-negatif);margin:0;">
+      <div class="card-header" style="background:color-mix(in srgb, var(--pc-negatif) 7%, transparent);">
+        <div class="card-title" style="color:var(--pc-negatif)" data-editable>⚠️ POINTS CLÉS À AMÉLIORER</div>
       </div>
       <div class="card-body">
         ${data.negatifs.map(item=>`
           <div style="margin-bottom:10px;">
-            <div style="font-family:var(--mono);font-size:10px;color:var(--red);margin-bottom:4px;">${item.titre}</div>
+            <div style="font-family:var(--mono);font-size:10px;color:var(--pc-negatif);margin-bottom:4px;">${item.titre}</div>
             ${(item.points||[]).map(p=>`<div style="display:flex;gap:6px;align-items:flex-start;margin-bottom:3px;">
-              <span style="color:var(--red);font-size:10px;margin-top:2px;">▸</span>
+              <span style="color:var(--pc-negatif);font-size:10px;margin-top:2px;">▸</span>
               <span style="font-size:12px;color:var(--text);line-height:1.5;">${p}</span>
             </div>`).join('')}
           </div>`).join('')}
@@ -2615,6 +2675,7 @@ function renderPcCards(data) {
   wrap.innerHTML = html2;
   document.getElementById('pcContent').style.display = 'block';
   document.getElementById('pcStatus').style.display = 'none';
+  applyPencilEdits();
   setupPencil();
 }
 
