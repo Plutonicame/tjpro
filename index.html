@@ -172,7 +172,7 @@ tbody td{padding:6px 8px;vertical-align:middle;white-space:nowrap;}
 .empty-state{text-align:center;padding:28px;color:var(--muted);font-size:13px;}
 
 /* KPI */
-.kpi-strip{display:grid;grid-template-columns:repeat(10,1fr);gap:1px;background:var(--border);margin-bottom:16px;border-radius:8px;overflow:hidden;}
+.kpi-strip{display:grid;grid-template-columns:repeat(9,1fr);gap:1px;background:var(--border);margin-bottom:16px;border-radius:8px;overflow:hidden;}
 .kpi-card{background:var(--card);padding:11px 9px 10px;position:relative;}
 .kpi-bar{position:absolute;bottom:0;left:0;right:0;height:3px;}
 .kpi-icon{font-size:16px;margin-bottom:2px;display:block;}
@@ -323,7 +323,7 @@ tbody td{padding:6px 8px;vertical-align:middle;white-space:nowrap;}
   .nav-mobile{display:none;}
   .hamburger{display:none;}
   .two-col{grid-template-columns:1fr 1fr;}
-  .kpi-strip{grid-template-columns:repeat(10,1fr);}
+  .kpi-strip{grid-template-columns:repeat(9,1fr);}
 }
 @media(max-width:1100px){
   /* ── MOBILE / ÉCRAN VERTICAL ── */
@@ -520,8 +520,7 @@ tbody td{padding:6px 8px;vertical-align:middle;white-space:nowrap;}
     <div class="kpi-card"><div class="kpi-bar" id="kb6"></div><div class="kpi-icon" data-editable>💸</div><div class="kpi-label" data-editable>Pay Out</div><div class="kpi-value" id="k5">—</div></div>
     <div class="kpi-card"><div class="kpi-bar" id="kb7"></div><div class="kpi-icon" data-editable>🔢</div><div class="kpi-label" data-editable>Trades</div><div class="kpi-value" id="k6">—</div></div>
     <div class="kpi-card"><div class="kpi-bar" id="kb8"></div><div class="kpi-icon" data-editable>⚠️</div><div class="kpi-label" data-editable>Risk Actuel</div><div class="kpi-value" id="k7">—</div></div>
-    <div class="kpi-card"><div class="kpi-bar" id="kb9"></div><div class="kpi-icon" data-editable>🔴</div><div class="kpi-label" data-editable>Pire Série</div><div class="kpi-value" id="k8">—</div></div>
-    <div class="kpi-card"><div class="kpi-bar" id="kb10"></div><div class="kpi-icon" data-editable>📉</div><div class="kpi-label" data-editable>Drawdown Max</div><div class="kpi-value" id="k9">—</div></div>
+    <div class="kpi-card"><div class="kpi-bar" id="kb9"></div><div class="kpi-icon" data-editable>📉</div><div class="kpi-label" data-editable>Drawdown Max</div><div class="kpi-value" id="k8">—</div></div>
   </div>
 
   <div class="chart-card" style="background:var(--eq-bg)">
@@ -540,7 +539,7 @@ tbody td{padding:6px 8px;vertical-align:middle;white-space:nowrap;}
         <button class="pbtn" data-chart="pnl" data-p="mois">MOIS</button>
         <button class="pbtn" data-chart="pnl" data-p="trimestre">TRIM</button>
         <button class="pbtn" data-chart="pnl" data-p="annee">AN</button>
-        <button class="pbtn" data-chart="pnl" data-p="tout">TOUT</button>
+        <button class="pbtn active" data-chart="pnl" data-p="tout">TOUT</button>
       </div>
     </div>
     <div class="chart-body" style="height:220px"><canvas id="cPnl"></canvas></div>
@@ -639,6 +638,11 @@ tbody td{padding:6px 8px;vertical-align:middle;white-space:nowrap;}
         <div class="fg"><label data-editable>Paire / Actif</label><select id="f-paire"></select></div>
         <div class="fg"><label data-editable>Direction</label><select id="f-dir"><option value="">—</option><option>LONG</option><option>SHORT</option></select></div>
         <div class="fg"><label data-editable>RR Cible</label><input type="number" id="f-rrcible" placeholder="2.0" step="0.1"></div>
+        <div class="fg">
+          <label data-editable>RR Pris auto</label>
+          <div class="tgl-track" id="f-tglRrAuto" onclick="toggleFormRrAuto('f')" style="margin-top:4px;"><div class="tgl-thumb"></div></div>
+        </div>
+        <div class="fg" id="f-rrpris-group" style="display:none;"><label data-editable>RR Pris</label><input type="number" id="f-rrpris" placeholder="2.0" step="0.1"></div>
         <div class="fg"><label data-editable>Résultat (€)</label><input type="number" id="f-res" placeholder="150 ou -80"></div>
         <div class="fg"><label data-editable>Management</label><select id="f-mgmt"></select></div>
         <div class="fg"><label data-editable>Reprendrais-tu ?</label><select id="f-reprend"></select></div>
@@ -1030,7 +1034,7 @@ function computeRiskHistory(){
   });
   return{hist,finalRp:rp,finalWs:ws,finalLs:ls2,finalRealWs:realWS,finalRealLs:realLS,maxRealWs:maxRealWS,maxRealLs:maxRealLS};
 }
-function computeRR(t){const re=Math.max(1,Math.round(CAPITAL()*RBASE()/100));return parseFloat((t.res/re).toFixed(2));}
+function computeRR(t){if(t&&t.rrAuto===false&&typeof t.rrPris==='number'&&t.rrPris!==0){return t.rrPris;}const re=Math.max(1,Math.round(CAPITAL()*RBASE()/100));return parseFloat((t.res/re).toFixed(2));}
 function getCurrentCap(){return APP.trades.reduce((s,t)=>s+(t.res||0),CAPITAL());}
 function getCurrentRiskPct(){return computeRiskHistory().finalRp;}
 function getCurrentRiskEur(){return Math.round(getCurrentCap()*getCurrentRiskPct()/100*100)/100;}
@@ -1131,7 +1135,8 @@ function addTrade(){markUserAction();
   const g=id=>(document.getElementById(id)||{}).value||'';
   const tfs=Array.from(document.querySelectorAll('#tf-wrap .chip.sel')).map(c=>c.dataset.v).join(',');
   const confs=Array.from(document.querySelectorAll('#conf-wrap .chip.sel')).map(c=>c.dataset.v).join(',');
-  const t={id:APP.nextId++,date:g('f-date').trim(),heure:g('f-heure').trim(),paire:g('f-paire'),session:g('f-session'),conf:confs||'—',tf:tfs||'—',dir:g('f-dir'),rrCible:parseFloat(g('f-rrcible'))||0,res:parseFloat(g('f-res'))||0,mgmt:g('f-mgmt'),reprend:g('f-reprend'),notes:g('f-notes'),stars:parseFloat(g('f-stars'))||0,images:[]};
+  const fRrAutoOn=document.getElementById('f-tglRrAuto')?.classList.contains('on');
+  const t={id:APP.nextId++,date:g('f-date').trim(),heure:g('f-heure').trim(),paire:g('f-paire'),session:g('f-session'),conf:confs||'—',tf:tfs||'—',dir:g('f-dir'),rrCible:parseFloat(g('f-rrcible'))||0,rrAuto:fRrAutoOn!==false,rrPris:parseFloat(g('f-rrpris'))||0,res:parseFloat(g('f-res'))||0,mgmt:g('f-mgmt'),reprend:g('f-reprend'),notes:g('f-notes'),stars:parseFloat(g('f-stars'))||0,images:[]};
   if(!t.date){alert('Date obligatoire.');return;}
   APP.trades.unshift(t);saveState();renderTable();updateNavBadges();
   document.getElementById('alertSaved').classList.add('show');setTimeout(()=>document.getElementById('alertSaved').classList.remove('show'),2200);resetForm();
@@ -1181,7 +1186,7 @@ function pcShowUndoToast(){
   clearTimeout(window._undoToastTimer);
   window._undoToastTimer = setTimeout(()=>toast.classList.remove('show'), 6000);
 }
-function resetForm(){['f-date','f-heure','f-paire','f-session','f-dir','f-rrcible','f-res','f-mgmt','f-reprend','f-notes'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});document.querySelectorAll('#tf-wrap .chip,#conf-wrap .chip').forEach(c=>c.classList.remove('sel'));document.getElementById('f-date').value=new Date().toISOString().split('T')[0];initStarPicker('f-stars-picker','f-stars',0);window._formImages=[];renderFormImages();}
+function resetForm(){['f-date','f-heure','f-paire','f-session','f-dir','f-rrcible','f-res','f-mgmt','f-reprend','f-notes','f-rrpris'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});document.querySelectorAll('#tf-wrap .chip,#conf-wrap .chip').forEach(c=>c.classList.remove('sel'));document.getElementById('f-date').value=new Date().toISOString().split('T')[0];initStarPicker('f-stars-picker','f-stars',0);window._formImages=[];renderFormImages();const fTgl=document.getElementById('f-tglRrAuto');if(fTgl){fTgl.classList.add('on');document.getElementById('f-rrpris-group').style.display='none';}}
 function tagD(v){return v==='LONG'?'<span class="tag tag-long">LONG</span>':v==='SHORT'?'<span class="tag tag-short">SHORT</span>':v||'—';}
 function tagO(v){const m={Oui:'oui',Non:'non','Peut-être':'peut','N/A':'na'};return v?`<span class="tag tag-${m[v]||'na'}">${v}</span>`:'—';}
 function fmtR(v){if(v===''||v==null)return'—';return`<span class="${v>=0?'rp':'rn'}">${v>=0?'+':''}${Number(v).toLocaleString('fr-FR')}€</span>`;}
@@ -1279,6 +1284,14 @@ function updateNavBadges(){
 // ══ MODIFS ══
 function toggleDecimal(){const c=RDEC();lss('tj_risk_decimal',!c);document.getElementById('tglDec').classList.toggle('on',!c);renderModifs();updateNavBadges();updateKPIs();if(typeof currentUser!=="undefined"&&currentUser&&!_isSyncing){clearTimeout(window._pushTimer);window._pushTimer=setTimeout(pushToCloud,300);}}
 function toggleSmartRisk(){const c=SMART();lss('tj_smart_risk',!c);document.getElementById('tglSmart').classList.toggle('on',!c);document.getElementById('smartLbl').textContent=!c?'Activé':'Désactivé';document.getElementById('riskCard').style.display=!c?'':'none';renderModifs();updateNavBadges();refreshAllCharts();if(typeof currentUser!=="undefined"&&currentUser&&!_isSyncing){clearTimeout(window._pushTimer);window._pushTimer=setTimeout(pushToCloud,300);}}
+// Toggle RR Pris auto/manuel, par formulaire ('f' pour ajout, 'e' pour édition)
+function toggleFormRrAuto(prefix){
+  const tgl=document.getElementById(prefix+'-tglRrAuto');
+  const group=document.getElementById(prefix+'-rrpris-group');
+  const isOn=tgl.classList.toggle('on');
+  // "on" = auto (calcul automatique) -> on cache le champ manuel
+  group.style.display=isOn?'none':'';
+}
 function saveCapitalRisk(){
   lss('tj_capital',parseFloat(document.getElementById('capInput').value)||10000);
   lss('tj_risk',parseFloat(document.getElementById('riskInput').value)||1);
@@ -1428,9 +1441,8 @@ function updateKPIs(){
    if(k5el){k5el.textContent=(totalPO>0?'-':'')+fr(totalPO)+' €';k5el.style.color=totalPO>0?'var(--gold)':'var(--muted)';}
   }
   document.getElementById('k6').textContent=t.length;document.getElementById('k7').textContent=re.toLocaleString('fr-FR')+'€ ('+fmtRiskPct(rp)+')';
-  document.getElementById('k8').textContent=worst+' trades';
-  document.getElementById('k9').textContent=computeMaxDrawdown().toFixed(1)+'%';
-  for(let i=1;i<=10;i++){const c=gc(`--kpi${i}`);const bar=document.getElementById('kb'+i);const val=document.getElementById(`k${i-1}`);if(bar)bar.style.background=c;if(val)val.style.color=c;}
+  document.getElementById('k8').textContent=worst+' T / '+computeMaxDrawdown().toFixed(1)+'%';
+  for(let i=1;i<=9;i++){const c=gc(`--kpi${i}`);const bar=document.getElementById('kb'+i);const val=document.getElementById(`k${i-1}`);if(bar)bar.style.background=c;if(val)val.style.color=c;}
 }
 
 // EQUITY
@@ -1647,7 +1659,7 @@ const TV=[
   {v:'--badge-t-bg',l:'Badge Trades fond',g:'Navigation'},{v:'--badge-t-bd',l:'Badge Trades bord',g:'Navigation'},{v:'--badge-t-tx',l:'Badge Trades texte',g:'Navigation'},
   {v:'--badge-p-bg',l:'Badge P&L fond',g:'Navigation'},{v:'--badge-p-bd',l:'Badge P&L bord',g:'Navigation'},{v:'--badge-p-tx',l:'Badge P&L texte',g:'Navigation'},
   {v:'--badge-r-bg',l:'Badge Risk fond',g:'Navigation'},{v:'--badge-r-bd',l:'Badge Risk bord',g:'Navigation'},{v:'--badge-r-tx',l:'Badge Risk texte',g:'Navigation'},
-  {v:'--kpi1',l:'Barre KPI 1',g:'KPI'},{v:'--kpi2',l:'Barre KPI 2',g:'KPI'},{v:'--kpi3',l:'Barre KPI 3',g:'KPI'},{v:'--kpi4',l:'Barre KPI 4',g:'KPI'},{v:'--kpi5',l:'Barre KPI 5',g:'KPI'},{v:'--kpi6',l:'Barre KPI 6',g:'KPI'},{v:'--kpi7',l:'Barre KPI 7',g:'KPI'},{v:'--kpi8',l:'Barre KPI 8',g:'KPI'},{v:'--kpi9',l:'Barre KPI 9',g:'KPI'},{v:'--kpi10',l:'Barre KPI 10',g:'KPI'},
+  {v:'--kpi1',l:'Barre KPI 1',g:'KPI'},{v:'--kpi2',l:'Barre KPI 2',g:'KPI'},{v:'--kpi3',l:'Barre KPI 3',g:'KPI'},{v:'--kpi4',l:'Barre KPI 4',g:'KPI'},{v:'--kpi5',l:'Barre KPI 5',g:'KPI'},{v:'--kpi6',l:'Barre KPI 6',g:'KPI'},{v:'--kpi7',l:'Barre KPI 7',g:'KPI'},{v:'--kpi8',l:'Barre KPI 8',g:'KPI'},{v:'--kpi9',l:'Barre KPI 9',g:'KPI'},
 {v:'--pc-positif',l:'Points Clés - Positif',g:'Points Clés'},{v:'--pc-negatif',l:'Points Clés - Négatif',g:'Points Clés'},
   {v:'--auth-bg',l:'Connexion fond',g:'Connexion'},{v:'--auth-title',l:'Connexion titre',g:'Connexion'},{v:'--auth-sub',l:'Connexion sous-titre',g:'Connexion'},{v:'--auth-btn-bg',l:'Bouton continuer fond',g:'Connexion'},{v:'--auth-btn-tx',l:'Bouton continuer texte',g:'Connexion'},{v:'--auth-input-bg',l:'Champ email fond',g:'Connexion'},{v:'--auth-input-bd',l:'Champ email bordure',g:'Connexion'},{v:'--pin-btn-bg',l:'Touche PIN fond',g:'Connexion'},{v:'--pin-btn-bd',l:'Touche PIN bordure',g:'Connexion'},{v:'--pin-btn-tx',l:'Touche PIN texte',g:'Connexion'},{v:'--pin-dot-off',l:'Point PIN inactif',g:'Connexion'},{v:'--pin-dot-on',l:'Point PIN actif',g:'Connexion'},{v:'--btn-p-bg',l:'Bouton fond',g:'Boutons'},{v:'--btn-p-tx',l:'Bouton texte',g:'Boutons'},{v:'--btn-g-bg',l:'Ghost fond',g:'Boutons'},{v:'--btn-g-bd',l:'Ghost bordure',g:'Boutons'},{v:'--btn-img-bg',l:'Image fond',g:'Boutons'},{v:'--btn-img-bd',l:'Image bordure',g:'Boutons'},{v:'--btn-img-tx',l:'Image texte',g:'Boutons'},{v:'--btn-pin-bg',l:'PIN fond',g:'Boutons'},{v:'--btn-pin-bd',l:'PIN bordure',g:'Boutons'},{v:'--btn-pin-tx',l:'PIN texte',g:'Boutons'},{v:'--btn-deco-bg',l:'Déco fond',g:'Boutons'},{v:'--btn-deco-bd',l:'Déco bordure',g:'Boutons'},{v:'--btn-deco-tx',l:'Déco texte',g:'Boutons'},
   {v:'--tgl-off',l:'Toggle off',g:'Boutons'},{v:'--tgl-on',l:'Toggle on',g:'Boutons'},{v:'--tgl-thumb',l:'Toggle rond',g:'Boutons'},
@@ -1749,6 +1761,12 @@ function openEditTrade(id){
   sv('e-heure', t.heure);
   sv('e-res', t.res);
   sv('e-rrcible', t.rrCible);
+  sv('e-rrpris', t.rrPris);
+  const eTgl=document.getElementById('e-tglRrAuto');
+  const eGroup=document.getElementById('e-rrpris-group');
+  const eIsAuto=t.rrAuto!==false;
+  if(eTgl){eTgl.classList.toggle('on',eIsAuto);}
+  if(eGroup){eGroup.style.display=eIsAuto?'none':'';}
   sv('e-notes', t.notes);
   sv('e-stars', t.stars);
   [['e-paire',APP.lists.paires],['e-session',APP.lists.sessions],
@@ -1831,6 +1849,8 @@ function saveEditTrade(){markUserAction();
   t.paire    = document.getElementById('e-paire').value;
   t.dir      = document.getElementById('e-dir').value;
   t.rrCible  = parseFloat(document.getElementById('e-rrcible').value)||0;
+  t.rrAuto   = document.getElementById('e-tglRrAuto')?.classList.contains('on') !== false;
+  t.rrPris   = parseFloat(document.getElementById('e-rrpris').value)||0;
   t.res      = parseFloat(document.getElementById('e-res').value)||0;
   t.mgmt     = document.getElementById('e-mgmt').value;
   t.reprend  = document.getElementById('e-reprend').value;
@@ -1872,6 +1892,11 @@ function saveEditTrade(){markUserAction();
       <div class="fg"><label>Paire / Actif</label><select id="e-paire"></select></div>
       <div class="fg"><label>Direction</label><select id="e-dir"><option value="">—</option><option>LONG</option><option>SHORT</option></select></div>
       <div class="fg"><label>RR Cible</label><input type="number" id="e-rrcible" step="0.1"></div>
+      <div class="fg">
+        <label>RR Pris auto</label>
+        <div class="tgl-track" id="e-tglRrAuto" onclick="toggleFormRrAuto('e')" style="margin-top:4px;"><div class="tgl-thumb"></div></div>
+      </div>
+      <div class="fg" id="e-rrpris-group" style="display:none;"><label>RR Pris</label><input type="number" id="e-rrpris" step="0.1"></div>
       <div class="fg"><label>Résultat (€)</label><input type="number" id="e-res"></div>
       <div class="fg"><label>Management</label><select id="e-mgmt"></select></div>
       <div class="fg"><label>Reprendrais-tu ?</label><select id="e-reprend"></select></div>
