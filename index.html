@@ -140,7 +140,7 @@ body.pencil-mode [data-editable]:hover{outline-color:var(--green);background:rgb
 .fg textarea{resize:vertical;min-height:46px;}
 .fg.span2{grid-column:span 2;}.fg.spanall{grid-column:1/-1;}
 .chip-wrap{display:flex;flex-wrap:wrap;gap:4px;}
-.chip{display:inline-flex;align-items:center;background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:4px 9px;cursor:pointer;font-family:var(--mono);font-size:10px;transition:all .12s;user-select:none;white-space:nowrap;}
+.chip{display:inline-flex;align-items:center;background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:4px 9px;cursor:pointer;font-family:var(--mono);font-size:10px;transition:all .12s;user-select:none;}
 .chip:hover{background:var(--chip-h-bg);border-color:var(--chip-h-bd);color:var(--chip-h-tx);}
 .chip.sel{background:var(--chip-s-bg);border-color:var(--chip-s-bd);color:var(--chip-s-tx);}
 .chip.sel::before{content:'✓ ';}
@@ -640,7 +640,7 @@ tbody td{padding:6px 8px;vertical-align:middle;white-space:nowrap;}
         <div class="fg" style="grid-column:-1;">
           <label data-editable>RR Pris auto</label>
           <div style="display:flex;align-items:center;height:34px;">
-            <div class="tgl-track" id="f-tglRrAuto" onclick="toggleFormRrAuto('f')"><div class="tgl-thumb"></div></div>
+            <div class="tgl-track on" id="f-tglRrAuto" onclick="toggleFormRrAuto('f')"><div class="tgl-thumb"></div></div>
           </div>
         </div>
         <div class="fg"><label data-editable>Paire / Actif</label><select id="f-paire"></select></div>
@@ -650,6 +650,9 @@ tbody td{padding:6px 8px;vertical-align:middle;white-space:nowrap;}
         <div class="fg"><label data-editable>Résultat (€)</label><input type="number" id="f-res" placeholder="150 ou -80"></div>
         <div class="fg"><label data-editable>Management</label><select id="f-mgmt"></select></div>
         <div class="fg"><label data-editable>Reprendrais-tu ?</label><select id="f-reprend"></select></div>
+        <div class="fg span2"><label data-editable>Timeframes</label><div class="chip-wrap" id="tf-wrap"></div></div>
+        <div class="fg spanall"><label data-editable>Confluences</label><div class="chip-wrap" id="conf-wrap"></div></div>
+        <div class="fg spanall"><label data-editable>Notes</label><textarea id="f-notes" placeholder="Setup, émotions..."></textarea></div>
         <div class="fg spanall"><label data-editable>Note ⭐</label>
           <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
             <div class="star-picker" id="f-stars-picker" data-val="0">
@@ -665,9 +668,6 @@ tbody td{padding:6px 8px;vertical-align:middle;white-space:nowrap;}
           </div>
           <div id="f-images-wrap" style="display:flex;flex-wrap:wrap;gap:4px;margin-top:6px;"></div>
         </div>
-        <div class="fg span2"><label data-editable>Timeframes</label><div class="chip-wrap" id="tf-wrap"></div></div>
-        <div class="fg spanall"><label data-editable>Confluences</label><div class="chip-wrap" id="conf-wrap"></div></div>
-        <div class="fg spanall"><label data-editable>Notes</label><textarea id="f-notes" placeholder="Setup, émotions..."></textarea></div>
       </div>
       <button class="btn btn-p" onclick="addTrade()">＋ Ajouter le Trade</button>
     </div>
@@ -1292,9 +1292,13 @@ function toggleSmartRisk(){const c=SMART();lss('tj_smart_risk',!c);document.getE
 function toggleFormRrAuto(prefix){
   const tgl=document.getElementById(prefix+'-tglRrAuto');
   const group=document.getElementById(prefix+'-rrpris-group');
-  const isOn=tgl.classList.toggle('on');
-  // "on" = auto (calcul automatique) -> on cache le champ manuel
-  group.style.display=isOn?'none':'';
+  if(!tgl||!group)return;
+  const wasOn=tgl.classList.contains('on');
+  const nowOn=!wasOn;
+  tgl.classList.toggle('on',nowOn);
+  // "on" = RR Pris auto activé → champ manuel caché
+  // "off" = RR Pris manuel → champ visible
+  group.style.display=nowOn?'none':'';
 }
 function saveCapitalRisk(){
   lss('tj_capital',parseFloat(document.getElementById('capInput').value)||10000);
@@ -1742,6 +1746,9 @@ document.addEventListener('DOMContentLoaded',function(){
   document.getElementById('tglSmart').classList.toggle('on',smart);
   document.getElementById('smartLbl').textContent=smart?'Activé':'Désactivé';
   document.getElementById('riskCard').style.display=smart?'':'none';
+  // Toggle RR Pris auto : toujours activé (ON) au chargement initial
+  const fTgl=document.getElementById('f-tglRrAuto');
+  if(fTgl){fTgl.classList.add('on');const g=document.getElementById('f-rrpris-group');if(g)g.style.display='none';}
   // Charts drawn with a small delay to ensure canvas dimensions are ready
   setTimeout(function(){
     refreshAllCharts();
