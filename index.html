@@ -331,6 +331,7 @@ tbody td{padding:6px 8px;vertical-align:middle;white-space:nowrap;}
   .nav-mobile{display:block;}
   .hamburger{display:flex;align-items:center;}
   .nav-mobile-session.session-badge{font-size:13px;padding:6px 14px;}
+  .rm-config-grid{grid-template-columns:1fr!important;}
   
   /* Calendrier mobile: nav sur une ligne */
   .cal-nav-surface{padding:8px 10px;gap:6px;flex-wrap:nowrap;}
@@ -748,6 +749,83 @@ tbody td{padding:6px 8px;vertical-align:middle;white-space:nowrap;}
     </div>
   </div>
 
+  <div class="card">
+    <div class="card-header"><div class="card-title" data-editable>RISK MANAGEMENT — RÉGLAGES</div></div>
+    <div class="card-body">
+      <div style="font-size:11px;color:var(--muted);margin-bottom:14px;" data-editable>Configure quand et de combien le risk intelligent augmente ou diminue.</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;" class="rm-config-grid">
+
+        <!-- ZONE ÇA MONTE -->
+        <div style="background:var(--surface);border:1px solid var(--green);border-radius:8px;padding:12px;">
+          <div style="font-family:var(--mono);font-size:11px;color:var(--green);margin-bottom:10px;" data-editable>📈 ÇA MONTE</div>
+
+          <div style="margin-bottom:10px;">
+            <label style="font-size:10px;color:var(--muted);display:block;margin-bottom:5px;" data-editable>Déclencheur</label>
+            <select id="rmUpTrigger" onchange="updateRmTriggerUI('up')" style="width:100%;font-size:12px;">
+              <option value="trades">Trades gagnants consécutifs</option>
+              <option value="pct">% de gain sur le compte</option>
+            </select>
+          </div>
+          <div class="fg" id="rmUpTradesGroup" style="margin-bottom:10px;">
+            <label style="font-size:10px;" data-editable>Tous les combien de trades ?</label>
+            <input type="number" id="rmUpTradesVal" min="1" step="1" style="width:100%;font-size:13px;">
+          </div>
+          <div class="fg" id="rmUpPctGroup" style="margin-bottom:10px;display:none;">
+            <label style="font-size:10px;" data-editable>Tous les combien de % de gain ?</label>
+            <input type="number" id="rmUpPctVal" min="0.1" step="0.1" style="width:100%;font-size:13px;">
+          </div>
+
+          <div style="margin-bottom:10px;">
+            <label style="font-size:10px;color:var(--muted);display:block;margin-bottom:5px;" data-editable>Variation du risk</label>
+            <select id="rmUpVarType" style="width:100%;font-size:12px;">
+              <option value="pct">En % de risk</option>
+              <option value="eur">En € de risk</option>
+            </select>
+          </div>
+          <div class="fg">
+            <label style="font-size:10px;" data-editable>De combien ça monte ?</label>
+            <input type="number" id="rmUpVarVal" min="0.01" step="0.1" style="width:100%;font-size:13px;">
+          </div>
+        </div>
+
+        <!-- ZONE ÇA DESCEND -->
+        <div style="background:var(--surface);border:1px solid var(--red);border-radius:8px;padding:12px;">
+          <div style="font-family:var(--mono);font-size:11px;color:var(--red);margin-bottom:10px;" data-editable>📉 ÇA DESCEND</div>
+
+          <div style="margin-bottom:10px;">
+            <label style="font-size:10px;color:var(--muted);display:block;margin-bottom:5px;" data-editable>Déclencheur</label>
+            <select id="rmDownTrigger" onchange="updateRmTriggerUI('down')" style="width:100%;font-size:12px;">
+              <option value="trades">Trades perdants consécutifs</option>
+              <option value="pct">% de drawdown</option>
+            </select>
+          </div>
+          <div class="fg" id="rmDownTradesGroup" style="margin-bottom:10px;display:none;">
+            <label style="font-size:10px;" data-editable>Tous les combien de trades ?</label>
+            <input type="number" id="rmDownTradesVal" min="1" step="1" style="width:100%;font-size:13px;">
+          </div>
+          <div class="fg" id="rmDownPctGroup" style="margin-bottom:10px;">
+            <label style="font-size:10px;" data-editable>Tous les combien de % de drawdown ?</label>
+            <input type="number" id="rmDownPctVal" min="0.1" step="0.1" style="width:100%;font-size:13px;">
+          </div>
+
+          <div style="margin-bottom:10px;">
+            <label style="font-size:10px;color:var(--muted);display:block;margin-bottom:5px;" data-editable>Variation du risk</label>
+            <select id="rmDownVarType" style="width:100%;font-size:12px;">
+              <option value="pct">En % de risk</option>
+              <option value="eur">En € de risk</option>
+            </select>
+          </div>
+          <div class="fg">
+            <label style="font-size:10px;" data-editable>De combien ça descend ?</label>
+            <input type="number" id="rmDownVarVal" min="0.01" step="0.1" style="width:100%;font-size:13px;">
+          </div>
+        </div>
+
+      </div>
+      <button class="btn btn-p" style="margin-top:14px;width:100%;" onclick="saveRmConfig()">SAUVEGARDER LES RÉGLAGES</button>
+    </div>
+  </div>
+
 
 
 
@@ -890,6 +968,23 @@ const RDEC=()=>ls('tj_risk_decimal',false);
 const SMART=()=>ls('tj_smart_risk',true);
 const RMAX=()=>parseFloat(ls('tj_risk_max','10'));
 
+// ══ CONFIG RISK MANAGEMENT PERSONNALISABLE ══
+// Montée : déclencheur 'trades' (X gains consécutifs) ou 'pct' (X% de gain sur le compte)
+const RM_UP_TRIGGER=()=>ls('tj_rm_up_trigger','trades'); // 'trades' | 'pct'
+const RM_UP_TRADES=()=>parseFloat(ls('tj_rm_up_trades','3'));
+const RM_UP_PCT=()=>parseFloat(ls('tj_rm_up_pct','5'));
+// Montée : variation 'pct' (X% de risque) ou 'eur' (X€ de risque)
+const RM_UP_VAR_TYPE=()=>ls('tj_rm_up_var_type','pct'); // 'pct' | 'eur'
+const RM_UP_VAR_VAL=()=>parseFloat(ls('tj_rm_up_var_val','0.5'));
+
+// Descente : déclencheur 'trades' (X pertes consécutives) ou 'pct' (X% de drawdown)
+const RM_DOWN_TRIGGER=()=>ls('tj_rm_down_trigger','pct'); // 'trades' | 'pct'
+const RM_DOWN_TRADES=()=>parseFloat(ls('tj_rm_down_trades','3'));
+const RM_DOWN_PCT=()=>parseFloat(ls('tj_rm_down_pct','5'));
+// Descente : variation 'pct' (X% de risque) ou 'eur' (X€ de risque)
+const RM_DOWN_VAR_TYPE=()=>ls('tj_rm_down_var_type','pct'); // 'pct' | 'eur'
+const RM_DOWN_VAR_VAL=()=>parseFloat(ls('tj_rm_down_var_val','0.5'));
+
 // ══ CLOCKS ══
 function updateClocks(){
   const n=new Date();
@@ -992,16 +1087,32 @@ function confirmAccept(){document.getElementById('confirmModal').classList.remov
 function confirmReject(){document.getElementById('confirmModal').classList.remove('open');confirmCB=null;}
 
 // ══ RISK LOGIC ══
+// Convertit une variation de risque (en % ou en €) en delta de pourcentage, selon le capital actuel
+function rmVarToPct(varType,varVal,runCap){
+  if(varType==='eur'){
+    return runCap>0?(varVal/runCap)*100:0;
+  }
+  return varVal;
+}
+
 function computeRiskHistory(){
   const sorted=[...APP.trades].sort((a,b)=>a.date.localeCompare(b.date)||(a.heure||'').localeCompare(b.heure||''));
   const base=RBASE(),smart=SMART();
   let rp=base,ws=0,ls2=0;
   let runCap=CAPITAL();
   let highestEq=runCap;
-  let appliedSteps=0; // nombre de paliers de -0.5% déjà appliqués pour le drawdown en cours
+  let appliedSteps=0; // nombre de paliers de baisse déjà appliqués pour le drawdown en cours
+  let upRefCap=runCap; // référence pour mesurer le % de gain (mode 'pct' en montée)
+  let upAppliedSteps=0; // nombre de paliers de hausse déjà appliqués depuis upRefCap
   // Vrai compteur de séries de gains/pertes consécutifs (indépendant du risk management ci-dessous)
   let realWS=0,realLS=0,maxRealWS=0,maxRealLS=0;
   const hist=[{date:'Départ',rp:base,ws:0,ls:0,realWs:0,realLs:0}];
+
+  const upTrigger=RM_UP_TRIGGER(),upTrades=RM_UP_TRADES(),upPct=RM_UP_PCT();
+  const upVarType=RM_UP_VAR_TYPE(),upVarVal=RM_UP_VAR_VAL();
+  const downTrigger=RM_DOWN_TRIGGER(),downTrades=RM_DOWN_TRADES(),downPct=RM_DOWN_PCT();
+  const downVarType=RM_DOWN_VAR_TYPE(),downVarVal=RM_DOWN_VAR_VAL();
+
   sorted.forEach(t=>{
     const res=t.res||0;
     runCap+=res;
@@ -1015,25 +1126,60 @@ function computeRiskHistory(){
         highestEq=runCap;
         appliedSteps=0;
         if(wasInDrawdown){
-          // Rattrapage : retour au plus haut après un drawdown → +0.5%
-          rp=Math.min(RMAX(),Math.round((rp+0.5)*100)/100);
+          // Rattrapage : retour au plus haut après un drawdown → on applique une hausse
+          const delta=rmVarToPct(upVarType,upVarVal,runCap);
+          rp=Math.min(RMAX(),Math.round((rp+delta)*100)/100);
           ws=0;
-        } else if(res>0){
-          // Gains consécutifs (hors drawdown) → +0.5% tous les 3 gains
+          upRefCap=runCap;upAppliedSteps=0;
+        } else if(res>0 && upTrigger==='trades'){
+          // Gains consécutifs (hors drawdown) → hausse tous les X gains
           ws++;
-          if(ws%3===0){rp=Math.min(RMAX(),Math.round((rp+0.5)*100)/100);}
+          if(upTrades>0 && ws%upTrades===0){
+            const delta=rmVarToPct(upVarType,upVarVal,runCap);
+            rp=Math.min(RMAX(),Math.round((rp+delta)*100)/100);
+          }
         }
-      } else {
-        // En drawdown (ou égal au plus haut sans le dépasser)
+      } else if(res<0){
+        ws=0; // reset streak de gains sur perte
+      }
+
+      // Déclencheur montée par % de gain : indépendant des plus hauts, basé sur une référence glissante
+      if(upTrigger==='pct' && upPct>0){
+        const gainPct=upRefCap>0?((runCap-upRefCap)/upRefCap)*100:0;
+        const gainSteps=Math.floor(gainPct/upPct);
+        if(gainSteps>upAppliedSteps){
+          const newSteps=gainSteps-upAppliedSteps;
+          for(let _i=0;_i<newSteps;_i++){
+            const delta=rmVarToPct(upVarType,upVarVal,runCap);
+            rp=Math.min(RMAX(),Math.round((rp+delta)*100)/100);
+          }
+          upAppliedSteps=gainSteps;
+        }
+      }
+
+      // Déclencheur descente
+      if(runCap<=highestEq){
         const dd=highestEq>0?((highestEq-runCap)/highestEq)*100:0;
-        const ddSteps=Math.floor(dd/5); // chaque palier de 5% = -0.5%
-        if(ddSteps>appliedSteps){
-          const newSteps=ddSteps-appliedSteps;
-          for(let _i=0;_i<newSteps;_i++) rp=Math.max(0.01,Math.round((rp-0.5)*100)/100);
-          appliedSteps=ddSteps;
-          ws=0;ls2++;
+        if(downTrigger==='pct'){
+          const stepSize=downPct>0?downPct:5;
+          const ddSteps=Math.floor(dd/stepSize);
+          if(ddSteps>appliedSteps){
+            const newSteps=ddSteps-appliedSteps;
+            for(let _i=0;_i<newSteps;_i++){
+              const delta=rmVarToPct(downVarType,downVarVal,runCap);
+              rp=Math.max(0.01,Math.round((rp-delta)*100)/100);
+            }
+            appliedSteps=ddSteps;
+            ls2++;
+            upRefCap=runCap;upAppliedSteps=0; // on repart d'une nouvelle référence de gain après une baisse
+          }
         } else if(res<0){
-          ws=0; // reset streak sur perte
+          // Déclencheur par trades perdants consécutifs
+          ls2++;
+          if(downTrades>0 && ls2%downTrades===0){
+            const delta=rmVarToPct(downVarType,downVarVal,runCap);
+            rp=Math.max(0.01,Math.round((rp-delta)*100)/100);
+          }
         }
       }
     }
@@ -1315,6 +1461,46 @@ function saveCapitalRisk(){
   const lbl=document.getElementById('riskMaxLabel');if(lbl)lbl.textContent=rm;
   renderModifs();updateNavBadges();updateKPIs();refreshAllCharts();
 }
+// Affiche le bon champ (trades ou %) selon le déclencheur choisi, pour la zone 'up' ou 'down'
+function updateRmTriggerUI(zone){
+  const trigger=document.getElementById('rm'+(zone==='up'?'Up':'Down')+'Trigger').value;
+  const tradesGroup=document.getElementById('rm'+(zone==='up'?'Up':'Down')+'TradesGroup');
+  const pctGroup=document.getElementById('rm'+(zone==='up'?'Up':'Down')+'PctGroup');
+  if(tradesGroup)tradesGroup.style.display=trigger==='trades'?'':'none';
+  if(pctGroup)pctGroup.style.display=trigger==='pct'?'':'none';
+}
+function loadRmConfigUI(){
+  document.getElementById('rmUpTrigger').value=RM_UP_TRIGGER();
+  document.getElementById('rmUpTradesVal').value=RM_UP_TRADES();
+  document.getElementById('rmUpPctVal').value=RM_UP_PCT();
+  document.getElementById('rmUpVarType').value=RM_UP_VAR_TYPE();
+  document.getElementById('rmUpVarVal').value=RM_UP_VAR_VAL();
+
+  document.getElementById('rmDownTrigger').value=RM_DOWN_TRIGGER();
+  document.getElementById('rmDownTradesVal').value=RM_DOWN_TRADES();
+  document.getElementById('rmDownPctVal').value=RM_DOWN_PCT();
+  document.getElementById('rmDownVarType').value=RM_DOWN_VAR_TYPE();
+  document.getElementById('rmDownVarVal').value=RM_DOWN_VAR_VAL();
+
+  updateRmTriggerUI('up');
+  updateRmTriggerUI('down');
+}
+function saveRmConfig(){
+  lss('tj_rm_up_trigger',document.getElementById('rmUpTrigger').value);
+  lss('tj_rm_up_trades',parseFloat(document.getElementById('rmUpTradesVal').value)||3);
+  lss('tj_rm_up_pct',parseFloat(document.getElementById('rmUpPctVal').value)||5);
+  lss('tj_rm_up_var_type',document.getElementById('rmUpVarType').value);
+  lss('tj_rm_up_var_val',parseFloat(document.getElementById('rmUpVarVal').value)||0.5);
+
+  lss('tj_rm_down_trigger',document.getElementById('rmDownTrigger').value);
+  lss('tj_rm_down_trades',parseFloat(document.getElementById('rmDownTradesVal').value)||3);
+  lss('tj_rm_down_pct',parseFloat(document.getElementById('rmDownPctVal').value)||5);
+  lss('tj_rm_down_var_type',document.getElementById('rmDownVarType').value);
+  lss('tj_rm_down_var_val',parseFloat(document.getElementById('rmDownVarVal').value)||0.5);
+
+  if(typeof currentUser!=="undefined"&&currentUser&&!_isSyncing){clearTimeout(window._pushTimer);window._pushTimer=setTimeout(pushToCloud,300);}
+  renderModifs();updateNavBadges();updateKPIs();refreshAllCharts();
+}
 function addPayout(){
   const v=parseFloat(document.getElementById('payoutInput').value)||0;
   if(v<=0)return;
@@ -1348,6 +1534,7 @@ function renderModifs(){
   document.getElementById('disp0').textContent=getCurrentCap().toLocaleString('fr-FR')+'€';
   document.getElementById('disp1').textContent=fmtRiskPct(finalRp);document.getElementById('disp2').textContent=getCurrentRiskEur().toLocaleString('fr-FR')+'€';
   document.getElementById('disp3').textContent=finalRealWs+' T';document.getElementById('disp4').textContent=finalRealLs+' T';
+  loadRmConfigUI();
   const MK=[{key:'paires',label:'Paires / Actifs',cv:'--mt-paires'},{key:'sessions',label:'Sessions',cv:'--mt-sessions'},{key:'confluences',label:'Confluences',cv:'--mt-confluences'},{key:'timeframes',label:'Timeframes',cv:'--mt-timeframes'},{key:'mgmt_opts',label:'Management',cv:'--mt-mgmt'},{key:'reprend_opts',label:'Reprendrais-tu ?',cv:'--mt-reprend'}];
   document.getElementById('modGrid').innerHTML=MK.map(({key,label,cv})=>`
     <div class="mod-col">
