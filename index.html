@@ -366,6 +366,8 @@ tbody td{padding:6px 8px;vertical-align:middle;white-space:nowrap;}
   .kpi-strip{grid-template-columns:repeat(3,1fr);}
   .form-grid{grid-template-columns:1fr;}
   .fg.span2,.fg.spanall{grid-column:1/-1;}
+  #tf-wrap,#conf-wrap{display:flex;flex-wrap:wrap;width:100%;}
+  #tf-wrap .chip,#conf-wrap .chip{width:auto;min-width:80px;flex:0 0 auto;}
 }
 
 /* ══ MODE TÉLÉPHONE (≤480px) — polices adaptatives ══ */
@@ -409,6 +411,8 @@ tbody td{padding:6px 8px;vertical-align:middle;white-space:nowrap;}
   .kpi-strip{grid-template-columns:repeat(3,1fr);}
   .form-grid{grid-template-columns:1fr;}
   .fg.span2,.fg.spanall{grid-column:1/-1;}
+  #tf-wrap,#conf-wrap{display:flex;flex-wrap:wrap;width:100%;}
+  #tf-wrap .chip,#conf-wrap .chip{width:auto;min-width:80px;flex:0 0 auto;}
 }
 </style>
 </head>
@@ -629,20 +633,19 @@ tbody td{padding:6px 8px;vertical-align:middle;white-space:nowrap;}
   <div class="page-title" data-editable>Journal de Trading</div>
   <div class="alert" id="alertSaved">✓ Trade ajouté</div>
   <div class="card">
-    <div class="card-header"><div class="card-title" data-editable>NOUVEAU TRADE</div>
-      <button class="btn btn-g" onclick="resetForm()">✕</button>
+    <div class="card-header">
+      <div class="card-title" data-editable>NOUVEAU TRADE</div>
+      <div style="display:flex;align-items:center;gap:8px;">
+        <span style="font-size:10px;color:var(--muted);font-family:var(--mono);white-space:nowrap;" data-editable>RR auto</span>
+        <div class="tgl-track on" id="f-tglRrAuto" onclick="toggleFormRrAuto('f')"><div class="tgl-thumb"></div></div>
+        <button class="btn btn-g" onclick="resetForm()">✕</button>
+      </div>
     </div>
     <div class="card-body">
       <div class="form-grid">
         <div class="fg"><label data-editable>Date</label><input type="date" id="f-date"></div>
         <div class="fg"><label data-editable>Heure</label><input type="time" id="f-heure"></div>
         <div class="fg"><label data-editable>Session</label><select id="f-session"></select></div>
-        <div class="fg" style="grid-column:-1;">
-          <label data-editable>RR Pris auto</label>
-          <div style="display:flex;align-items:center;height:34px;">
-            <div class="tgl-track on" id="f-tglRrAuto" onclick="toggleFormRrAuto('f')"><div class="tgl-thumb"></div></div>
-          </div>
-        </div>
         <div class="fg"><label data-editable>Paire / Actif</label><select id="f-paire"></select></div>
         <div class="fg"><label data-editable>Direction</label><select id="f-dir"><option value="">—</option><option>LONG</option><option>SHORT</option></select></div>
         <div class="fg"><label data-editable>RR Cible</label><input type="number" id="f-rrcible" placeholder="2.0" step="0.1"></div>
@@ -1116,6 +1119,9 @@ function computePctBefore(tid){const s=[...APP.trades].sort((a,b)=>a.date.locale
 
 // ══ NAV ══
 function showPage(id,btn){
+  // Fermer le thème éditeur automatiquement quand on change de page
+  const te=document.getElementById('themeEditor');
+  if(te&&te.style.display!=='none')te.style.display='none';
   document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
   document.querySelectorAll('.nav-tab').forEach(t=>t.classList.remove('active'));
   const pg=document.getElementById('page-'+id);if(pg)pg.classList.add('active');
