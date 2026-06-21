@@ -328,8 +328,6 @@ tbody td{padding:6px 8px;vertical-align:middle;white-space:nowrap;}
 }
 @media(max-width:1100px){
   /* ── MOBILE / ÉCRAN VERTICAL ── */
-  .card,.chart-card{border-color:#0062d2!important;}
-  .card,.chart-card,.card-title,.chart-title,.kpi-label,.fg label,.page-title,.mod-state-label{color:#0062d2!important;}
   .nav-desktop{display:none!important;}
   .nav-mobile{display:block;}
   .hamburger{display:flex;align-items:center;}
@@ -493,7 +491,7 @@ tbody td{padding:6px 8px;vertical-align:middle;white-space:nowrap;}
       <div class="nbadge nb-t" id="navTrades">—</div>
       <div class="nbadge nb-p" id="navPnl">P&L —</div>
       <div class="nbadge nb-r" id="navRisk">Risk —</div>
-      <button onclick="manualSyncSave()" style="background:var(--btn-p-bg);border:1px solid var(--btn-p-bg);border-radius:5px;color:var(--btn-p-tx);font-family:var(--mono);font-size:10px;padding:4px 10px;cursor:pointer;margin-left:6px;" title="Sauvegarder et synchroniser"><span class="deco-emoji">💾</span> Sauvegarder</button>
+      <button onclick="manualSyncSave()" style="background:#0062d2;border:1px solid #0062d2;border-radius:5px;color:#fff;font-family:var(--mono);font-size:10px;padding:4px 10px;cursor:pointer;margin-left:6px;" title="Sauvegarder et synchroniser">Sauvegarder</button>
       <button onclick="resetPin()" style="background:var(--btn-deco-bg);border:1px solid var(--btn-deco-bd);border-radius:5px;color:var(--btn-deco-tx);font-family:var(--mono);font-size:10px;padding:4px 10px;cursor:pointer;margin-left:6px;" title="Déconnexion">⏻</button>
     </div>
   </div>
@@ -2781,7 +2779,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const syncBtn = document.createElement('button');
     syncBtn.className='nav-tab';
     syncBtn.id='mobileSyncBtn';
-    syncBtn.style.cssText='font-size:14px;padding:14px 16px;border:1px solid var(--green);border-radius:6px;text-align:left;color:var(--green);background:none;cursor:pointer;font-family:var(--mono);';
+    syncBtn.style.cssText='font-size:14px;padding:14px 16px;border:1px solid #0062d2;border-radius:6px;text-align:left;color:#0062d2;background:none;cursor:pointer;font-family:var(--mono);';
     syncBtn.textContent='SAUVEGARDER ET SYNCHRONISER';
     syncBtn.onclick=()=>{manualSyncSave();};
     mobileMenu.appendChild(syncBtn);
