@@ -460,6 +460,17 @@ tbody td{padding:6px 8px;vertical-align:middle;white-space:nowrap;}
   </div>
 </div>
 
+<!-- MODALE PIN : suppression de tous les trades -->
+<div class="confirm-modal" id="deleteAllModal">
+  <div class="confirm-box">
+    <h3>⚠ Supprimer tous les trades</h3>
+    <p>Cette action est irréversible. Entre ton code PIN pour confirmer la suppression de <strong id="deleteAllCount">0</strong> trade(s).</p>
+    <input type="password" id="deleteAllPinInput" inputmode="numeric" maxlength="4" placeholder="••••" style="width:100%;text-align:center;font-size:24px;letter-spacing:12px;font-family:var(--mono);padding:10px;margin:14px 0;" autocomplete="off" onkeydown="if(event.key==='Enter')confirmDeleteAllTrades();this.value=this.value.replace(/[^0-9]/g,'').slice(0,4);" oninput="this.value=this.value.replace(/[^0-9]/g,'').slice(0,4);">
+    <p id="deleteAllErr" style="display:none;color:#ef4444;font-size:12px;margin-bottom:10px;">Code PIN incorrect.</p>
+    <div class="btn-row"><button class="btn btn-g" onclick="closeDeleteAllModal()">ANNULER</button><button class="btn btn-d" onclick="confirmDeleteAllTrades()">SUPPRIMER DÉFINITIVEMENT</button></div>
+  </div>
+</div>
+
 <!-- MOBILE MENU -->
 <div class="mobile-menu" id="mobileMenu">
   <button class="mobile-menu-close" onclick="closeMobileMenu()">✕ Fermer</button>
@@ -685,7 +696,12 @@ tbody td{padding:6px 8px;vertical-align:middle;white-space:nowrap;}
     </div>
   </div>
   <div class="card">
-    <div class="card-header"><div class="card-title" data-editable>HISTORIQUE <span id="tradeCount"></span></div><button class="btn btn-g undo-hist-btn" id="undoHistBtn" onclick="undoDeleteTrade()" title="Annuler la dernière suppression" style="font-size:11px;padding:5px 10px;align-items:center;gap:5px;">↺ Annuler suppression</button></div>
+    <div class="card-header"><div class="card-title" data-editable>HISTORIQUE <span id="tradeCount"></span></div>
+      <div style="display:flex;gap:6px;align-items:center;">
+        <button class="btn btn-g undo-hist-btn" id="undoHistBtn" onclick="undoDeleteTrade()" title="Annuler la dernière suppression" style="font-size:11px;padding:5px 10px;align-items:center;gap:5px;">↺ Annuler suppression</button>
+        <button class="btn" onclick="askDeleteAllTrades()" title="Supprimer tous les trades" style="font-size:11px;padding:5px 10px;background:none;color:#ef4444;border:1px solid #ef4444;border-radius:6px;cursor:pointer;"><span class="deco-emoji">🗑</span> Supprimer tous les trades</button>
+      </div>
+    </div>
     <div id="tableScrollTop" style="overflow-x:auto;overflow-y:hidden;height:14px;-webkit-overflow-scrolling:touch;">
       <div id="tableScrollTopInner" style="height:1px;"></div>
     </div>
@@ -966,7 +982,7 @@ function saveState(){
   lss('tj_nextId',APP.nextId);
   if(typeof currentUser !== 'undefined' && currentUser && typeof _isSyncing !== 'undefined' && !_isSyncing && window._userActionHappened) {
     clearTimeout(window._pushTimer);
-    window._pushTimer = setTimeout(function(){ if(typeof pushToCloud==='function') pushToCloud(); }, 300);
+    schedulePush(300);
   }
 }
 // Marquer qu'une action utilisateur a eu lieu (pour éviter push au démarrage)
@@ -1036,7 +1052,7 @@ function togglePencil(){
       if(el.style.fontSize||el.style.color||el.innerHTML)edits[k]={html:el.innerHTML,fs:el.style.fontSize||'',col:el.style.color||''};
     });
     lss('tj_pencil_edits',edits);
-    if(typeof currentUser!=="undefined"&&currentUser&&!_isSyncing){clearTimeout(window._pushTimer);window._pushTimer=setTimeout(pushToCloud,300);}
+    if(typeof currentUser!=="undefined"&&currentUser&&!_isSyncing){schedulePush(300);}
   } else setupPencil();
 }
 function setupPencil(){
@@ -1081,7 +1097,7 @@ function saveOneEdit(el){
   const isDynamic=/^disp[0-9]$/.test(el.id||''); // valeurs calculées en direct : ne jamais figer le texte
   edits[k]={html:isDynamic?undefined:el.innerHTML,fs:el.style.fontSize||'',col:el.style.color||''};
   lss('tj_pencil_edits',edits);
-  if(typeof currentUser!=="undefined"&&currentUser&&!_isSyncing){clearTimeout(window._pushTimer);window._pushTimer=setTimeout(pushToCloud,300);}
+  if(typeof currentUser!=="undefined"&&currentUser&&!_isSyncing){schedulePush(300);}
 }
 function openCPforPencil(){openCP('Couleur texte',pencilColor,hex=>{pencilColor=hex;document.getElementById('pencilColorSwatch').style.background=hex;});}
 function applyPencilStyle(){if(!currentEditEl)return;const sz=document.getElementById('pencilFontSize').value;if(sz)currentEditEl.style.fontSize=sz+'px';currentEditEl.style.color=pencilColor;saveOneEdit(currentEditEl);}
@@ -1338,7 +1354,7 @@ function deleteTrade(id){
   if (window._deletedTradesStack.length > 20) window._deletedTradesStack.shift();
   APP.trades.splice(idx, 1);
   saveState();renderTable();updateNavBadges();
-  clearTimeout(window._pushTimer);window._pushTimer=setTimeout(pushToCloud,0);
+  schedulePush(0);
   pcShowUndoToast();
   pcUpdateUndoBtnVisibility();
 }
@@ -1349,10 +1365,45 @@ function undoDeleteTrade(){
   const insertAt = Math.min(last.index, APP.trades.length);
   APP.trades.splice(insertAt, 0, last.trade);
   saveState();renderTable();updateNavBadges();
-  clearTimeout(window._pushTimer);window._pushTimer=setTimeout(pushToCloud,0);
+  schedulePush(0);
   const toast = document.getElementById('undoToast');
   if (toast) toast.classList.remove('show');
   pcUpdateUndoBtnVisibility();
+}
+
+// ── Suppression de tous les trades, protégée par code PIN ──
+function askDeleteAllTrades(){
+  if (!APP.trades.length) return;
+  document.getElementById('deleteAllCount').textContent = APP.trades.length;
+  document.getElementById('deleteAllPinInput').value = '';
+  document.getElementById('deleteAllErr').style.display = 'none';
+  document.getElementById('deleteAllModal').classList.add('open');
+  setTimeout(() => document.getElementById('deleteAllPinInput').focus(), 100);
+}
+function closeDeleteAllModal(){
+  document.getElementById('deleteAllModal').classList.remove('open');
+}
+function confirmDeleteAllTrades(){
+  const entered = document.getElementById('deleteAllPinInput').value.trim();
+  const stored = currentUser ? localStorage.getItem(pinKey(currentUser.id)) : null;
+  if (!stored || entered !== stored) {
+    document.getElementById('deleteAllErr').style.display = 'block';
+    return;
+  }
+  markUserAction();
+  // On garde une copie pour permettre l'annulation via le système existant
+  APP.trades.forEach((t,i) => {
+    window._deletedTradesStack.push({trade: t, index: i});
+  });
+  if (window._deletedTradesStack.length > 20) {
+    window._deletedTradesStack = window._deletedTradesStack.slice(-20);
+  }
+  APP.trades = [];
+  saveState(); renderTable(); updateNavBadges();
+  schedulePush(0);
+  closeDeleteAllModal();
+  pcUpdateUndoBtnVisibility();
+  showSync('✓ Tous les trades supprimés', '#ef4444');
 }
 function pcShowUndoToast(){
   let toast = document.getElementById('undoToast');
@@ -1481,8 +1532,8 @@ function updateNavBadges(){
 }
 
 // ══ MODIFS ══
-function toggleDecimal(){const c=RDEC();lss('tj_risk_decimal',!c);document.getElementById('tglDec').classList.toggle('on',!c);renderModifs();updateNavBadges();updateKPIs();if(typeof currentUser!=="undefined"&&currentUser&&!_isSyncing){clearTimeout(window._pushTimer);window._pushTimer=setTimeout(pushToCloud,300);}}
-function toggleSmartRisk(){const c=SMART();lss('tj_smart_risk',!c);document.getElementById('tglSmart').classList.toggle('on',!c);document.getElementById('smartLbl').textContent=!c?'Activé':'Désactivé';document.getElementById('riskCard').style.display=!c?'':'none';renderModifs();updateNavBadges();refreshAllCharts();if(typeof currentUser!=="undefined"&&currentUser&&!_isSyncing){clearTimeout(window._pushTimer);window._pushTimer=setTimeout(pushToCloud,300);}}
+function toggleDecimal(){const c=RDEC();lss('tj_risk_decimal',!c);document.getElementById('tglDec').classList.toggle('on',!c);renderModifs();updateNavBadges();updateKPIs();if(typeof currentUser!=="undefined"&&currentUser&&!_isSyncing){schedulePush(300);}}
+function toggleSmartRisk(){const c=SMART();lss('tj_smart_risk',!c);document.getElementById('tglSmart').classList.toggle('on',!c);document.getElementById('smartLbl').textContent=!c?'Activé':'Désactivé';document.getElementById('riskCard').style.display=!c?'':'none';renderModifs();updateNavBadges();refreshAllCharts();if(typeof currentUser!=="undefined"&&currentUser&&!_isSyncing){schedulePush(300);}}
 // Toggle RR Pris auto/manuel, par formulaire ('f' pour ajout, 'e' pour édition)
 function toggleFormRrAuto(prefix){
   const tgl=document.getElementById(prefix+'-tglRrAuto');
@@ -1500,7 +1551,7 @@ function saveCapitalRisk(){
   lss('tj_risk',parseFloat(document.getElementById('riskInput').value)||1);
   const rm=parseFloat(document.getElementById('riskMaxInput').value)||10;
   lss('tj_risk_max',rm);
-  if(typeof currentUser!=="undefined"&&currentUser&&!_isSyncing){clearTimeout(window._pushTimer);window._pushTimer=setTimeout(pushToCloud,300);}
+  if(typeof currentUser!=="undefined"&&currentUser&&!_isSyncing){schedulePush(300);}
   const lbl=document.getElementById('riskMaxLabel');if(lbl)lbl.textContent=rm;
   renderModifs();updateNavBadges();updateKPIs();refreshAllCharts();
 }
@@ -1541,7 +1592,7 @@ function saveRmConfig(){
   lss('tj_rm_down_var_type',document.getElementById('rmDownVarType').value);
   lss('tj_rm_down_var_val',parseFloat(document.getElementById('rmDownVarVal').value)||0.5);
 
-  if(typeof currentUser!=="undefined"&&currentUser&&!_isSyncing){clearTimeout(window._pushTimer);window._pushTimer=setTimeout(pushToCloud,300);}
+  if(typeof currentUser!=="undefined"&&currentUser&&!_isSyncing){schedulePush(300);}
   renderModifs();updateNavBadges();updateKPIs();refreshAllCharts();
 }
 function addPayout(){
@@ -1553,7 +1604,7 @@ function addPayout(){
   document.getElementById('payoutInput').value='';
   renderPayouts();updateNavBadges();updateKPIs();refreshAllCharts();
 }
-function removePayout(i){const payouts=ls('tj_payouts',[]);payouts.splice(i,1);lss('tj_payouts',payouts);renderPayouts();updateNavBadges();updateKPIs();refreshAllCharts();if(typeof currentUser!=="undefined"&&currentUser&&!_isSyncing){clearTimeout(window._pushTimer);window._pushTimer=setTimeout(pushToCloud,300);}}
+function removePayout(i){const payouts=ls('tj_payouts',[]);payouts.splice(i,1);lss('tj_payouts',payouts);renderPayouts();updateNavBadges();updateKPIs();refreshAllCharts();if(typeof currentUser!=="undefined"&&currentUser&&!_isSyncing){schedulePush(300);}}
 function renderPayouts(){
   const payouts=ls('tj_payouts',[]);
   const total=payouts.reduce((s,p)=>s+p.amount,0);
@@ -1585,7 +1636,7 @@ function renderModifs(){
       <div class="mod-list" id="ml-${key}">${(APP.lists[key]||[]).map((item,i)=>`<div class="mod-item"><span class="drag-h">⣿</span><span class="item-tx" data-editable>${item}</span><button class="del-item" onclick="removeListItem('${key}',${i})">×</button></div>`).join('')}</div>
       <div class="mod-add"><input type="text" id="ma-${key}" placeholder="Ajouter..." onkeydown="if(event.key==='Enter')addListItem('${key}')"><button onclick="addListItem('${key}')">+</button></div>
     </div>`).join('');
-  MK.forEach(({key})=>{const el=document.getElementById('ml-'+key);if(el&&window.Sortable){new Sortable(el,{animation:120,handle:'.drag-h',onEnd:evt=>{const list=APP.lists[key];const[m]=list.splice(evt.oldIndex,1);list.splice(evt.newIndex,0,m);saveState();populateSelects();if(currentUser&&!_isSyncing){clearTimeout(window._pushTimer);window._pushTimer=setTimeout(pushToCloud,300);}}});}});
+  MK.forEach(({key})=>{const el=document.getElementById('ml-'+key);if(el&&window.Sortable){new Sortable(el,{animation:120,handle:'.drag-h',onEnd:evt=>{const list=APP.lists[key];const[m]=list.splice(evt.oldIndex,1);list.splice(evt.newIndex,0,m);saveState();populateSelects();if(currentUser&&!_isSyncing){schedulePush(300);}}});}});
   setupPencil(); // re-attacher les listeners dynamiques
   // Compact on mobile
   applyMobileModState();
@@ -1601,8 +1652,8 @@ function applyMobileModState(){
     });
   }
 }
-function addListItem(key){markUserAction();const inp=document.getElementById('ma-'+key);const v=inp.value.trim();if(!v||(APP.lists[key]||[]).includes(v))return;if(!APP.lists[key])APP.lists[key]=[];APP.lists[key].push(v);saveState();populateSelects();renderModifs();inp.value='';if(currentUser&&!_isSyncing){clearTimeout(window._pushTimer);window._pushTimer=setTimeout(pushToCloud,300);}}
-function removeListItem(key,idx){markUserAction();if(!APP.lists[key])return;APP.lists[key].splice(idx,1);saveState();populateSelects();renderModifs();if(currentUser&&!_isSyncing){clearTimeout(window._pushTimer);window._pushTimer=setTimeout(pushToCloud,300);}}
+function addListItem(key){markUserAction();const inp=document.getElementById('ma-'+key);const v=inp.value.trim();if(!v||(APP.lists[key]||[]).includes(v))return;if(!APP.lists[key])APP.lists[key]=[];APP.lists[key].push(v);saveState();populateSelects();renderModifs();inp.value='';if(currentUser&&!_isSyncing){schedulePush(300);}}
+function removeListItem(key,idx){markUserAction();if(!APP.lists[key])return;APP.lists[key].splice(idx,1);saveState();populateSelects();renderModifs();if(currentUser&&!_isSyncing){schedulePush(300);}}
 
 // ══ CALENDRIER ══
 let calD=new Date();calD.setDate(1);
@@ -1963,9 +2014,9 @@ function teOCP(v,l){
     renderTE();
   });
 }
-function applyTheme(){Object.entries(teVals).forEach(([v,c])=>document.documentElement.style.setProperty(v,c));lss('tj_theme_vars',teVals);refreshAllCharts();if(typeof currentUser!=="undefined"&&currentUser&&!_isSyncing){clearTimeout(window._pushTimer);window._pushTimer=setTimeout(pushToCloud,300);}}
+function applyTheme(){Object.entries(teVals).forEach(([v,c])=>document.documentElement.style.setProperty(v,c));lss('tj_theme_vars',teVals);refreshAllCharts();if(typeof currentUser!=="undefined"&&currentUser&&!_isSyncing){schedulePush(300);}}
 function undoTheme(){if(!teHist.length)return;teVals=teHist.pop();renderTE();applyTheme();}
-function askResetTheme(){showConfirm('Réinitialiser','Supprimer toutes les personnalisations ?',()=>{teVals={};lss('tj_theme_vars',{});document.documentElement.removeAttribute('style');renderTE();refreshAllCharts();if(typeof currentUser!=="undefined"&&currentUser&&!_isSyncing){clearTimeout(window._pushTimer);window._pushTimer=setTimeout(pushToCloud,300);}});}
+function askResetTheme(){showConfirm('Réinitialiser','Supprimer toutes les personnalisations ?',()=>{teVals={};lss('tj_theme_vars',{});document.documentElement.removeAttribute('style');renderTE();refreshAllCharts();if(typeof currentUser!=="undefined"&&currentUser&&!_isSyncing){schedulePush(300);}});}
 function loadSavedTheme(){const s=ls('tj_theme_vars',null);if(s){Object.entries(s).forEach(([v,c])=>document.documentElement.style.setProperty(v,c));teVals=s;}}
 
 // ══ INIT ══
@@ -2381,7 +2432,6 @@ async function afterPinValidated() {
       if (!error && data && data.length) {
         _isSyncing = true;
         applyCloudData(data[0]);
-        setTimeout(() => _isSyncing = false, 500);
         pulled = true;
         break;
       }
@@ -2412,8 +2462,6 @@ async function afterPinValidated() {
           if (!localTs || data[0].updated_at > localTs) {
             _isSyncing = true;
             applyCloudData(data[0]);
-            localStorage.setItem('tjp_last_updated_at', data[0].updated_at);
-            setTimeout(() => _isSyncing = false, 500);
             showSync('✓ Mis à jour', '#22c55e');
           }
         }
@@ -2636,11 +2684,13 @@ async function pullFromCloud() {
 }
 
 function applyCloudData(data) {
-  // Ne pas écraser si le cloud a moins de données (protection contre sync inversée)
+  // On applique toujours les données du cloud telles quelles : le timestamp (updated_at)
+  // est la seule source de vérité fiable pour décider quelle version est la plus récente.
+  // L'ancienne protection basée sur "nombre de trades" empêchait les suppressions de se
+  // synchroniser correctement (un pull pouvait ramener des trades qu'on venait de supprimer)
+  // et bloquait aussi les synchronisations légitimes vers le bas (moins de trades = plus récent).
   const cloudTrades = data.trades || [];
-  if(cloudTrades.length >= APP.trades.length || APP.trades.length === 0){
-    APP.trades = cloudTrades;
-  }
+  APP.trades = cloudTrades;
   // Ne pas écraser les listes si celles du cloud sont vides
   if(data.lists) {
     const merged = {...APP.lists};
@@ -2656,7 +2706,18 @@ function applyCloudData(data) {
   if (data.payouts) localStorage.setItem('tj_payouts', data.payouts);
   if (data.theme) {
     localStorage.setItem('tj_theme_vars', data.theme);
-    try { const v=JSON.parse(data.theme); Object.entries(v).forEach(([k,c])=>document.documentElement.style.setProperty(k,c)); } catch(e){}
+    try {
+      const v=JSON.parse(data.theme);
+      Object.entries(v).forEach(([k,c])=>document.documentElement.style.setProperty(k,c));
+      // Met aussi à jour le state en mémoire du theme editor, sinon le panneau
+      // Modifications continue d'afficher l'ancienne couleur même si le CSS a changé.
+      if (typeof teVals !== 'undefined') {
+        teVals = {...teVals, ...v};
+        if (document.getElementById('page-modifs')?.classList.contains('active') && typeof renderTE === 'function') {
+          renderTE();
+        }
+      }
+    } catch(e){}
   }
   if (data.pencil_edits) {
     try {
@@ -2698,6 +2759,18 @@ function applyCloudData(data) {
 // Realtime — reçoit les changements de l'AUTRE appareil seulement
 let _realtimeChannel = null;
 let _isPushing = false; // on est en train de pusher — ignorer le realtime entrant
+
+// Planifie un push vers le cloud, en posant le verrou _isPushing IMMÉDIATEMENT
+// (avant même le délai de debounce) pour empêcher le polling ou le realtime de
+// s'intercaler avec une version périmée pendant qu'on s'apprête à sauvegarder.
+function schedulePush(delay){
+  _isPushing = true;
+  clearTimeout(window._pushTimer);
+  window._pushTimer = setTimeout(() => {
+    if (typeof pushToCloud === 'function') pushToCloud();
+  }, delay);
+}
+
 function startRealtime() {
   if (!currentUser || _realtimeChannel) return;
   _realtimeChannel = sb.channel('tjp_changes_'+currentUser.id)
