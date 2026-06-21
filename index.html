@@ -780,6 +780,18 @@ tbody td{padding:6px 8px;vertical-align:middle;white-space:nowrap;}
     <div class="card-header"><div class="card-title" data-editable>RISK MANAGEMENT — RÉGLAGES</div></div>
     <div class="card-body">
       <div style="font-size:11px;color:var(--muted);margin-bottom:14px;" data-editable>Configure quand et de combien le risk intelligent augmente ou diminue.</div>
+
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:12px;margin-bottom:14px;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;">
+        <div>
+          <div style="font-family:var(--mono);font-size:11px;color:var(--gold);margin-bottom:4px;" data-editable>⚖ RISQUE DE BASE (point de départ)</div>
+          <div style="font-size:10px;color:var(--muted);" data-editable>C'est la ligne de référence : le risk intelligent part de cette valeur, puis monte ou descend selon les règles ci-dessous.</div>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;">
+          <input type="number" id="rmBaseInput" min="0.1" step="0.1" style="width:80px;font-family:var(--mono);font-size:15px;text-align:center;">
+          <span style="font-family:var(--mono);font-size:13px;color:var(--muted);">%</span>
+        </div>
+      </div>
+
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;" class="rm-config-grid">
 
         <!-- ZONE ÇA MONTE -->
@@ -1354,7 +1366,7 @@ function deleteTrade(id){
   if (window._deletedTradesStack.length > 20) window._deletedTradesStack.shift();
   APP.trades.splice(idx, 1);
   saveState();renderTable();updateNavBadges();
-  schedulePush(0);
+  schedulePush(250);
   pcShowUndoToast();
   pcUpdateUndoBtnVisibility();
 }
@@ -1365,7 +1377,7 @@ function undoDeleteTrade(){
   const insertAt = Math.min(last.index, APP.trades.length);
   APP.trades.splice(insertAt, 0, last.trade);
   saveState();renderTable();updateNavBadges();
-  schedulePush(0);
+  schedulePush(250);
   const toast = document.getElementById('undoToast');
   if (toast) toast.classList.remove('show');
   pcUpdateUndoBtnVisibility();
@@ -1400,7 +1412,7 @@ function confirmDeleteAllTrades(){
   }
   APP.trades = [];
   saveState(); renderTable(); updateNavBadges();
-  schedulePush(0);
+  schedulePush(250);
   closeDeleteAllModal();
   pcUpdateUndoBtnVisibility();
   showSync('✓ Tous les trades supprimés', '#ef4444');
@@ -1474,6 +1486,18 @@ function deleteTradeImage(id,idx){
   saveState();viewTradeImages(id);renderTable();
 }
 function renderTable(){
+  // Filet de sécurité : élimine les doublons d'id qui pourraient survenir
+  // en cas d'état incohérent transitoire pendant la synchronisation cloud.
+  const seen=new Set();
+  const dedup=APP.trades.filter(t=>{
+    if(seen.has(t.id))return false;
+    seen.add(t.id);
+    return true;
+  });
+  if(dedup.length!==APP.trades.length){
+    console.warn('Doublons de trades détectés et retirés:', APP.trades.length-dedup.length);
+    APP.trades=dedup;
+  }
   const sorted=[...APP.trades].sort((a,b)=>b.date.localeCompare(a.date)||(b.heure||'').localeCompare(a.heure||''));
   document.getElementById('tradeCount').textContent=`— ${APP.trades.length} trades`;
   document.getElementById('emptyState').style.display=sorted.length?'none':'block';
@@ -1548,7 +1572,9 @@ function toggleFormRrAuto(prefix){
 }
 function saveCapitalRisk(){
   lss('tj_capital',parseFloat(document.getElementById('capInput').value)||10000);
-  lss('tj_risk',parseFloat(document.getElementById('riskInput').value)||1);
+  const riskVal=parseFloat(document.getElementById('riskInput').value)||1;
+  lss('tj_risk',riskVal);
+  const rmBaseEl=document.getElementById('rmBaseInput');if(rmBaseEl)rmBaseEl.value=riskVal;
   const rm=parseFloat(document.getElementById('riskMaxInput').value)||10;
   lss('tj_risk_max',rm);
   if(typeof currentUser!=="undefined"&&currentUser&&!_isSyncing){schedulePush(300);}
@@ -1564,6 +1590,7 @@ function updateRmTriggerUI(zone){
   if(pctGroup)pctGroup.style.display=trigger==='pct'?'':'none';
 }
 function loadRmConfigUI(){
+  document.getElementById('rmBaseInput').value=RBASE();
   document.getElementById('rmUpTrigger').value=RM_UP_TRIGGER();
   document.getElementById('rmUpTradesVal').value=RM_UP_TRADES();
   document.getElementById('rmUpPctVal').value=RM_UP_PCT();
@@ -1580,6 +1607,10 @@ function loadRmConfigUI(){
   updateRmTriggerUI('down');
 }
 function saveRmConfig(){
+  const baseVal=parseFloat(document.getElementById('rmBaseInput').value)||1;
+  lss('tj_risk',baseVal);
+  const riskInputEl=document.getElementById('riskInput');if(riskInputEl)riskInputEl.value=baseVal;
+
   lss('tj_rm_up_trigger',document.getElementById('rmUpTrigger').value);
   lss('tj_rm_up_trades',parseFloat(document.getElementById('rmUpTradesVal').value)||3);
   lss('tj_rm_up_pct',parseFloat(document.getElementById('rmUpPctVal').value)||5);
@@ -2623,9 +2654,11 @@ function pcHideSyncFailureWarning(){
   if (bar) bar.style.display = 'none';
 }
 
+let _pushGeneration = 0;
 async function pushToCloud() {
   if (!currentUser || !currentUser.id) return;
   _isPushing = true;
+  const myGen = ++_pushGeneration; // identifie ce push précis parmi d'éventuels chevauchements
   try { await sb.auth.refreshSession(); } catch(e) {}
   try {
     const data = {
@@ -2647,14 +2680,17 @@ async function pushToCloud() {
     };
     _lastPushTimestamp = data.updated_at;
     const { error } = await sb.from('journal_data').upsert(data, { onConflict: 'user_id' });
+    // Si un push plus récent a démarré pendant que celui-ci était en vol, on ignore
+    // son résultat pour ne pas remettre _isPushing à false trop tôt ni écraser l'état.
+    if (myGen !== _pushGeneration) return;
     if (error) {
       console.error('Erreur upsert journal_data:', error);
       showSync('⚠ '+(error.message||'Erreur sauvegarde'), '#ef4444');
       pcShowSyncFailureWarning(error.message||'Erreur inconnue');
     }
     else { showSync('✓ Sauvegardé', '#22c55e'); localStorage.setItem('tjp_last_updated_at', new Date().toISOString()); pcHideSyncFailureWarning(); }
-  } catch(e) { showSync('⚠ Réseau', '#f59e0b'); }
-  setTimeout(() => { _isPushing = false; }, 500);
+  } catch(e) { if (myGen === _pushGeneration) showSync('⚠ Réseau', '#f59e0b'); }
+  if (myGen === _pushGeneration) setTimeout(() => { _isPushing = false; }, 500);
 }
 let _lastPushTimestamp = null;
 
@@ -2792,7 +2828,16 @@ function stopRealtime() {
   if (_realtimeChannel) { sb.removeChannel(_realtimeChannel); _realtimeChannel = null; }
 }
 
-window.addEventListener('beforeunload', () => { if (currentUser && !_isSyncing) pushToCloud(); });
+window.addEventListener('beforeunload', () => {
+  if (currentUser && !_isSyncing && !_isPushing) pushToCloud();
+});
+// Sur mobile, 'beforeunload' ne se déclenche pas toujours (changement d'app, verrouillage d'écran).
+// 'visibilitychange' est plus fiable pour détecter qu'on quitte l'app sur mobile.
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'hidden' && currentUser && !_isSyncing && !_isPushing) {
+    pushToCloud();
+  }
+});
 
 // ══ STAR PICKER avec demi-étoile ══
 function initStarPicker(pickerId, hiddenId, val) {
