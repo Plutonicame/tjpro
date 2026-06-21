@@ -64,6 +64,7 @@
   --pc-positif:#00e5a0;--pc-negatif:#ef4444;
   --rm-up-border:#00e5a0;--rm-up-text:#00e5a0;--rm-down-border:#ef4444;--rm-down-text:#ef4444;
   --btn-save-bg:#0062d2;--btn-save-bg-mobile:transparent;--btn-save-bd:#0062d2;--btn-save-tx:#fff;--btn-save-tx-mobile:#0062d2;
+  --btn-delall-bg:transparent;--btn-delall-bd:#ef4444;--btn-delall-tx:#ef4444;
   /* Couleurs SÉPARÉES pour résultats/pourcentages journal */
   --result-pos:#00e5a0;--result-neg:#ef4444;
   --state-capital:#00e5a0;--state-winstreak:#00e5a0;--state-tf:#3b82f6;
@@ -465,9 +466,12 @@ tbody td{padding:6px 8px;vertical-align:middle;white-space:nowrap;}
   <div class="confirm-box">
     <h3>⚠ Supprimer tous les trades</h3>
     <p>Cette action est irréversible. Entre ton code PIN pour confirmer la suppression de <strong id="deleteAllCount">0</strong> trade(s).</p>
-    <input type="password" id="deleteAllPinInput" inputmode="numeric" maxlength="4" placeholder="••••" style="width:100%;text-align:center;font-size:24px;letter-spacing:12px;font-family:var(--mono);padding:10px;margin:14px 0;" autocomplete="off" onkeydown="if(event.key==='Enter')confirmDeleteAllTrades();this.value=this.value.replace(/[^0-9]/g,'').slice(0,4);" oninput="this.value=this.value.replace(/[^0-9]/g,'').slice(0,4);">
-    <p id="deleteAllErr" style="display:none;color:#ef4444;font-size:12px;margin-bottom:10px;">Code PIN incorrect.</p>
-    <div class="btn-row"><button class="btn btn-g" onclick="closeDeleteAllModal()">ANNULER</button><button class="btn btn-d" onclick="confirmDeleteAllTrades()">SUPPRIMER DÉFINITIVEMENT</button></div>
+    <div class="pin-dots" id="deleteAllDots" style="justify-content:center;margin:14px auto;">
+      <div class="pin-dot"></div><div class="pin-dot"></div><div class="pin-dot"></div><div class="pin-dot"></div>
+    </div>
+    <p id="deleteAllErr" class="auth-err" style="display:none;">Code PIN incorrect.</p>
+    <div class="pin-pad" id="deleteAllPad" style="margin:10px auto;"></div>
+    <div class="btn-row"><button class="btn btn-g" onclick="closeDeleteAllModal()">ANNULER</button></div>
   </div>
 </div>
 
@@ -696,10 +700,10 @@ tbody td{padding:6px 8px;vertical-align:middle;white-space:nowrap;}
     </div>
   </div>
   <div class="card">
-    <div class="card-header"><div class="card-title" data-editable>HISTORIQUE <span id="tradeCount"></span></div>
+    <div class="card-header"><div class="card-title" data-editable>HISTORIQUE DES TRADES</div>
       <div style="display:flex;gap:6px;align-items:center;">
         <button class="btn btn-g undo-hist-btn" id="undoHistBtn" onclick="undoDeleteTrade()" title="Annuler la dernière suppression" style="font-size:11px;padding:5px 10px;align-items:center;gap:5px;">↺ Annuler suppression</button>
-        <button class="btn" onclick="askDeleteAllTrades()" title="Supprimer tous les trades" style="font-size:11px;padding:5px 10px;background:none;color:#ef4444;border:1px solid #ef4444;border-radius:6px;cursor:pointer;"><span class="deco-emoji">🗑</span> Supprimer tous les trades</button>
+        <button class="btn" onclick="askDeleteAllTrades()" title="Supprimer tous les trades" style="font-size:11px;padding:5px 10px;background:var(--btn-delall-bg);color:var(--btn-delall-tx);border:1px solid var(--btn-delall-bd);border-radius:6px;cursor:pointer;"><span class="deco-emoji">🗑</span> Supprimer tous les trades</button>
       </div>
     </div>
     <div id="tableScrollTop" style="overflow-x:auto;overflow-y:hidden;height:14px;-webkit-overflow-scrolling:touch;">
@@ -1112,7 +1116,7 @@ function saveOneEdit(el){
   if(typeof currentUser!=="undefined"&&currentUser&&!_isSyncing){schedulePush(300);}
 }
 function openCPforPencil(){openCP('Couleur texte',pencilColor,hex=>{pencilColor=hex;document.getElementById('pencilColorSwatch').style.background=hex;});}
-function applyPencilStyle(){if(!currentEditEl)return;const sz=document.getElementById('pencilFontSize').value;if(sz)currentEditEl.style.fontSize=sz+'px';currentEditEl.style.color=pencilColor;saveOneEdit(currentEditEl);}
+function applyPencilStyle(){if(!currentEditEl)return;const sz=document.getElementById('pencilFontSize').value;if(sz){currentEditEl.style.fontSize=sz+'px';currentEditEl.dataset.userFs='1';}currentEditEl.style.color=pencilColor;saveOneEdit(currentEditEl);}
 
 function applyPencilEdits(){
   const edits=ls('tj_pencil_edits',{});
@@ -1120,7 +1124,7 @@ function applyPencilEdits(){
     const k=getEK(el);
     if(edits[k]){
       if(edits[k].html!==undefined&&edits[k].html!==null)el.innerHTML=edits[k].html;
-      if(edits[k].fs)el.style.fontSize=edits[k].fs;
+      if(edits[k].fs){el.style.fontSize=edits[k].fs;el.dataset.userFs='1';}
       if(edits[k].col)el.style.color=edits[k].col;
     }
   });
@@ -1387,21 +1391,23 @@ function undoDeleteTrade(){
 function askDeleteAllTrades(){
   if (!APP.trades.length) return;
   document.getElementById('deleteAllCount').textContent = APP.trades.length;
-  document.getElementById('deleteAllPinInput').value = '';
   document.getElementById('deleteAllErr').style.display = 'none';
   document.getElementById('deleteAllModal').classList.add('open');
-  setTimeout(() => document.getElementById('deleteAllPinInput').focus(), 100);
+  buildPad('deleteAllPad','deleteAllDots',(val,reset) => {
+    const stored = currentUser ? localStorage.getItem(pinKey(currentUser.id)) : null;
+    if (!stored || val !== stored) {
+      const err = document.getElementById('deleteAllErr');
+      err.textContent = 'Code PIN incorrect.'; err.style.display = 'block';
+      reset(true);
+      return;
+    }
+    executeDeleteAllTrades();
+  }, 'deleteAllErr');
 }
 function closeDeleteAllModal(){
   document.getElementById('deleteAllModal').classList.remove('open');
 }
-function confirmDeleteAllTrades(){
-  const entered = document.getElementById('deleteAllPinInput').value.trim();
-  const stored = currentUser ? localStorage.getItem(pinKey(currentUser.id)) : null;
-  if (!stored || entered !== stored) {
-    document.getElementById('deleteAllErr').style.display = 'block';
-    return;
-  }
+function executeDeleteAllTrades(){
   markUserAction();
   // On garde une copie pour permettre l'annulation via le système existant
   APP.trades.forEach((t,i) => {
@@ -1499,7 +1505,7 @@ function renderTable(){
     APP.trades=dedup;
   }
   const sorted=[...APP.trades].sort((a,b)=>b.date.localeCompare(a.date)||(b.heure||'').localeCompare(a.heure||''));
-  document.getElementById('tradeCount').textContent=`— ${APP.trades.length} trades`;
+  const tcEl=document.getElementById('tradeCount');if(tcEl)tcEl.textContent=`— ${APP.trades.length} trades`;
   document.getElementById('emptyState').style.display=sorted.length?'none':'block';
   document.getElementById('tradeTable').innerHTML=sorted.map(t=>`<tr>
     <td style="font-family:var(--mono)">${t.date||'—'}</td>
@@ -1669,6 +1675,7 @@ function renderModifs(){
     </div>`).join('');
   MK.forEach(({key})=>{const el=document.getElementById('ml-'+key);if(el&&window.Sortable){new Sortable(el,{animation:120,handle:'.drag-h',onEnd:evt=>{const list=APP.lists[key];const[m]=list.splice(evt.oldIndex,1);list.splice(evt.newIndex,0,m);saveState();populateSelects();if(currentUser&&!_isSyncing){schedulePush(300);}}});}});
   setupPencil(); // re-attacher les listeners dynamiques
+  applyPencilEdits(); // réappliquer les tailles/couleurs personnalisées (marque dataset.userFs)
   // Compact on mobile
   applyMobileModState();
 }
@@ -1678,8 +1685,9 @@ function applyMobileModState(){
     items.forEach(it=>{
       const lbl=it.querySelector('.mod-state-label');
       const val=it.querySelector('.mod-state-value');
-      if(lbl)lbl.style.fontSize='7px';
-      if(val)val.style.fontSize='11px';
+      // Ne force la taille compacte que si l'utilisateur n'a pas défini sa propre taille via le mode stylo
+      if(lbl&&!lbl.dataset.userFs)lbl.style.fontSize='7px';
+      if(val&&!val.dataset.userFs)val.style.fontSize='11px';
     });
   }
 }
@@ -1989,7 +1997,7 @@ const TV=[
 {v:'--pc-positif',l:'Points Clés - Positif',g:'Points Clés'},{v:'--pc-negatif',l:'Points Clés - Négatif',g:'Points Clés'},
 {v:'--rm-up-border',l:'Risk Mgmt - Bordure (monte)',g:'Risk Management'},{v:'--rm-up-text',l:'Risk Mgmt - Texte (monte)',g:'Risk Management'},{v:'--rm-down-border',l:'Risk Mgmt - Bordure (descend)',g:'Risk Management'},{v:'--rm-down-text',l:'Risk Mgmt - Texte (descend)',g:'Risk Management'},
   {v:'--auth-bg',l:'Connexion fond',g:'Connexion'},{v:'--auth-title',l:'Connexion titre',g:'Connexion'},{v:'--auth-sub',l:'Connexion sous-titre',g:'Connexion'},{v:'--auth-btn-bg',l:'Bouton continuer fond',g:'Connexion'},{v:'--auth-btn-tx',l:'Bouton continuer texte',g:'Connexion'},{v:'--auth-input-bg',l:'Champ email fond',g:'Connexion'},{v:'--auth-input-bd',l:'Champ email bordure',g:'Connexion'},{v:'--pin-btn-bg',l:'Touche PIN fond',g:'Connexion'},{v:'--pin-btn-bd',l:'Touche PIN bordure',g:'Connexion'},{v:'--pin-btn-tx',l:'Touche PIN texte',g:'Connexion'},{v:'--pin-dot-off',l:'Point PIN inactif',g:'Connexion'},{v:'--pin-dot-on',l:'Point PIN actif',g:'Connexion'},{v:'--btn-p-bg',l:'Bouton fond',g:'Boutons'},{v:'--btn-p-tx',l:'Bouton texte',g:'Boutons'},
-{v:'--btn-save-bg',l:'Sauvegarder - fond (PC)',g:'Boutons'},{v:'--btn-save-bg-mobile',l:'Sauvegarder - fond (mobile)',g:'Boutons'},{v:'--btn-save-bd',l:'Sauvegarder - bordure',g:'Boutons'},{v:'--btn-save-tx',l:'Sauvegarder - texte (PC)',g:'Boutons'},{v:'--btn-save-tx-mobile',l:'Sauvegarder - texte (mobile)',g:'Boutons'},{v:'--btn-g-bg',l:'Ghost fond',g:'Boutons'},{v:'--btn-g-bd',l:'Ghost bordure',g:'Boutons'},{v:'--btn-img-bg',l:'Image fond',g:'Boutons'},{v:'--btn-img-bd',l:'Image bordure',g:'Boutons'},{v:'--btn-img-tx',l:'Image texte',g:'Boutons'},{v:'--btn-pin-bg',l:'PIN fond',g:'Boutons'},{v:'--btn-pin-bd',l:'PIN bordure',g:'Boutons'},{v:'--btn-pin-tx',l:'PIN texte',g:'Boutons'},{v:'--btn-deco-bg',l:'Déco fond',g:'Boutons'},{v:'--btn-deco-bd',l:'Déco bordure',g:'Boutons'},{v:'--btn-deco-tx',l:'Déco texte',g:'Boutons'},
+{v:'--btn-save-bg',l:'Sauvegarder - fond (PC)',g:'Boutons'},{v:'--btn-save-bg-mobile',l:'Sauvegarder - fond (mobile)',g:'Boutons'},{v:'--btn-save-bd',l:'Sauvegarder - bordure',g:'Boutons'},{v:'--btn-save-tx',l:'Sauvegarder - texte (PC)',g:'Boutons'},{v:'--btn-save-tx-mobile',l:'Sauvegarder - texte (mobile)',g:'Boutons'},{v:'--btn-delall-bg',l:'Supprimer tout - fond',g:'Boutons'},{v:'--btn-delall-bd',l:'Supprimer tout - bordure',g:'Boutons'},{v:'--btn-delall-tx',l:'Supprimer tout - texte',g:'Boutons'},{v:'--btn-g-bg',l:'Ghost fond',g:'Boutons'},{v:'--btn-g-bd',l:'Ghost bordure',g:'Boutons'},{v:'--btn-img-bg',l:'Image fond',g:'Boutons'},{v:'--btn-img-bd',l:'Image bordure',g:'Boutons'},{v:'--btn-img-tx',l:'Image texte',g:'Boutons'},{v:'--btn-pin-bg',l:'PIN fond',g:'Boutons'},{v:'--btn-pin-bd',l:'PIN bordure',g:'Boutons'},{v:'--btn-pin-tx',l:'PIN texte',g:'Boutons'},{v:'--btn-deco-bg',l:'Déco fond',g:'Boutons'},{v:'--btn-deco-bd',l:'Déco bordure',g:'Boutons'},{v:'--btn-deco-tx',l:'Déco texte',g:'Boutons'},
   {v:'--tgl-off',l:'Toggle off',g:'Boutons'},{v:'--tgl-on',l:'Toggle on',g:'Boutons'},{v:'--tgl-thumb',l:'Toggle rond',g:'Boutons'},
   {v:'--tag-long-bg',l:'LONG fond',g:'Tags'},{v:'--tag-long-tx',l:'LONG texte',g:'Tags'},{v:'--tag-long-bd',l:'LONG bordure',g:'Tags'},
   {v:'--tag-short-bg',l:'SHORT fond',g:'Tags'},{v:'--tag-short-tx',l:'SHORT texte',g:'Tags'},{v:'--tag-short-bd',l:'SHORT bordure',g:'Tags'},
