@@ -770,11 +770,11 @@ tbody td{padding:6px 8px;vertical-align:middle;white-space:nowrap;}
       <div style="background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:12px;margin-top:12px;">
         <div style="font-family:var(--mono);font-size:8px;color:var(--muted);margin-bottom:9px;" data-editable>ÉTAT ACTUEL</div>
         <div style="display:flex;gap:10px;flex-wrap:wrap;">
-          <div class="mod-state-item"><div class="mod-state-label" style="font-size:9px;color:var(--muted)" data-editable>Capital actuel</div><div class="mod-state-value" style="font-family:var(--mono);font-size:15px;color:var(--state-capital)" id="disp0" data-editable>—</div></div>
-          <div class="mod-state-item"><div class="mod-state-label" style="font-size:9px;color:var(--muted)" data-editable>Risk %</div><div class="mod-state-value" style="font-family:var(--mono);font-size:15px;color:var(--gold)" id="disp1" data-editable>—</div></div>
-          <div class="mod-state-item"><div class="mod-state-label" style="font-size:9px;color:var(--muted)" data-editable>Risk €/trade</div><div class="mod-state-value" style="font-family:var(--mono);font-size:15px;color:var(--risk-euro-tx)" id="disp2" data-editable>—</div></div>
-          <div class="mod-state-item"><div class="mod-state-label" style="font-size:9px;color:var(--muted)" data-editable>Série gain</div><div class="mod-state-value" style="font-family:var(--mono);font-size:15px;color:var(--state-winstreak)" id="disp3" data-editable>—</div></div>
-          <div class="mod-state-item"><div class="mod-state-label" style="font-size:9px;color:var(--muted)" data-editable>Série perte</div><div class="mod-state-value" style="font-family:var(--mono);font-size:15px;color:var(--red)" id="disp4" data-editable>—</div></div>
+          <div class="mod-state-item"><div class="mod-state-label" style="font-size:9px;color:var(--muted)" data-editable>Capital actuel</div><div class="mod-state-value" style="font-family:var(--mono);font-size:15px;color:var(--state-capital)" id="disp0">—</div></div>
+          <div class="mod-state-item"><div class="mod-state-label" style="font-size:9px;color:var(--muted)" data-editable>Risk %</div><div class="mod-state-value" style="font-family:var(--mono);font-size:15px;color:var(--gold)" id="disp1">—</div></div>
+          <div class="mod-state-item"><div class="mod-state-label" style="font-size:9px;color:var(--muted)" data-editable>Risk €/trade</div><div class="mod-state-value" style="font-family:var(--mono);font-size:15px;color:var(--risk-euro-tx)" id="disp2">—</div></div>
+          <div class="mod-state-item"><div class="mod-state-label" style="font-size:9px;color:var(--muted)" data-editable>Série gain</div><div class="mod-state-value" style="font-family:var(--mono);font-size:15px;color:var(--state-winstreak)" id="disp3">—</div></div>
+          <div class="mod-state-item"><div class="mod-state-label" style="font-size:9px;color:var(--muted)" data-editable>Série perte</div><div class="mod-state-value" style="font-family:var(--mono);font-size:15px;color:var(--red)" id="disp4">—</div></div>
         </div>
       </div>
     </div>
@@ -784,17 +784,6 @@ tbody td{padding:6px 8px;vertical-align:middle;white-space:nowrap;}
     <div class="card-header"><div class="card-title" data-editable>RISK MANAGEMENT — RÉGLAGES</div></div>
     <div class="card-body">
       <div style="font-size:11px;color:var(--muted);margin-bottom:14px;" data-editable>Configure quand et de combien le risk intelligent augmente ou diminue.</div>
-
-      <div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:12px;margin-bottom:14px;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;">
-        <div>
-          <div style="font-family:var(--mono);font-size:11px;color:var(--gold);margin-bottom:4px;" data-editable>⚖ RISQUE DE BASE (point de départ)</div>
-          <div style="font-size:10px;color:var(--muted);" data-editable>C'est la ligne de référence : le risk intelligent part de cette valeur, puis monte ou descend selon les règles ci-dessous.</div>
-        </div>
-        <div style="display:flex;align-items:center;gap:8px;">
-          <input type="number" id="rmBaseInput" min="0.1" step="0.1" style="width:80px;font-family:var(--mono);font-size:15px;text-align:center;">
-          <span style="font-family:var(--mono);font-size:13px;color:var(--muted);">%</span>
-        </div>
-      </div>
 
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;" class="rm-config-grid">
 
@@ -1580,7 +1569,6 @@ function saveCapitalRisk(){
   lss('tj_capital',parseFloat(document.getElementById('capInput').value)||10000);
   const riskVal=parseFloat(document.getElementById('riskInput').value)||1;
   lss('tj_risk',riskVal);
-  const rmBaseEl=document.getElementById('rmBaseInput');if(rmBaseEl)rmBaseEl.value=riskVal;
   const rm=parseFloat(document.getElementById('riskMaxInput').value)||10;
   lss('tj_risk_max',rm);
   if(typeof currentUser!=="undefined"&&currentUser&&!_isSyncing){schedulePush(300);}
@@ -1596,7 +1584,6 @@ function updateRmTriggerUI(zone){
   if(pctGroup)pctGroup.style.display=trigger==='pct'?'':'none';
 }
 function loadRmConfigUI(){
-  document.getElementById('rmBaseInput').value=RBASE();
   document.getElementById('rmUpTrigger').value=RM_UP_TRIGGER();
   document.getElementById('rmUpTradesVal').value=RM_UP_TRADES();
   document.getElementById('rmUpPctVal').value=RM_UP_PCT();
@@ -1613,10 +1600,6 @@ function loadRmConfigUI(){
   updateRmTriggerUI('down');
 }
 function saveRmConfig(){
-  const baseVal=parseFloat(document.getElementById('rmBaseInput').value)||1;
-  lss('tj_risk',baseVal);
-  const riskInputEl=document.getElementById('riskInput');if(riskInputEl)riskInputEl.value=baseVal;
-
   lss('tj_rm_up_trigger',document.getElementById('rmUpTrigger').value);
   lss('tj_rm_up_trades',parseFloat(document.getElementById('rmUpTradesVal').value)||3);
   lss('tj_rm_up_pct',parseFloat(document.getElementById('rmUpPctVal').value)||5);
