@@ -62,6 +62,8 @@
   --kpi1:#00e5a0;--kpi2:#3b82f6;--kpi3:#8b5cf6;--kpi4:#f59e0b;
   --kpi5:#ec4899;--kpi6:#00e5a0;--kpi7:#64748b;--kpi8:#f59e0b;--kpi9:#ef4444;--kpi10:#ef4444;
   --pc-positif:#00e5a0;--pc-negatif:#ef4444;
+  --rm-up-border:#00e5a0;--rm-up-text:#00e5a0;--rm-down-border:#ef4444;--rm-down-text:#ef4444;
+  --btn-save-bg:#0062d2;--btn-save-bg-mobile:transparent;--btn-save-bd:#0062d2;--btn-save-tx:#fff;--btn-save-tx-mobile:#0062d2;
   /* Couleurs SÉPARÉES pour résultats/pourcentages journal */
   --result-pos:#00e5a0;--result-neg:#ef4444;
   --state-capital:#00e5a0;--state-winstreak:#00e5a0;--state-tf:#3b82f6;
@@ -491,7 +493,7 @@ tbody td{padding:6px 8px;vertical-align:middle;white-space:nowrap;}
       <div class="nbadge nb-t" id="navTrades">—</div>
       <div class="nbadge nb-p" id="navPnl">P&L —</div>
       <div class="nbadge nb-r" id="navRisk">Risk —</div>
-      <button onclick="manualSyncSave()" style="background:#0062d2;border:1px solid #0062d2;border-radius:5px;color:#fff;font-family:var(--mono);font-size:10px;padding:4px 10px;cursor:pointer;margin-left:6px;" title="Sauvegarder et synchroniser">Sauvegarder</button>
+      <button onclick="manualSyncSave()" style="background:var(--btn-save-bg);border:1px solid var(--btn-save-bd);border-radius:5px;color:var(--btn-save-tx);font-family:var(--mono);font-size:10px;padding:4px 10px;cursor:pointer;margin-left:6px;" title="Sauvegarder et synchroniser">Sauvegarder</button>
       <button onclick="resetPin()" style="background:var(--btn-deco-bg);border:1px solid var(--btn-deco-bd);border-radius:5px;color:var(--btn-deco-tx);font-family:var(--mono);font-size:10px;padding:4px 10px;cursor:pointer;margin-left:6px;" title="Déconnexion">⏻</button>
     </div>
   </div>
@@ -684,7 +686,10 @@ tbody td{padding:6px 8px;vertical-align:middle;white-space:nowrap;}
   </div>
   <div class="card">
     <div class="card-header"><div class="card-title" data-editable>HISTORIQUE <span id="tradeCount"></span></div><button class="btn btn-g undo-hist-btn" id="undoHistBtn" onclick="undoDeleteTrade()" title="Annuler la dernière suppression" style="font-size:11px;padding:5px 10px;align-items:center;gap:5px;">↺ Annuler suppression</button></div>
-    <div class="table-wrap">
+    <div id="tableScrollTop" style="overflow-x:auto;overflow-y:hidden;height:14px;-webkit-overflow-scrolling:touch;">
+      <div id="tableScrollTopInner" style="height:1px;"></div>
+    </div>
+    <div class="table-wrap" id="tableScrollMain">
       <table>
         <thead><tr><th>Date</th><th>Heure</th><th>Session</th><th>Paire</th><th>Dir.</th><th>TF</th><th>Confluences</th><th>RR Cible</th><th>RR Réalisé</th><th>Résultat</th><th>%</th><th>Mgmt</th><th>Reprend.</th><th>Note</th><th>📷</th><th></th></tr></thead>
         <tbody id="tradeTable"></tbody>
@@ -762,8 +767,8 @@ tbody td{padding:6px 8px;vertical-align:middle;white-space:nowrap;}
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;" class="rm-config-grid">
 
         <!-- ZONE ÇA MONTE -->
-        <div style="background:var(--surface);border:1px solid var(--green);border-radius:8px;padding:12px;">
-          <div style="font-family:var(--mono);font-size:11px;color:var(--green);margin-bottom:10px;" data-editable><span class="deco-emoji">📈</span> ÇA MONTE</div>
+        <div style="background:var(--surface);border:1px solid var(--rm-up-border);border-radius:8px;padding:12px;">
+          <div style="font-family:var(--mono);font-size:11px;color:var(--rm-up-text);margin-bottom:10px;" data-editable><span class="deco-emoji">📈</span> ÇA MONTE</div>
 
           <div style="margin-bottom:10px;">
             <label style="font-size:10px;color:var(--muted);display:block;margin-bottom:5px;" data-editable>Déclencheur</label>
@@ -795,8 +800,8 @@ tbody td{padding:6px 8px;vertical-align:middle;white-space:nowrap;}
         </div>
 
         <!-- ZONE ÇA DESCEND -->
-        <div style="background:var(--surface);border:1px solid var(--red);border-radius:8px;padding:12px;">
-          <div style="font-family:var(--mono);font-size:11px;color:var(--red);margin-bottom:10px;" data-editable><span class="deco-emoji">📉</span> ÇA DESCEND</div>
+        <div style="background:var(--surface);border:1px solid var(--rm-down-border);border-radius:8px;padding:12px;">
+          <div style="font-family:var(--mono);font-size:11px;color:var(--rm-down-text);margin-bottom:10px;" data-editable><span class="deco-emoji">📉</span> ÇA DESCEND</div>
 
           <div style="margin-bottom:10px;">
             <label style="font-size:10px;color:var(--muted);display:block;margin-bottom:5px;" data-editable>Déclencheur</label>
@@ -1440,7 +1445,25 @@ function renderTable(){
       <button class="del-btn" onclick="deleteTrade(${t.id})" title="Supprimer"><span class="deco-emoji">🗑</span><span class="deco-emoji-alt">✕</span></button>
     </td>
   </tr>`).join('');
+  syncTableScrollbar();
 }
+// Synchronise la barre de défilement horizontal "du haut" avec le tableau réel,
+// et ajuste sa largeur factice pour qu'elle reflète la largeur réelle scrollable du tableau.
+function syncTableScrollbar(){
+  const top=document.getElementById('tableScrollTop');
+  const topInner=document.getElementById('tableScrollTopInner');
+  const main=document.getElementById('tableScrollMain');
+  if(!top||!topInner||!main)return;
+  const table=main.querySelector('table');
+  if(!table)return;
+  topInner.style.width=table.scrollWidth+'px';
+  if(!top.dataset.bound){
+    top.addEventListener('scroll',()=>{main.scrollLeft=top.scrollLeft;});
+    main.addEventListener('scroll',()=>{top.scrollLeft=main.scrollLeft;});
+    top.dataset.bound='1';
+  }
+}
+window.addEventListener('resize',()=>{if(typeof syncTableScrollbar==='function')syncTableScrollbar();});
 function updateNavBadges(){
   const pnl=APP.trades.reduce((s,t)=>s+(t.res||0),0);
   const tTxt=APP.trades.length+' trades';
@@ -1882,7 +1905,9 @@ const TV=[
   {v:'--badge-r-bg',l:'Badge Risk fond',g:'Navigation'},{v:'--badge-r-bd',l:'Badge Risk bord',g:'Navigation'},{v:'--badge-r-tx',l:'Badge Risk texte',g:'Navigation'},
   {v:'--kpi1',l:'Barre KPI 1',g:'KPI'},{v:'--kpi2',l:'Barre KPI 2',g:'KPI'},{v:'--kpi3',l:'Barre KPI 3',g:'KPI'},{v:'--kpi4',l:'Barre KPI 4',g:'KPI'},{v:'--kpi5',l:'Barre KPI 5',g:'KPI'},{v:'--kpi6',l:'Barre KPI 6',g:'KPI'},{v:'--kpi7',l:'Barre KPI 7',g:'KPI'},{v:'--kpi8',l:'Barre KPI 8',g:'KPI'},{v:'--kpi9',l:'Barre KPI 9',g:'KPI'},
 {v:'--pc-positif',l:'Points Clés - Positif',g:'Points Clés'},{v:'--pc-negatif',l:'Points Clés - Négatif',g:'Points Clés'},
-  {v:'--auth-bg',l:'Connexion fond',g:'Connexion'},{v:'--auth-title',l:'Connexion titre',g:'Connexion'},{v:'--auth-sub',l:'Connexion sous-titre',g:'Connexion'},{v:'--auth-btn-bg',l:'Bouton continuer fond',g:'Connexion'},{v:'--auth-btn-tx',l:'Bouton continuer texte',g:'Connexion'},{v:'--auth-input-bg',l:'Champ email fond',g:'Connexion'},{v:'--auth-input-bd',l:'Champ email bordure',g:'Connexion'},{v:'--pin-btn-bg',l:'Touche PIN fond',g:'Connexion'},{v:'--pin-btn-bd',l:'Touche PIN bordure',g:'Connexion'},{v:'--pin-btn-tx',l:'Touche PIN texte',g:'Connexion'},{v:'--pin-dot-off',l:'Point PIN inactif',g:'Connexion'},{v:'--pin-dot-on',l:'Point PIN actif',g:'Connexion'},{v:'--btn-p-bg',l:'Bouton fond',g:'Boutons'},{v:'--btn-p-tx',l:'Bouton texte',g:'Boutons'},{v:'--btn-g-bg',l:'Ghost fond',g:'Boutons'},{v:'--btn-g-bd',l:'Ghost bordure',g:'Boutons'},{v:'--btn-img-bg',l:'Image fond',g:'Boutons'},{v:'--btn-img-bd',l:'Image bordure',g:'Boutons'},{v:'--btn-img-tx',l:'Image texte',g:'Boutons'},{v:'--btn-pin-bg',l:'PIN fond',g:'Boutons'},{v:'--btn-pin-bd',l:'PIN bordure',g:'Boutons'},{v:'--btn-pin-tx',l:'PIN texte',g:'Boutons'},{v:'--btn-deco-bg',l:'Déco fond',g:'Boutons'},{v:'--btn-deco-bd',l:'Déco bordure',g:'Boutons'},{v:'--btn-deco-tx',l:'Déco texte',g:'Boutons'},
+{v:'--rm-up-border',l:'Risk Mgmt - Bordure (monte)',g:'Risk Management'},{v:'--rm-up-text',l:'Risk Mgmt - Texte (monte)',g:'Risk Management'},{v:'--rm-down-border',l:'Risk Mgmt - Bordure (descend)',g:'Risk Management'},{v:'--rm-down-text',l:'Risk Mgmt - Texte (descend)',g:'Risk Management'},
+  {v:'--auth-bg',l:'Connexion fond',g:'Connexion'},{v:'--auth-title',l:'Connexion titre',g:'Connexion'},{v:'--auth-sub',l:'Connexion sous-titre',g:'Connexion'},{v:'--auth-btn-bg',l:'Bouton continuer fond',g:'Connexion'},{v:'--auth-btn-tx',l:'Bouton continuer texte',g:'Connexion'},{v:'--auth-input-bg',l:'Champ email fond',g:'Connexion'},{v:'--auth-input-bd',l:'Champ email bordure',g:'Connexion'},{v:'--pin-btn-bg',l:'Touche PIN fond',g:'Connexion'},{v:'--pin-btn-bd',l:'Touche PIN bordure',g:'Connexion'},{v:'--pin-btn-tx',l:'Touche PIN texte',g:'Connexion'},{v:'--pin-dot-off',l:'Point PIN inactif',g:'Connexion'},{v:'--pin-dot-on',l:'Point PIN actif',g:'Connexion'},{v:'--btn-p-bg',l:'Bouton fond',g:'Boutons'},{v:'--btn-p-tx',l:'Bouton texte',g:'Boutons'},
+{v:'--btn-save-bg',l:'Sauvegarder - fond (PC)',g:'Boutons'},{v:'--btn-save-bg-mobile',l:'Sauvegarder - fond (mobile)',g:'Boutons'},{v:'--btn-save-bd',l:'Sauvegarder - bordure',g:'Boutons'},{v:'--btn-save-tx',l:'Sauvegarder - texte (PC)',g:'Boutons'},{v:'--btn-save-tx-mobile',l:'Sauvegarder - texte (mobile)',g:'Boutons'},{v:'--btn-g-bg',l:'Ghost fond',g:'Boutons'},{v:'--btn-g-bd',l:'Ghost bordure',g:'Boutons'},{v:'--btn-img-bg',l:'Image fond',g:'Boutons'},{v:'--btn-img-bd',l:'Image bordure',g:'Boutons'},{v:'--btn-img-tx',l:'Image texte',g:'Boutons'},{v:'--btn-pin-bg',l:'PIN fond',g:'Boutons'},{v:'--btn-pin-bd',l:'PIN bordure',g:'Boutons'},{v:'--btn-pin-tx',l:'PIN texte',g:'Boutons'},{v:'--btn-deco-bg',l:'Déco fond',g:'Boutons'},{v:'--btn-deco-bd',l:'Déco bordure',g:'Boutons'},{v:'--btn-deco-tx',l:'Déco texte',g:'Boutons'},
   {v:'--tgl-off',l:'Toggle off',g:'Boutons'},{v:'--tgl-on',l:'Toggle on',g:'Boutons'},{v:'--tgl-thumb',l:'Toggle rond',g:'Boutons'},
   {v:'--tag-long-bg',l:'LONG fond',g:'Tags'},{v:'--tag-long-tx',l:'LONG texte',g:'Tags'},{v:'--tag-long-bd',l:'LONG bordure',g:'Tags'},
   {v:'--tag-short-bg',l:'SHORT fond',g:'Tags'},{v:'--tag-short-tx',l:'SHORT texte',g:'Tags'},{v:'--tag-short-bd',l:'SHORT bordure',g:'Tags'},
@@ -2538,7 +2563,7 @@ function pcShowSyncFailureWarning(msg){
   if (!bar) {
     bar = document.createElement('div');
     bar.id = 'syncFailBar';
-    bar.style.cssText = 'position:fixed;top:0;left:0;right:0;background:#ef4444;color:#fff;font-family:var(--mono);font-size:12px;padding:8px 14px;text-align:center;z-index:900;cursor:pointer;';
+    bar.style.cssText = 'position:relative;width:100%;background:#ef4444;color:#fff;font-family:var(--mono);font-size:12px;padding:8px 14px;text-align:center;z-index:900;cursor:pointer;box-sizing:border-box;';
     bar.onclick = () => manualSyncSave();
     document.body.prepend(bar);
   }
@@ -2779,7 +2804,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const syncBtn = document.createElement('button');
     syncBtn.className='nav-tab';
     syncBtn.id='mobileSyncBtn';
-    syncBtn.style.cssText='font-size:14px;padding:14px 16px;border:1px solid #0062d2;border-radius:6px;text-align:left;color:#0062d2;background:none;cursor:pointer;font-family:var(--mono);';
+    syncBtn.style.cssText='font-size:14px;padding:14px 16px;border:1px solid var(--btn-save-bd);border-radius:6px;text-align:left;color:var(--btn-save-tx-mobile);background:var(--btn-save-bg-mobile);cursor:pointer;font-family:var(--mono);';
     syncBtn.textContent='SAUVEGARDER ET SYNCHRONISER';
     syncBtn.onclick=()=>{manualSyncSave();};
     mobileMenu.appendChild(syncBtn);
@@ -3321,6 +3346,22 @@ function pcHistoryForAI(history){
     }));
 }
 
+// Extrait un échantillon raisonnable d'images de trades (les plus récentes) pour l'IA,
+// avec leur contexte (date/paire/résultat), pour rester dans des limites de taille/coût acceptables.
+function pcPrepareImagesForAI(trades, maxImages=8){
+  const sorted=[...(trades||[])].filter(t=>t.images&&t.images.length).sort((a,b)=>(b.date||'').localeCompare(a.date||''));
+  const out=[];
+  for(const t of sorted){
+    for(const img of t.images){
+      if(out.length>=maxImages)break;
+      if(typeof img!=='string'||!img.startsWith('data:image'))continue;
+      out.push({date:t.date||null,paire:t.paire||null,res:typeof t.res==='number'?t.res:null,dataUrl:img});
+    }
+    if(out.length>=maxImages)break;
+  }
+  return out;
+}
+
 async function pcAskAI(question, trades, history){
   const res = await fetch(PC_AI_ENDPOINT, {
     method: 'POST',
@@ -3331,7 +3372,8 @@ async function pcAskAI(question, trades, history){
     body: JSON.stringify({
       question,
       trades: pcPrepareTradesForAI(trades),
-      history: pcHistoryForAI(history)
+      history: pcHistoryForAI(history),
+      images: pcPrepareImagesForAI(trades)
     })
   });
   if(!res.ok) throw new Error('HTTP ' + res.status);
