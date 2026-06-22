@@ -65,6 +65,8 @@
   --rm-up-border:#00e5a0;--rm-up-text:#00e5a0;--rm-down-border:#ef4444;--rm-down-text:#ef4444;
   --btn-save-bg:#0062d2;--btn-save-bg-mobile:transparent;--btn-save-bd:#0062d2;--btn-save-tx:#fff;--btn-save-tx-mobile:#0062d2;
   --btn-delall-bg:transparent;--btn-delall-bd:#ef4444;--btn-delall-tx:#ef4444;
+  --btn-export-bg:transparent;--btn-export-bd:#00e5a0;--btn-export-tx:#00e5a0;
+  --btn-import-bg:transparent;--btn-import-bd:#f59e0b;--btn-import-tx:#f59e0b;
   /* Couleurs SÉPARÉES pour résultats/pourcentages journal */
   --result-pos:#00e5a0;--result-neg:#ef4444;
   --state-capital:#00e5a0;--state-winstreak:#00e5a0;--state-tf:#3b82f6;
@@ -509,6 +511,9 @@ tbody td{padding:6px 8px;vertical-align:middle;white-space:nowrap;}
       <div class="nbadge nb-p" id="navPnl">P&L —</div>
       <div class="nbadge nb-r" id="navRisk">Risk —</div>
       <button onclick="manualSyncSave()" style="background:var(--btn-save-bg);border:1px solid var(--btn-save-bd);border-radius:5px;color:var(--btn-save-tx);font-family:var(--mono);font-size:10px;padding:4px 10px;cursor:pointer;margin-left:6px;" title="Sauvegarder et synchroniser">Sauvegarder</button>
+      <button onclick="exportLocalBackup()" style="background:var(--btn-export-bg);border:1px solid var(--btn-export-bd);border-radius:5px;color:var(--btn-export-tx);font-family:var(--mono);font-size:10px;padding:4px 10px;cursor:pointer;margin-left:6px;" title="Télécharger une sauvegarde sur ton PC">⬇ Export</button>
+      <input type="file" id="importBackupInput" accept=".json" style="display:none" onchange="importLocalBackup(event)">
+      <button onclick="document.getElementById('importBackupInput').click()" style="background:var(--btn-import-bg);border:1px solid var(--btn-import-bd);border-radius:5px;color:var(--btn-import-tx);font-family:var(--mono);font-size:10px;padding:4px 10px;cursor:pointer;margin-left:6px;" title="Restaurer une sauvegarde depuis ton PC">⬆ Import</button>
       <button onclick="resetPin()" style="background:var(--btn-deco-bg);border:1px solid var(--btn-deco-bd);border-radius:5px;color:var(--btn-deco-tx);font-family:var(--mono);font-size:10px;padding:4px 10px;cursor:pointer;margin-left:6px;" title="Déconnexion">⏻</button>
     </div>
   </div>
@@ -979,7 +984,14 @@ const ALL_S=[...BASE,...gen2025()];
 // ══ STATE ══
 const DEF={paires:["EURUSD","GBPUSD","USDJPY","XAUUSD","XAGUSD","NAS100","SPX500","DAX40","DOW30","AUDUSD","USDCAD","EURGBP","GBPJPY","BTC/USD","ETH/USD"],sessions:["Londres","New York","Asie","Chevauchement LN","Pre-Marche"],confluences:["FVG","OB","BOS","CHOCH","Chandelier Japonais","EMA Cross","Support/Résistance","Liquidité","VWAP","SMT","Divergence RSI","Golden Zone Fib"],timeframes:["M1","M5","M15","M30","H1","H4","Daily","Weekly"],mgmt_opts:["Oui","Non"],reprend_opts:["Oui","Non","Peut-être"]};
 function ls(k,d){try{const v=localStorage.getItem(k);return v?JSON.parse(v):d;}catch(e){return d;}}
-function lss(k,v){localStorage.setItem(k,JSON.stringify(v));}
+function lss(k,v){
+  try {
+    localStorage.setItem(k,JSON.stringify(v));
+  } catch(e) {
+    console.error('Erreur localStorage (probablement quota dépassé):', e);
+    pcShowSyncFailureWarning('Stockage local plein — exporte une sauvegarde immédiatement (bouton Modifications) et réduis le nombre/la taille des images jointes aux trades.');
+  }
+}
 function loadState(){return{trades:ls('tj_trades',ALL_S),lists:ls('tj_lists',DEF),nextId:ls('tj_nextId',9000)};}
 function saveState(){
   lss('tj_trades',APP.trades);
@@ -1105,7 +1117,16 @@ function saveOneEdit(el){
   if(typeof currentUser!=="undefined"&&currentUser&&!_isSyncing){schedulePush(300);}
 }
 function openCPforPencil(){openCP('Couleur texte',pencilColor,hex=>{pencilColor=hex;document.getElementById('pencilColorSwatch').style.background=hex;});}
-function applyPencilStyle(){if(!currentEditEl)return;const sz=document.getElementById('pencilFontSize').value;if(sz){currentEditEl.style.fontSize=sz+'px';currentEditEl.dataset.userFs='1';}currentEditEl.style.color=pencilColor;saveOneEdit(currentEditEl);}
+function applyPencilStyle(){
+  if(!currentEditEl)return;
+  const sz=document.getElementById('pencilFontSize').value;
+  if(sz){
+    currentEditEl.style.setProperty('font-size', sz+'px', 'important');
+    currentEditEl.dataset.userFs='1';
+  }
+  currentEditEl.style.setProperty('color', pencilColor, 'important');
+  saveOneEdit(currentEditEl);
+}
 
 function applyPencilEdits(){
   const edits=ls('tj_pencil_edits',{});
@@ -1307,6 +1328,18 @@ function computeMaxDrawdown(){
   });
   return maxDD;
 }
+// Calcule le % de chaque trade par rapport au capital au moment où il a eu lieu,
+// en une seule passe sur les trades triés (au lieu de re-trier + re-boucler pour chaque trade).
+function computeAllPcts(){
+  const s=[...APP.trades].sort((a,b)=>a.date.localeCompare(b.date)||(a.heure||'').localeCompare(b.heure||''));
+  let cap=CAPITAL();
+  const map={};
+  for(const t of s){
+    map[t.id]=cap>0?(t.res/cap)*100:0;
+    cap+=(t.res||0);
+  }
+  return map;
+}
 function computePctBefore(tid){const s=[...APP.trades].sort((a,b)=>a.date.localeCompare(b.date)||(a.heure||'').localeCompare(b.heure||''));let cap=CAPITAL();for(const t of s){if(t.id===tid)return(t.res/cap)*100;cap+=(t.res||0);}return 0;}
 
 // ══ NAV ══
@@ -1398,6 +1431,7 @@ function closeDeleteAllModal(){
 }
 function executeDeleteAllTrades(){
   markUserAction();
+  window._intentionalBulkDelete = true;
   // On garde une copie pour permettre l'annulation via le système existant
   APP.trades.forEach((t,i) => {
     window._deletedTradesStack.push({trade: t, index: i});
@@ -1494,9 +1528,13 @@ function renderTable(){
     APP.trades=dedup;
   }
   const sorted=[...APP.trades].sort((a,b)=>b.date.localeCompare(a.date)||(b.heure||'').localeCompare(a.heure||''));
+  const pctMap=computeAllPcts();
   const tcEl=document.getElementById('tradeCount');if(tcEl)tcEl.textContent=`— ${APP.trades.length} trades`;
   document.getElementById('emptyState').style.display=sorted.length?'none':'block';
-  document.getElementById('tradeTable').innerHTML=sorted.map(t=>`<tr>
+  document.getElementById('tradeTable').innerHTML=sorted.map(t=>{
+    const p=pctMap[t.id]||0;
+    const pctHtml=`<span class="${p>=0?'rp':'rn'}">${p>=0?'+':''}${p.toFixed(2)}%</span>`;
+    return `<tr>
     <td style="font-family:var(--mono)">${t.date||'—'}</td>
     <td style="font-family:var(--mono)">${t.heure||'—'}</td>
     <td style="color:var(--muted)">${t.session||'—'}</td>
@@ -1506,7 +1544,7 @@ function renderTable(){
     <td style="color:var(--muted);max-width:120px;overflow:hidden;text-overflow:ellipsis" title="${t.conf||''}">${t.conf||'—'}</td>
     <td style="font-family:var(--mono);color:var(--muted)">${t.rrCible?t.rrCible+'R':'—'}</td>
     <td style="font-family:var(--mono)">${computeRR(t)}R</td>
-    <td>${fmtR(t.res)}</td><td>${fmtPct(t.id)}</td>
+    <td>${fmtR(t.res)}</td><td>${pctHtml}</td>
     <td>${tagO(t.mgmt)}</td><td>${tagO(t.reprend)}</td>
     <td style="white-space:nowrap">${starsHtml(t.stars)}</td>
     <td style="text-align:center">${imgEyeHtml(t)}</td>
@@ -1514,7 +1552,8 @@ function renderTable(){
       <button class="del-btn" style="margin-right:2px" onclick="openEditTrade(${t.id})" title="Modifier">✎</button>
       <button class="del-btn" onclick="deleteTrade(${t.id})" title="Supprimer"><span class="deco-emoji">🗑</span><span class="deco-emoji-alt">✕</span></button>
     </td>
-  </tr>`).join('');
+  </tr>`;
+  }).join('');
   syncTableScrollbar();
 }
 // Synchronise la barre de défilement horizontal "du haut" avec le tableau réel,
@@ -1980,7 +2019,7 @@ const TV=[
 {v:'--pc-positif',l:'Points Clés - Positif',g:'Points Clés'},{v:'--pc-negatif',l:'Points Clés - Négatif',g:'Points Clés'},
 {v:'--rm-up-border',l:'Risk Mgmt - Bordure (monte)',g:'Risk Management'},{v:'--rm-up-text',l:'Risk Mgmt - Texte (monte)',g:'Risk Management'},{v:'--rm-down-border',l:'Risk Mgmt - Bordure (descend)',g:'Risk Management'},{v:'--rm-down-text',l:'Risk Mgmt - Texte (descend)',g:'Risk Management'},
   {v:'--auth-bg',l:'Connexion fond',g:'Connexion'},{v:'--auth-title',l:'Connexion titre',g:'Connexion'},{v:'--auth-sub',l:'Connexion sous-titre',g:'Connexion'},{v:'--auth-btn-bg',l:'Bouton continuer fond',g:'Connexion'},{v:'--auth-btn-tx',l:'Bouton continuer texte',g:'Connexion'},{v:'--auth-input-bg',l:'Champ email fond',g:'Connexion'},{v:'--auth-input-bd',l:'Champ email bordure',g:'Connexion'},{v:'--pin-btn-bg',l:'Touche PIN fond',g:'Connexion'},{v:'--pin-btn-bd',l:'Touche PIN bordure',g:'Connexion'},{v:'--pin-btn-tx',l:'Touche PIN texte',g:'Connexion'},{v:'--pin-dot-off',l:'Point PIN inactif',g:'Connexion'},{v:'--pin-dot-on',l:'Point PIN actif',g:'Connexion'},{v:'--btn-p-bg',l:'Bouton fond',g:'Boutons'},{v:'--btn-p-tx',l:'Bouton texte',g:'Boutons'},
-{v:'--btn-save-bg',l:'Sauvegarder - fond (PC)',g:'Boutons'},{v:'--btn-save-bg-mobile',l:'Sauvegarder - fond (mobile)',g:'Boutons'},{v:'--btn-save-bd',l:'Sauvegarder - bordure',g:'Boutons'},{v:'--btn-save-tx',l:'Sauvegarder - texte (PC)',g:'Boutons'},{v:'--btn-save-tx-mobile',l:'Sauvegarder - texte (mobile)',g:'Boutons'},{v:'--btn-delall-bg',l:'Supprimer tout - fond',g:'Boutons'},{v:'--btn-delall-bd',l:'Supprimer tout - bordure',g:'Boutons'},{v:'--btn-delall-tx',l:'Supprimer tout - texte',g:'Boutons'},{v:'--btn-g-bg',l:'Ghost fond',g:'Boutons'},{v:'--btn-g-bd',l:'Ghost bordure',g:'Boutons'},{v:'--btn-img-bg',l:'Image fond',g:'Boutons'},{v:'--btn-img-bd',l:'Image bordure',g:'Boutons'},{v:'--btn-img-tx',l:'Image texte',g:'Boutons'},{v:'--btn-pin-bg',l:'PIN fond',g:'Boutons'},{v:'--btn-pin-bd',l:'PIN bordure',g:'Boutons'},{v:'--btn-pin-tx',l:'PIN texte',g:'Boutons'},{v:'--btn-deco-bg',l:'Déco fond',g:'Boutons'},{v:'--btn-deco-bd',l:'Déco bordure',g:'Boutons'},{v:'--btn-deco-tx',l:'Déco texte',g:'Boutons'},
+{v:'--btn-save-bg',l:'Sauvegarder - fond (PC)',g:'Boutons'},{v:'--btn-save-bg-mobile',l:'Sauvegarder - fond (mobile)',g:'Boutons'},{v:'--btn-save-bd',l:'Sauvegarder - bordure',g:'Boutons'},{v:'--btn-save-tx',l:'Sauvegarder - texte (PC)',g:'Boutons'},{v:'--btn-save-tx-mobile',l:'Sauvegarder - texte (mobile)',g:'Boutons'},{v:'--btn-delall-bg',l:'Supprimer tout - fond',g:'Boutons'},{v:'--btn-delall-bd',l:'Supprimer tout - bordure',g:'Boutons'},{v:'--btn-delall-tx',l:'Supprimer tout - texte',g:'Boutons'},{v:'--btn-export-bg',l:'Export - fond',g:'Boutons'},{v:'--btn-export-bd',l:'Export - bordure',g:'Boutons'},{v:'--btn-export-tx',l:'Export - texte',g:'Boutons'},{v:'--btn-import-bg',l:'Import - fond',g:'Boutons'},{v:'--btn-import-bd',l:'Import - bordure',g:'Boutons'},{v:'--btn-import-tx',l:'Import - texte',g:'Boutons'},{v:'--btn-g-bg',l:'Ghost fond',g:'Boutons'},{v:'--btn-g-bd',l:'Ghost bordure',g:'Boutons'},{v:'--btn-img-bg',l:'Image fond',g:'Boutons'},{v:'--btn-img-bd',l:'Image bordure',g:'Boutons'},{v:'--btn-img-tx',l:'Image texte',g:'Boutons'},{v:'--btn-pin-bg',l:'PIN fond',g:'Boutons'},{v:'--btn-pin-bd',l:'PIN bordure',g:'Boutons'},{v:'--btn-pin-tx',l:'PIN texte',g:'Boutons'},{v:'--btn-deco-bg',l:'Déco fond',g:'Boutons'},{v:'--btn-deco-bd',l:'Déco bordure',g:'Boutons'},{v:'--btn-deco-tx',l:'Déco texte',g:'Boutons'},
   {v:'--tgl-off',l:'Toggle off',g:'Boutons'},{v:'--tgl-on',l:'Toggle on',g:'Boutons'},{v:'--tgl-thumb',l:'Toggle rond',g:'Boutons'},
   {v:'--tag-long-bg',l:'LONG fond',g:'Tags'},{v:'--tag-long-tx',l:'LONG texte',g:'Tags'},{v:'--tag-long-bd',l:'LONG bordure',g:'Tags'},
   {v:'--tag-short-bg',l:'SHORT fond',g:'Tags'},{v:'--tag-short-tx',l:'SHORT texte',g:'Tags'},{v:'--tag-short-bd',l:'SHORT bordure',g:'Tags'},
@@ -2634,15 +2673,43 @@ function pcShowSyncFailureWarning(msg){
     bar = document.createElement('div');
     bar.id = 'syncFailBar';
     bar.style.cssText = 'position:relative;width:100%;background:#ef4444;color:#fff;font-family:var(--mono);font-size:12px;padding:8px 14px;text-align:center;z-index:900;cursor:pointer;box-sizing:border-box;';
-    bar.onclick = () => manualSyncSave();
     document.body.prepend(bar);
   }
+  bar.onclick = () => manualSyncSave();
   bar.textContent = '⚠ Sauvegarde échouée (' + msg + ') — tes derniers trades ne sont peut-être pas synchronisés. Touche ici pour réessayer.';
   bar.style.display = 'block';
 }
 function pcHideSyncFailureWarning(){
   const bar = document.getElementById('syncFailBar');
   if (bar) bar.style.display = 'none';
+}
+// Bandeau spécifique : le cloud a beaucoup moins de trades que l'appareil local.
+// On laisse le choix explicite à l'utilisateur plutôt que de trancher tout seul.
+function pcShowPullSuspectWarning(msg){
+  let bar = document.getElementById('syncFailBar');
+  if (!bar) {
+    bar = document.createElement('div');
+    bar.id = 'syncFailBar';
+    bar.style.cssText = 'position:relative;width:100%;background:#ef4444;color:#fff;font-family:var(--mono);font-size:12px;padding:10px 14px;text-align:center;z-index:900;box-sizing:border-box;';
+    document.body.prepend(bar);
+  }
+  bar.onclick = null;
+  bar.innerHTML = '⚠ ' + msg + '<br><button onclick="pcForceKeepLocal()" style="margin:6px 6px 0;padding:5px 10px;background:#fff;color:#ef4444;border:none;border-radius:4px;font-family:var(--mono);font-size:11px;cursor:pointer;">Garder mes trades locaux</button>' +
+    '<button onclick="pcForceUseCloud()" style="margin:6px 0 0;padding:5px 10px;background:none;color:#fff;border:1px solid #fff;border-radius:4px;font-family:var(--mono);font-size:11px;cursor:pointer;">Utiliser la version du cloud</button>';
+  bar.style.display = 'block';
+}
+function pcForceKeepLocal(){
+  // On garde notre version locale et on la pousse pour écraser la version cloud suspecte
+  window._pendingCloudData = null;
+  pcHideSyncFailureWarning();
+  schedulePush(0);
+}
+function pcForceUseCloud(){
+  if (window._pendingCloudData) {
+    applyCloudData(window._pendingCloudData, true);
+    window._pendingCloudData = null;
+  }
+  pcHideSyncFailureWarning();
 }
 
 let _pushGeneration = 0;
@@ -2695,6 +2762,117 @@ async function manualSyncSave() {
   btns.forEach(b => { b.textContent = '✓ Sauvegardé !'; setTimeout(() => { b.textContent = b.dataset.orig; b.disabled = false; }, 1500); });
 }
 
+// ── Sauvegarde locale (fichier .json téléchargé sur l'appareil) ──
+// Indépendante du cloud : un vrai filet de sécurité contre toute perte de données,
+// même en cas de bug de synchronisation, de panne Supabase, ou de mauvaise manipulation.
+function exportLocalBackup(){
+  const backup = {
+    type: 'tjp_backup',
+    version: 1,
+    exportedAt: new Date().toISOString(),
+    trades: APP.trades,
+    lists: APP.lists,
+    nextId: APP.nextId,
+    capital: localStorage.getItem('tj_capital'),
+    risk: localStorage.getItem('tj_risk'),
+    smartRisk: localStorage.getItem('tj_smart_risk'),
+    riskMax: localStorage.getItem('tj_risk_max'),
+    riskDecimal: localStorage.getItem('tj_risk_decimal'),
+    theme: localStorage.getItem('tj_theme_vars'),
+    pencilEdits: localStorage.getItem('tj_pencil_edits'),
+    payouts: localStorage.getItem('tj_payouts'),
+    iaConfig: localStorage.getItem('tjp_ia_config'),
+    recapHistory: localStorage.getItem('tjp_recap_history'),
+    rmConfig: {
+      upTrigger: localStorage.getItem('tj_rm_up_trigger'),
+      upTrades: localStorage.getItem('tj_rm_up_trades'),
+      upPct: localStorage.getItem('tj_rm_up_pct'),
+      upVarType: localStorage.getItem('tj_rm_up_var_type'),
+      upVarVal: localStorage.getItem('tj_rm_up_var_val'),
+      downTrigger: localStorage.getItem('tj_rm_down_trigger'),
+      downTrades: localStorage.getItem('tj_rm_down_trades'),
+      downPct: localStorage.getItem('tj_rm_down_pct'),
+      downVarType: localStorage.getItem('tj_rm_down_var_type'),
+      downVarVal: localStorage.getItem('tj_rm_down_var_val'),
+    },
+  };
+  const blob = new Blob([JSON.stringify(backup, null, 2)], {type: 'application/json'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  const dateStr = new Date().toISOString().slice(0,10);
+  a.href = url;
+  a.download = `tjp-sauvegarde-${dateStr}-${APP.trades.length}trades.json`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  showSync('✓ Sauvegarde téléchargée', '#22c55e');
+}
+
+function importLocalBackup(event){
+  const file = event.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    let backup;
+    try { backup = JSON.parse(e.target.result); }
+    catch(err) { alert('Fichier invalide : ce n\'est pas un fichier de sauvegarde TJP valide.'); return; }
+    if (backup.type !== 'tjp_backup' || !Array.isArray(backup.trades)) {
+      alert('Fichier invalide : ce n\'est pas un fichier de sauvegarde TJP valide.');
+      return;
+    }
+    const currentCount = APP.trades.length;
+    const backupCount = backup.trades.length;
+    const dateStr = backup.exportedAt ? new Date(backup.exportedAt).toLocaleString('fr-FR') : 'date inconnue';
+    showConfirm(
+      'Restaurer une sauvegarde',
+      `Cette sauvegarde du ${dateStr} contient ${backupCount} trade(s). Ton journal actuel en a ${currentCount}. Restaurer remplacera TOUS tes trades actuels par ceux de la sauvegarde. Continuer ?`,
+      () => {
+        markUserAction();
+        window._intentionalBulkDelete = true; // on assume ce remplacement volontaire, pas de garde-fou à déclencher
+        APP.trades = backup.trades;
+        if (backup.lists) APP.lists = backup.lists;
+        if (backup.nextId) APP.nextId = backup.nextId;
+        if (backup.capital) localStorage.setItem('tj_capital', backup.capital);
+        if (backup.risk) localStorage.setItem('tj_risk', backup.risk);
+        if (backup.smartRisk) localStorage.setItem('tj_smart_risk', backup.smartRisk);
+        if (backup.riskMax) localStorage.setItem('tj_risk_max', backup.riskMax);
+        if (backup.riskDecimal) localStorage.setItem('tj_risk_decimal', backup.riskDecimal);
+        if (backup.theme) localStorage.setItem('tj_theme_vars', backup.theme);
+        if (backup.pencilEdits) localStorage.setItem('tj_pencil_edits', backup.pencilEdits);
+        if (backup.payouts) localStorage.setItem('tj_payouts', backup.payouts);
+        if (backup.iaConfig) localStorage.setItem('tjp_ia_config', backup.iaConfig);
+        if (backup.recapHistory) localStorage.setItem('tjp_recap_history', backup.recapHistory);
+        if (backup.rmConfig) {
+          const rm = backup.rmConfig;
+          if (rm.upTrigger) localStorage.setItem('tj_rm_up_trigger', rm.upTrigger);
+          if (rm.upTrades) localStorage.setItem('tj_rm_up_trades', rm.upTrades);
+          if (rm.upPct) localStorage.setItem('tj_rm_up_pct', rm.upPct);
+          if (rm.upVarType) localStorage.setItem('tj_rm_up_var_type', rm.upVarType);
+          if (rm.upVarVal) localStorage.setItem('tj_rm_up_var_val', rm.upVarVal);
+          if (rm.downTrigger) localStorage.setItem('tj_rm_down_trigger', rm.downTrigger);
+          if (rm.downTrades) localStorage.setItem('tj_rm_down_trades', rm.downTrades);
+          if (rm.downPct) localStorage.setItem('tj_rm_down_pct', rm.downPct);
+          if (rm.downVarType) localStorage.setItem('tj_rm_down_var_type', rm.downVarType);
+          if (rm.downVarVal) localStorage.setItem('tj_rm_down_var_val', rm.downVarVal);
+        }
+        // Réappliquer le thème visuellement si restauré
+        if (backup.theme) {
+          try { const v = JSON.parse(backup.theme); Object.entries(v).forEach(([k,c]) => document.documentElement.style.setProperty(k,c)); } catch(e) {}
+        }
+        saveState(); renderTable(); updateNavBadges(); populateSelects();
+        applyPencilEdits();
+        if (document.getElementById('page-trackrecord')?.classList.contains('active')) refreshAllCharts();
+        if (document.getElementById('page-modifs')?.classList.contains('active')) renderModifs();
+        schedulePush(0);
+        showSync('✓ Sauvegarde restaurée (' + backupCount + ' trades)', '#22c55e');
+      }
+    );
+  };
+  reader.readAsText(file);
+  event.target.value = ''; // reset pour pouvoir réimporter le même fichier si besoin
+}
+
 async function pullFromCloud() {
   if (!currentUser || !currentUser.id) return;
   try { await sb.auth.refreshSession(); } catch(e) {}
@@ -2710,13 +2888,27 @@ async function pullFromCloud() {
   } catch(e) { showSync('⚠ Réseau', '#f59e0b'); }
 }
 
-function applyCloudData(data) {
-  // On applique toujours les données du cloud telles quelles : le timestamp (updated_at)
-  // est la seule source de vérité fiable pour décider quelle version est la plus récente.
-  // L'ancienne protection basée sur "nombre de trades" empêchait les suppressions de se
-  // synchroniser correctement (un pull pouvait ramener des trades qu'on venait de supprimer)
-  // et bloquait aussi les synchronisations légitimes vers le bas (moins de trades = plus récent).
+function applyCloudData(data, skipSafetyCheck) {
   const cloudTrades = data.trades || [];
+  const localCount = APP.trades.length;
+  const cloudCount = cloudTrades.length;
+
+  // Garde-fou anti-perte de données : si le cloud propose une chute BRUTALE du nombre
+  // de trades (perte de plus de 30%, et au moins 5 trades de différence) alors qu'on
+  // n'a pas nous-même déclenché une suppression volontaire (ex: "Supprimer tous les trades"),
+  // on ne l'applique pas silencieusement — on alerte et on garde la version locale,
+  // car c'est plus probablement une donnée cloud périmée/un conflit qu'une vraie suppression.
+  if (!skipSafetyCheck && !window._intentionalBulkDelete && localCount >= 5) {
+    const lostRatio = (localCount - cloudCount) / localCount;
+    if (cloudCount < localCount && lostRatio > 0.3 && (localCount - cloudCount) >= 5) {
+      console.warn(`Pull cloud suspect ignoré : ${localCount} trades locaux vs ${cloudCount} sur le cloud (perte de ${(lostRatio*100).toFixed(0)}%).`);
+      pcShowPullSuspectWarning(`Le cloud a ${cloudCount} trades, ton appareil en a ${localCount}. Choisis quelle version garder :`);
+      window._pendingCloudData = data; // permet de forcer l'application plus tard si l'utilisateur confirme
+      return;
+    }
+  }
+  window._intentionalBulkDelete = false;
+
   APP.trades = cloudTrades;
   // Ne pas écraser les listes si celles du cloud sont vides
   if(data.lists) {
@@ -2878,11 +3070,37 @@ function initStarPicker(pickerId, hiddenId, val) {
 
 // ══ IMAGES FORMULAIRE ══
 window._formImages = [];
+// Compresse une image (redimensionne + recompresse en JPEG) avant stockage,
+// pour éviter de saturer le quota localStorage avec des captures haute résolution.
+function compressImage(dataUrl, maxWidth=1000, quality=0.7){
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => {
+      let { width, height } = img;
+      if (width > maxWidth) {
+        height = Math.round(height * (maxWidth / width));
+        width = maxWidth;
+      }
+      const canvas = document.createElement('canvas');
+      canvas.width = width; canvas.height = height;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(img, 0, 0, width, height);
+      resolve(canvas.toDataURL('image/jpeg', quality));
+    };
+    img.onerror = () => resolve(dataUrl); // en cas d'échec, on garde l'original plutôt que de bloquer
+    img.src = dataUrl;
+  });
+}
+
 function addFormImage() {
   const inp = document.getElementById('f-img-input'); if (!inp||!inp.files||!inp.files.length) return;
   Array.from(inp.files).forEach(file => {
     const reader = new FileReader();
-    reader.onload = e => { window._formImages.push(e.target.result); renderFormImages(); };
+    reader.onload = async e => {
+      const compressed = await compressImage(e.target.result);
+      window._formImages.push(compressed);
+      renderFormImages();
+    };
     reader.readAsDataURL(file);
   }); inp.value='';
 }
@@ -2917,6 +3135,20 @@ document.addEventListener('DOMContentLoaded', () => {
     syncBtn.textContent='SAUVEGARDER ET SYNCHRONISER';
     syncBtn.onclick=()=>{manualSyncSave();};
     mobileMenu.appendChild(syncBtn);
+
+    const exportBtn = document.createElement('button');
+    exportBtn.className='nav-tab';
+    exportBtn.style.cssText='font-size:14px;padding:14px 16px;border:1px solid var(--btn-export-bd);border-radius:6px;text-align:left;color:var(--btn-export-tx);background:var(--btn-export-bg);cursor:pointer;font-family:var(--mono);';
+    exportBtn.textContent='⬇ EXPORTER UNE SAUVEGARDE';
+    exportBtn.onclick=()=>{exportLocalBackup();};
+    mobileMenu.appendChild(exportBtn);
+
+    const importBtn = document.createElement('button');
+    importBtn.className='nav-tab';
+    importBtn.style.cssText='font-size:14px;padding:14px 16px;border:1px solid var(--btn-import-bd);border-radius:6px;text-align:left;color:var(--btn-import-tx);background:var(--btn-import-bg);cursor:pointer;font-family:var(--mono);';
+    importBtn.textContent='⬆ RESTAURER UNE SAUVEGARDE';
+    importBtn.onclick=()=>{document.getElementById('importBackupInput').click();};
+    mobileMenu.appendChild(importBtn);
   }
 });
 
