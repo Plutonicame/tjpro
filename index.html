@@ -511,9 +511,7 @@ tbody td{padding:6px 8px;vertical-align:middle;white-space:nowrap;}
       <div class="nbadge nb-p" id="navPnl">P&L —</div>
       <div class="nbadge nb-r" id="navRisk">Risk —</div>
       <button onclick="manualSyncSave()" style="background:var(--btn-save-bg);border:1px solid var(--btn-save-bd);border-radius:5px;color:var(--btn-save-tx);font-family:var(--mono);font-size:10px;padding:4px 10px;cursor:pointer;margin-left:6px;" title="Sauvegarder et synchroniser">Sauvegarder</button>
-      <button onclick="exportLocalBackup()" style="background:var(--btn-export-bg);border:1px solid var(--btn-export-bd);border-radius:5px;color:var(--btn-export-tx);font-family:var(--mono);font-size:10px;padding:4px 10px;cursor:pointer;margin-left:6px;" title="Télécharger une sauvegarde sur ton PC">⬇ Export</button>
       <input type="file" id="importBackupInput" accept=".json" style="display:none" onchange="importLocalBackup(event)">
-      <button onclick="document.getElementById('importBackupInput').click()" style="background:var(--btn-import-bg);border:1px solid var(--btn-import-bd);border-radius:5px;color:var(--btn-import-tx);font-family:var(--mono);font-size:10px;padding:4px 10px;cursor:pointer;margin-left:6px;" title="Restaurer une sauvegarde depuis ton PC">⬆ Import</button>
       <button onclick="resetPin()" style="background:var(--btn-deco-bg);border:1px solid var(--btn-deco-bd);border-radius:5px;color:var(--btn-deco-tx);font-family:var(--mono);font-size:10px;padding:4px 10px;cursor:pointer;margin-left:6px;" title="Déconnexion">⏻</button>
     </div>
   </div>
@@ -872,6 +870,17 @@ tbody td{padding:6px 8px;vertical-align:middle;white-space:nowrap;}
     </div>
     <div class="card-body">
       <button class="btn" onclick="changePinFlow()" style="font-size:12px;background:var(--btn-pin-bg);color:var(--btn-pin-tx);border:2px solid var(--btn-pin-bd);border-radius:6px;padding:8px 16px;cursor:pointer;">Changer mon code PIN</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><div class="card-title" data-editable>SAUVEGARDE LOCALE</div></div>
+    <div class="card-body" style="display:flex;flex-direction:column;gap:10px;">
+      <div style="font-size:11px;color:var(--muted);" data-editable>Exporte une copie complète de tes trades sur ton appareil. En cas de perte, importe-la pour tout restaurer instantanément.</div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;">
+        <button onclick="exportLocalBackup()" style="flex:1;padding:10px;background:var(--btn-export-bg);border:1px solid var(--btn-export-bd);border-radius:6px;color:var(--btn-export-tx);font-family:var(--mono);font-size:12px;cursor:pointer;">⬇ Exporter une sauvegarde</button>
+        <button onclick="document.getElementById('importBackupInput').click()" style="flex:1;padding:10px;background:var(--btn-import-bg);border:1px solid var(--btn-import-bd);border-radius:6px;color:var(--btn-import-tx);font-family:var(--mono);font-size:12px;cursor:pointer;">⬆ Importer une sauvegarde</button>
+      </div>
     </div>
   </div>
 
@@ -3141,14 +3150,12 @@ document.addEventListener('DOMContentLoaded', () => {
     exportBtn.style.cssText='font-size:14px;padding:14px 16px;border:1px solid var(--btn-export-bd);border-radius:6px;text-align:left;color:var(--btn-export-tx);background:var(--btn-export-bg);cursor:pointer;font-family:var(--mono);';
     exportBtn.textContent='⬇ EXPORTER UNE SAUVEGARDE';
     exportBtn.onclick=()=>{exportLocalBackup();};
-    mobileMenu.appendChild(exportBtn);
 
     const importBtn = document.createElement('button');
     importBtn.className='nav-tab';
     importBtn.style.cssText='font-size:14px;padding:14px 16px;border:1px solid var(--btn-import-bd);border-radius:6px;text-align:left;color:var(--btn-import-tx);background:var(--btn-import-bg);cursor:pointer;font-family:var(--mono);';
     importBtn.textContent='⬆ RESTAURER UNE SAUVEGARDE';
     importBtn.onclick=()=>{document.getElementById('importBackupInput').click();};
-    mobileMenu.appendChild(importBtn);
   }
 });
 
