@@ -680,6 +680,10 @@ tbody td{padding:6px 8px;vertical-align:middle;white-space:nowrap;}
         <div class="fg"><label data-editable>Résultat (€)</label><input type="number" id="f-res" placeholder="150 ou -80"></div>
         <div class="fg"><label data-editable>Management</label><select id="f-mgmt"></select></div>
         <div class="fg"><label data-editable>Reprendrais-tu ?</label><select id="f-reprend"></select></div>
+        <div class="fg" style="display:flex;align-items:center;gap:8px;">
+          <input type="checkbox" id="f-backtest" style="width:18px;height:18px;cursor:pointer;accent-color:var(--gold);">
+          <label for="f-backtest" data-editable style="cursor:pointer;">Trade backtest</label>
+        </div>
         <div class="fg span2"><label data-editable>Timeframes</label><div class="chip-wrap" id="tf-wrap"></div></div>
         <div class="fg spanall"><label data-editable>Confluences</label><div class="chip-wrap" id="conf-wrap"></div></div>
         <div class="fg spanall"><label data-editable>Notes</label><textarea id="f-notes" placeholder="Setup, émotions..."></textarea></div>
@@ -1014,6 +1018,10 @@ function saveState(){
 // Marquer qu'une action utilisateur a eu lieu (pour éviter push au démarrage)
 function markUserAction(){ window._userActionHappened = true; }
 const APP=loadState();
+// Trades réels uniquement (hors backtest) — utilisé pour tous les calculs financiers :
+// P&L, capital, risk intelligent, séries de gains/pertes, calendrier.
+// Les backtests restent dans APP.trades pour l'analyse stratégique (confluences, TF, etc.)
+const realTrades=()=>APP.trades.filter(t=>!t.backtest);
 ['confluences','mgmt_opts','reprend_opts'].forEach(k=>{if(!APP.lists[k])APP.lists[k]=DEF[k];});
 const CAPITAL=()=>parseFloat(ls('tj_capital','10000'));
 const RBASE=()=>parseFloat(ls('tj_risk','1'));
@@ -1174,7 +1182,7 @@ function applyRiskDecrease(rp,downVarType,downVarVal,runCap){
 }
 
 function computeRiskHistory(){
-  const sorted=[...APP.trades].sort((a,b)=>a.date.localeCompare(b.date)||(a.heure||'').localeCompare(b.heure||''));
+  const sorted=[...realTrades()].sort((a,b)=>a.date.localeCompare(b.date)||(a.heure||'').localeCompare(b.heure||''));
   const base=RBASE(),smart=SMART();
   let rp=base,ws=0,ls2=0;
   let runCap=CAPITAL();
@@ -1264,7 +1272,7 @@ function computeRiskHistory(){
   return{hist,finalRp:rp,finalWs:ws,finalLs:ls2,finalRealWs:realWS,finalRealLs:realLS,maxRealWs:maxRealWS,maxRealLs:maxRealLS};
 }
 function computeRR(t){if(t&&t.rrAuto===false&&typeof t.rrPris==='number'&&t.rrPris!==0){return t.rrPris;}const re=Math.max(1,Math.round(CAPITAL()*RBASE()/100));return parseFloat((t.res/re).toFixed(2));}
-function getCurrentCap(){return APP.trades.reduce((s,t)=>s+(t.res||0),CAPITAL());}
+function getCurrentCap(){return realTrades().reduce((s,t)=>s+(t.res||0),CAPITAL());}
 function getCurrentRiskPct(){return computeRiskHistory().finalRp;}
 function getCurrentRiskEur(){return Math.round(getCurrentCap()*getCurrentRiskPct()/100*100)/100;}
 // Formate un pourcentage de risque selon le réglage "Affichage risk : Décimales"
@@ -1274,7 +1282,7 @@ function fmtRiskPct(v){
 
 // ══ RISK CHART ══
 function drawRiskChart(period){
-  const tr=filterT(period);destroy('risk');
+  const tr=filterRealT(period);destroy('risk');
   const axC=gc('--risk-axis')||'#f59e0b';
   const grC=gc('--risk-grid')||'rgba(100,116,139,.1)';
   const lineC=gc('--risk-line')||'#f59e0b';
@@ -1324,10 +1332,10 @@ function drawRiskChart(period){
     }
   });
 }
-function computeWorstLose(){const s=[...APP.trades].sort((a,b)=>a.date.localeCompare(b.date)||(a.heure||'').localeCompare(b.heure||''));let max=0,cur=0;s.forEach(t=>{if(t.res<0){cur++;max=Math.max(max,cur);}else if(t.res>0)cur=0;});return max;}
+function computeWorstLose(){const s=[...realTrades()].sort((a,b)=>a.date.localeCompare(b.date)||(a.heure||'').localeCompare(b.heure||''));let max=0,cur=0;s.forEach(t=>{if(t.res<0){cur++;max=Math.max(max,cur);}else if(t.res>0)cur=0;});return max;}
 // % maximum perdu d'affilée par rapport au plus haut du capital atteint (drawdown max)
 function computeMaxDrawdown(){
-  const s=[...APP.trades].sort((a,b)=>a.date.localeCompare(b.date)||(a.heure||'').localeCompare(b.heure||''));
+  const s=[...realTrades()].sort((a,b)=>a.date.localeCompare(b.date)||(a.heure||'').localeCompare(b.heure||''));
   let peak=CAPITAL(),runCap=CAPITAL(),maxDD=0;
   s.forEach(t=>{
     runCap+=t.res||0;
@@ -1344,8 +1352,8 @@ function computeAllPcts(){
   let cap=CAPITAL();
   const map={};
   for(const t of s){
-    map[t.id]=cap>0?(t.res/cap)*100:0;
-    cap+=(t.res||0);
+    map[t.id]=t.backtest?0:(cap>0?(t.res/cap)*100:0);
+    if(!t.backtest)cap+=(t.res||0);
   }
   return map;
 }
@@ -1377,10 +1385,10 @@ function populateSelects(){
 }
 function addTrade(){markUserAction();
   const g=id=>(document.getElementById(id)||{}).value||'';
-  const tfs=Array.from(document.querySelectorAll('#tf-wrap .chip.sel')).map(c=>c.dataset.v).join(',');
-  const confs=Array.from(document.querySelectorAll('#conf-wrap .chip.sel')).map(c=>c.dataset.v).join(',');
+  const tfs=Array.from(document.querySelectorAll('#tf-wrap .chip.sel')).map(c=>c.dataset.v).join('|');
+  const confs=Array.from(document.querySelectorAll('#conf-wrap .chip.sel')).map(c=>c.dataset.v).join('|');
   const fRrAutoOn=document.getElementById('f-tglRrAuto')?.classList.contains('on');
-  const t={id:APP.nextId++,date:g('f-date').trim(),heure:g('f-heure').trim(),paire:g('f-paire'),session:g('f-session'),conf:confs||'—',tf:tfs||'—',dir:g('f-dir'),rrCible:parseFloat(g('f-rrcible'))||0,rrAuto:fRrAutoOn!==false,rrPris:parseFloat(g('f-rrpris'))||0,res:parseFloat(g('f-res'))||0,mgmt:g('f-mgmt'),reprend:g('f-reprend'),notes:g('f-notes'),stars:parseFloat(g('f-stars'))||0,images:[]};
+  const t={id:APP.nextId++,date:g('f-date').trim(),heure:g('f-heure').trim(),paire:g('f-paire'),session:g('f-session'),conf:confs||'—',tf:tfs||'—',dir:g('f-dir'),rrCible:parseFloat(g('f-rrcible'))||0,rrAuto:fRrAutoOn!==false,rrPris:parseFloat(g('f-rrpris'))||0,res:parseFloat(g('f-res'))||0,mgmt:g('f-mgmt'),reprend:g('f-reprend'),notes:g('f-notes'),stars:parseFloat(g('f-stars'))||0,images:[],backtest:document.getElementById('f-backtest')?.checked||false};
   if(!t.date){alert('Date obligatoire.');return;}
   APP.trades.unshift(t);saveState();renderTable();updateNavBadges();
   document.getElementById('alertSaved').classList.add('show');setTimeout(()=>document.getElementById('alertSaved').classList.remove('show'),2200);resetForm();
@@ -1468,7 +1476,7 @@ function pcShowUndoToast(){
   clearTimeout(window._undoToastTimer);
   window._undoToastTimer = setTimeout(()=>toast.classList.remove('show'), 6000);
 }
-function resetForm(){['f-date','f-heure','f-paire','f-session','f-dir','f-rrcible','f-res','f-mgmt','f-reprend','f-notes','f-rrpris'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});document.querySelectorAll('#tf-wrap .chip,#conf-wrap .chip').forEach(c=>c.classList.remove('sel'));document.getElementById('f-date').value=new Date().toISOString().split('T')[0];initStarPicker('f-stars-picker','f-stars',0);window._formImages=[];renderFormImages();const fTgl=document.getElementById('f-tglRrAuto');if(fTgl){fTgl.classList.add('on');document.getElementById('f-rrpris-group').style.display='none';}}
+function resetForm(){['f-date','f-heure','f-paire','f-session','f-dir','f-rrcible','f-res','f-mgmt','f-reprend','f-notes','f-rrpris'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});const fbt=document.getElementById('f-backtest');if(fbt)fbt.checked=false;document.querySelectorAll('#tf-wrap .chip,#conf-wrap .chip').forEach(c=>c.classList.remove('sel'));document.getElementById('f-date').value=new Date().toISOString().split('T')[0];initStarPicker('f-stars-picker','f-stars',0);window._formImages=[];renderFormImages();const fTgl=document.getElementById('f-tglRrAuto');if(fTgl){fTgl.classList.add('on');document.getElementById('f-rrpris-group').style.display='none';}}
 function tagD(v){return v==='LONG'?'<span class="tag tag-long">LONG</span>':v==='SHORT'?'<span class="tag tag-short">SHORT</span>':v||'—';}
 function tagO(v){const m={Oui:'oui',Non:'non','Peut-être':'peut','N/A':'na'};return v?`<span class="tag tag-${m[v]||'na'}">${v}</span>`:'—';}
 function fmtR(v){if(v===''||v==null)return'—';return`<span class="${v>=0?'rp':'rn'}">${v>=0?'+':''}${Number(v).toLocaleString('fr-FR')}€</span>`;}
@@ -1547,7 +1555,7 @@ function renderTable(){
     <td style="font-family:var(--mono)">${t.date||'—'}</td>
     <td style="font-family:var(--mono)">${t.heure||'—'}</td>
     <td style="color:var(--muted)">${t.session||'—'}</td>
-    <td><strong>${t.paire||'—'}</strong></td>
+    <td><strong>${t.paire||'—'}</strong>${t.backtest?'&nbsp;<span style="font-size:9px;padding:1px 4px;background:var(--gold);color:#000;border-radius:3px;font-family:var(--mono);">BT</span>':''}</td>
     <td>${tagD(t.dir)}</td>
     <td style="font-family:var(--mono);color:var(--state-tf)">${t.tf||'—'}</td>
     <td style="color:var(--muted);max-width:120px;overflow:hidden;text-overflow:ellipsis" title="${t.conf||''}">${t.conf||'—'}</td>
@@ -1583,7 +1591,7 @@ function syncTableScrollbar(){
 }
 window.addEventListener('resize',()=>{if(typeof syncTableScrollbar==='function')syncTableScrollbar();});
 function updateNavBadges(){
-  const pnl=APP.trades.reduce((s,t)=>s+(t.res||0),0);
+  const pnl=realTrades().reduce((s,t)=>s+(t.res||0),0);
   const tTxt=APP.trades.length+' trades';
   const pTxt='P&L '+(pnl>=0?'+':'')+pnl.toLocaleString('fr-FR')+'€';
   const pCol=pnl>=0?'var(--green)':'var(--red)';
@@ -1730,7 +1738,7 @@ let calD=new Date();calD.setDate(1);
 function calMonth(d){calD.setMonth(calD.getMonth()+d);renderCalendar();}
 function calYear(d){const y=calD.getFullYear()+d;if(y<2020)return;calD.setFullYear(y);renderCalendar();}
 const MNL=['Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Août','Septembre','Octobre','Novembre','Décembre'];
-function buildDM(y,m){const dm={};APP.trades.forEach(t=>{if(!t.date)return;const td=new Date(t.date+'T12:00:00');if(td.getFullYear()===y&&td.getMonth()===m){dm[t.date]=dm[t.date]||{pnl:0,rr:0,count:0};dm[t.date].pnl+=(t.res||0);dm[t.date].rr+=computeRR(t);dm[t.date].count++;}});return dm;}
+function buildDM(y,m){const dm={};realTrades().forEach(t=>{if(!t.date)return;const td=new Date(t.date+'T12:00:00');if(td.getFullYear()===y&&td.getMonth()===m){dm[t.date]=dm[t.date]||{pnl:0,rr:0,count:0};dm[t.date].pnl+=(t.res||0);dm[t.date].rr+=computeRR(t);dm[t.date].count++;}});return dm;}
 function renderMonthGrid(y,m){
   const dm=buildDM(y,m);const fd=(new Date(y,m,1).getDay()+6)%7,dim=new Date(y,m+1,0).getDate();
   const ts=new Date().toISOString().split('T')[0];const DW=['Lun','Mar','Mer','Jeu','Ven','Sam','Dim'];
@@ -1767,6 +1775,8 @@ function filterT(period){
     if(period==='jour')return td.toDateString()===now.toDateString();return true;
   }).sort((a,b)=>a.date.localeCompare(b.date)||(a.heure||'').localeCompare(b.heure||''));
 }
+// Version qui exclut les backtests — pour les graphiques financiers (Equity, P&L, Risk)
+function filterRealT(period){return filterT(period).filter(t=>!t.backtest);}
 function wk(ds){const d=new Date(ds+'T12:00:00'),t=new Date(Date.UTC(d.getFullYear(),d.getMonth(),d.getDate()));const dy=(t.getUTCDay()+6)%7;t.setUTCDate(t.getUTCDate()-dy+3);const ft=new Date(Date.UTC(t.getUTCFullYear(),0,4));return t.getUTCFullYear()+'-W'+String(1+Math.round(((t-ft)/864e5-3+(ft.getUTCDay()+6)%7)/7)).padStart(2,'0');}
 function destroy(k){if(CH[k]){CH[k].destroy();delete CH[k];}}
 function gc(v){return getComputedStyle(document.documentElement).getPropertyValue(v).trim();}
@@ -1784,14 +1794,13 @@ function buildLabels(tr,period){
 }
 
 function updateKPIs(){
-  const t=APP.trades;if(!t.length)return;
+  const t=realTrades();if(!t.length)return;
   const gains=t.filter(x=>x.res>0),pertes=t.filter(x=>x.res<0);
   const pnl=t.reduce((s,x)=>s+(x.res||0),0),wr=gains.length/t.length*100;
   const rrArr=t.filter(x=>x.rrCible>0).map(x=>computeRR(x));
   const rrMoy=rrArr.length?rrArr.reduce((a,b)=>a+b)/rrArr.length:0;
   const sumG=gains.reduce((s,x)=>s+x.res,0),sumP=Math.abs(pertes.reduce((s,x)=>s+x.res,0));
   const pf=sumP>0?sumG/sumP:(sumG>0?99:0);
-  const mOk=t.filter(x=>x.mgmt==='Oui').filter(x=>x.res>0).length,mTot=t.filter(x=>x.mgmt==='Oui').length;
   const rp=getCurrentRiskPct(),re=getCurrentRiskEur(),worst=computeWorstLose();
   const fr=n=>n.toLocaleString('fr-FR',{minimumFractionDigits:2,maximumFractionDigits:2});
   document.getElementById('k0').textContent=fr(getCurrentCap())+'€';
@@ -1812,7 +1821,7 @@ function updateKPIs(){
 
 // EQUITY
 function drawEquity(period){
-  let tr=filterT(period);if(!tr.length)tr=filterT('tout');destroy('eq');if(!tr.length)return;
+  let tr=filterRealT(period);if(!tr.length)tr=filterRealT('tout');destroy('eq');if(!tr.length)return;
   let cap=CAPITAL();const data=tr.map(t=>{cap+=(t.res||0);return cap;});
   const labels=buildLabels(tr,period);const ctx=document.getElementById('cEq').getContext('2d');
   const lc=gc('--eq-line')||'#00e5a0',axC=gc('--eq-axis')||'#64748b',grC=gc('--eq-grid')||'rgba(100,116,139,.1)';
@@ -1825,7 +1834,7 @@ function drawEquity(period){
 
 // PNL — Diagramme en barres par trade
 function drawPnl(period){
-  const tr=filterT(period);destroy('pnl');
+  const tr=filterRealT(period);destroy('pnl');
   if(!tr.length)return;
   const posC=gc('--pnl-bar-pos')||'#3b82f6';
   const negC=gc('--pnl-bar-neg')||'#ef4444';
@@ -1908,7 +1917,7 @@ function drawMgmt(period){
 // COMP
 function drawComp(cid,chKey,trKey,period,pct,multi=false){
   const tr=filterT(period);destroy(chKey);
-  const map={};tr.forEach(t=>{const keys=multi&&t[trKey]?t[trKey].split(',').map(s=>s.trim()).filter(Boolean):[t[trKey]||'?'];keys.forEach(k=>{if(!map[k])map[k]={pnl:0,wins:0,total:0};map[k].pnl+=(t.res||0);if(t.res>0)map[k].wins++;map[k].total++;});});
+  const map={};tr.forEach(t=>{const keys=multi&&t[trKey]?t[trKey].split(/[|,]/).map(s=>s.trim()).filter(Boolean):[t[trKey]||'?'];keys.forEach(k=>{if(!map[k])map[k]={pnl:0,wins:0,total:0};map[k].pnl+=(t.res||0);if(t.res>0)map[k].wins++;map[k].total++;});});
   const ks=Object.keys(map).sort((a,b)=>map[b].pnl-map[a].pnl).slice(0,20);
   const data=ks.map(k=>pct?Math.round(map[k].wins/map[k].total*100):map[k].pnl);if(!ks.length)return;
   const pk=chKey==='conf'?'conf':'comp';
@@ -2149,11 +2158,12 @@ function openEditTrade(id){
   setTimeout(()=>{ sv2('e-dir', t.dir); sv2('e-session', t.session); sv2('e-paire', t.paire); }, 10);
   sv2('e-mgmt', t.mgmt);
   sv2('e-reprend', t.reprend);
+  const ebt=document.getElementById('e-backtest');if(ebt)ebt.checked=!!t.backtest;
   sv2('e-stars', t.stars||0);
   window._editImages=[];
   renderEditImages(t.images||[]);
-  const selTf  = (t.tf||'').split(',').map(s=>s.trim()).filter(Boolean);
-  const selConf= (t.conf||'').split(',').map(s=>s.trim()).filter(Boolean);
+  const selTf  = (t.tf||'').split(/[|,]/).map(s=>s.trim()).filter(Boolean);
+  const selConf= (t.conf||'').split(/[|,]/).map(s=>s.trim()).filter(Boolean);
   const tfList = APP.lists.timeframes||DEF.timeframes||[];
   const confList = APP.lists.confluences||DEF.confluences||[];
   document.getElementById('e-tf-wrap').innerHTML =
@@ -2224,10 +2234,11 @@ function saveEditTrade(){markUserAction();
   t.res      = parseFloat(document.getElementById('e-res').value)||0;
   t.mgmt     = document.getElementById('e-mgmt').value;
   t.reprend  = document.getElementById('e-reprend').value;
+  t.backtest = document.getElementById('e-backtest')?.checked||false;
   const notesEl = document.getElementById('e-notes'); t.notes = notesEl ? notesEl.value : (t.notes||'');
   const starsEl = document.getElementById('e-stars'); t.stars = starsEl ? parseFloat(starsEl.value)||0 : 0;
-  t.tf  = Array.from(document.querySelectorAll('#e-tf-wrap .chip.sel')).map(c=>c.dataset.v).join(',');
-  t.conf= Array.from(document.querySelectorAll('#e-conf-wrap .chip.sel')).map(c=>c.dataset.v).join(',');
+  t.tf  = Array.from(document.querySelectorAll('#e-tf-wrap .chip.sel')).map(c=>c.dataset.v).join('|');
+  t.conf= Array.from(document.querySelectorAll('#e-conf-wrap .chip.sel')).map(c=>c.dataset.v).join('|');
   // Gestion images
   const newImgs=window._editImages||[];
   if(!t.images)t.images=[];
@@ -2272,6 +2283,10 @@ function saveEditTrade(){markUserAction();
       <div class="fg"><label>Résultat (€)</label><input type="number" id="e-res"></div>
       <div class="fg"><label>Management</label><select id="e-mgmt"></select></div>
       <div class="fg"><label>Reprendrais-tu ?</label><select id="e-reprend"></select></div>
+      <div class="fg" style="display:flex;align-items:center;gap:8px;">
+        <input type="checkbox" id="e-backtest" style="width:18px;height:18px;cursor:pointer;accent-color:var(--gold);">
+        <label for="e-backtest" style="cursor:pointer;">Trade backtest</label>
+      </div>
       <div class="fg span2"><label>Note ⭐</label>
         <div class="star-picker" id="e-stars-picker" data-val="0">
           <span class="star-pick" data-v="1">★</span>
@@ -3230,9 +3245,9 @@ function showPcStatus(msg, color='var(--muted)'){
 
 // ══ TOP 5 / PIRES 5 TRADES ══
 function renderTop5() {
-  const sorted = [...APP.trades].sort((a,b) => (b.res||0) - (a.res||0));
-  const top5 = sorted.slice(0, 5);
-  const worst5 = [...APP.trades].sort((a,b) => (a.res||0) - (b.res||0)).slice(0, 5);
+  const rt = realTrades();
+  const top5 = [...rt].sort((a,b) => (b.res||0) - (a.res||0)).slice(0, 5);
+  const worst5 = [...rt].sort((a,b) => (a.res||0) - (b.res||0)).slice(0, 5);
 
   function tradeRow(t) {
     const pct = CAPITAL() > 0 ? ((t.res||0)/CAPITAL()*100).toFixed(2) : '0.00';
@@ -3375,7 +3390,7 @@ async function generatePointsCles() {
   const stat = (arr, key) => {
     const m = {};
     arr.forEach(t => {
-      const vals = t[key] ? (key==='tf'||key==='conf' ? t[key].split(',') : [t[key]]) : [];
+      const vals = t[key] ? (key==='tf'||key==='conf' ? t[key].split(/[|,]/) : [t[key]]) : [];
       vals.forEach(v => {
         v = v.trim(); if (!v) return;
         if (!m[v]) m[v] = {pnl:0,n:0,w:0};
@@ -3784,7 +3799,7 @@ function stripDecoEmoji(s){
 function pcStat(arr, key){
   const m = {};
   arr.forEach(t => {
-    const vals = t[key] ? (key==='tf'||key==='conf' ? t[key].split(',') : [t[key]]) : [];
+    const vals = t[key] ? (key==='tf'||key==='conf' ? t[key].split(/[|,]/) : [t[key]]) : [];
     vals.forEach(v => {
       v = v.trim(); if (!v) return;
       if (!m[v]) m[v] = {pnl:0,n:0,w:0};
