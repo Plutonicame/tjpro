@@ -65,6 +65,7 @@
   --rm-up-border:#00e5a0;--rm-up-text:#00e5a0;--rm-down-border:#ef4444;--rm-down-text:#ef4444;
   --btn-save-bg:#0062d2;--btn-save-bg-mobile:transparent;--btn-save-bd:#0062d2;--btn-save-tx:#fff;--btn-save-tx-mobile:#0062d2;
   --btn-delall-bg:transparent;--btn-delall-bd:#ef4444;--btn-delall-tx:#ef4444;
+  --bt-bg:var(--gold);--bt-tx:#000;
   --btn-export-bg:transparent;--btn-export-bd:#00e5a0;--btn-export-tx:#00e5a0;
   --btn-import-bg:transparent;--btn-import-bd:#f59e0b;--btn-import-tx:#f59e0b;
   /* Couleurs SÉPARÉES pour résultats/pourcentages journal */
@@ -680,10 +681,6 @@ tbody td{padding:6px 8px;vertical-align:middle;white-space:nowrap;}
         <div class="fg"><label data-editable>Résultat (€)</label><input type="number" id="f-res" placeholder="150 ou -80"></div>
         <div class="fg"><label data-editable>Management</label><select id="f-mgmt"></select></div>
         <div class="fg"><label data-editable>Reprendrais-tu ?</label><select id="f-reprend"></select></div>
-        <div class="fg" style="display:flex;align-items:center;gap:8px;">
-          <input type="checkbox" id="f-backtest" style="width:18px;height:18px;cursor:pointer;accent-color:var(--gold);">
-          <label for="f-backtest" data-editable style="cursor:pointer;">Trade backtest</label>
-        </div>
         <div class="fg span2"><label data-editable>Timeframes</label><div class="chip-wrap" id="tf-wrap"></div></div>
         <div class="fg spanall"><label data-editable>Confluences</label><div class="chip-wrap" id="conf-wrap"></div></div>
         <div class="fg spanall"><label data-editable>Notes</label><textarea id="f-notes" placeholder="Setup, émotions..."></textarea></div>
@@ -703,7 +700,13 @@ tbody td{padding:6px 8px;vertical-align:middle;white-space:nowrap;}
           <div id="f-images-wrap" style="display:flex;flex-wrap:wrap;gap:4px;margin-top:6px;"></div>
         </div>
       </div>
-      <button class="btn btn-p" onclick="addTrade()">＋ Ajouter le Trade</button>
+      <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:4px;">
+        <button class="btn btn-p" onclick="addTrade()">＋ Ajouter le Trade</button>
+        <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:12px;color:var(--muted);">
+          <input type="checkbox" id="f-backtest" style="width:16px;height:16px;cursor:pointer;accent-color:var(--bt-bg);">
+          <span data-editable>Backtest</span>
+        </label>
+      </div>
     </div>
   </div>
   <div class="card">
@@ -1555,7 +1558,7 @@ function renderTable(){
     <td style="font-family:var(--mono)">${t.date||'—'}</td>
     <td style="font-family:var(--mono)">${t.heure||'—'}</td>
     <td style="color:var(--muted)">${t.session||'—'}</td>
-    <td><strong>${t.paire||'—'}</strong>${t.backtest?'&nbsp;<span style="font-size:9px;padding:1px 4px;background:var(--gold);color:#000;border-radius:3px;font-family:var(--mono);">BT</span>':''}</td>
+    <td><strong>${t.paire||'—'}</strong>${t.backtest?'&nbsp;<span style="font-size:9px;padding:1px 4px;background:var(--bt-bg);color:var(--bt-tx);border-radius:3px;font-family:var(--mono);">BT</span>':''}</td>
     <td>${tagD(t.dir)}</td>
     <td style="font-family:var(--mono);color:var(--state-tf)">${t.tf||'—'}</td>
     <td style="color:var(--muted);max-width:120px;overflow:hidden;text-overflow:ellipsis" title="${t.conf||''}">${t.conf||'—'}</td>
@@ -1814,7 +1817,10 @@ function updateKPIs(){
    const k5el=document.getElementById('k5');
    if(k5el){k5el.textContent=(totalPO>0?'-':'')+fr(totalPO)+' €';k5el.style.color=totalPO>0?'var(--gold)':'var(--muted)';}
   }
-  document.getElementById('k6').textContent=t.length;document.getElementById('k7').textContent=re.toLocaleString('fr-FR')+'€ ('+fmtRiskPct(rp)+')';
+  const btCount=APP.trades.filter(x=>x.backtest).length;
+  const k6el=document.getElementById('k6');
+  if(k6el)k6el.innerHTML=t.length+(btCount?`<br><span style="font-size:9px;opacity:.7;">(${btCount} BT)</span>`:'');
+  document.getElementById('k7').textContent=re.toLocaleString('fr-FR')+'€ ('+fmtRiskPct(rp)+')';
   document.getElementById('k8').textContent=worst+' T ('+computeMaxDrawdown().toFixed(1)+'%)';
   for(let i=1;i<=9;i++){const c=gc(`--kpi${i}`);const bar=document.getElementById('kb'+i);const val=document.getElementById(`k${i-1}`);if(bar)bar.style.background=c;if(val)val.style.color=c;}
 }
@@ -1869,7 +1875,7 @@ function drawPnl(period){
 
 // PIE
 function drawPie(period){
-  const tr=filterT(period);destroy('pie');
+  const tr=filterRealT(period);destroy('pie');
   const g=tr.filter(t=>t.res>0).length,p=tr.filter(t=>t.res<0).length,n=tr.filter(t=>t.res===0).length;
   const ctx=document.getElementById('cPie').getContext('2d');
   CH['pie']=new Chart(ctx,{type:'doughnut',data:{labels:['Gagnants','Perdants','Nuls'],
@@ -1882,7 +1888,7 @@ function drawPie(period){
 // MGMT — 4 barres : P&L Oui | WinRate Oui | P&L Non | WinRate Non (sans toggle)
 function drawMgmt(period){
   destroy('mgmt');
-  const tr=filterT(period);
+  const tr=filterRealT(period);
   const mOui=tr.filter(t=>t.mgmt==='Oui'),mNon=tr.filter(t=>t.mgmt==='Non');
   const posC=gc('--mgmt-yes')||'#00e5a0',negC=gc('--mgmt-no')||'#ef4444';
   const axC=gc('--mgmt-axis')||'#64748b',grC=gc('--mgmt-grid')||'rgba(100,116,139,.1)';
@@ -2037,7 +2043,7 @@ const TV=[
 {v:'--pc-positif',l:'Points Clés - Positif',g:'Points Clés'},{v:'--pc-negatif',l:'Points Clés - Négatif',g:'Points Clés'},
 {v:'--rm-up-border',l:'Risk Mgmt - Bordure (monte)',g:'Risk Management'},{v:'--rm-up-text',l:'Risk Mgmt - Texte (monte)',g:'Risk Management'},{v:'--rm-down-border',l:'Risk Mgmt - Bordure (descend)',g:'Risk Management'},{v:'--rm-down-text',l:'Risk Mgmt - Texte (descend)',g:'Risk Management'},
   {v:'--auth-bg',l:'Connexion fond',g:'Connexion'},{v:'--auth-title',l:'Connexion titre',g:'Connexion'},{v:'--auth-sub',l:'Connexion sous-titre',g:'Connexion'},{v:'--auth-btn-bg',l:'Bouton continuer fond',g:'Connexion'},{v:'--auth-btn-tx',l:'Bouton continuer texte',g:'Connexion'},{v:'--auth-input-bg',l:'Champ email fond',g:'Connexion'},{v:'--auth-input-bd',l:'Champ email bordure',g:'Connexion'},{v:'--pin-btn-bg',l:'Touche PIN fond',g:'Connexion'},{v:'--pin-btn-bd',l:'Touche PIN bordure',g:'Connexion'},{v:'--pin-btn-tx',l:'Touche PIN texte',g:'Connexion'},{v:'--pin-dot-off',l:'Point PIN inactif',g:'Connexion'},{v:'--pin-dot-on',l:'Point PIN actif',g:'Connexion'},{v:'--btn-p-bg',l:'Bouton fond',g:'Boutons'},{v:'--btn-p-tx',l:'Bouton texte',g:'Boutons'},
-{v:'--btn-save-bg',l:'Sauvegarder - fond (PC)',g:'Boutons'},{v:'--btn-save-bg-mobile',l:'Sauvegarder - fond (mobile)',g:'Boutons'},{v:'--btn-save-bd',l:'Sauvegarder - bordure',g:'Boutons'},{v:'--btn-save-tx',l:'Sauvegarder - texte (PC)',g:'Boutons'},{v:'--btn-save-tx-mobile',l:'Sauvegarder - texte (mobile)',g:'Boutons'},{v:'--btn-delall-bg',l:'Supprimer tout - fond',g:'Boutons'},{v:'--btn-delall-bd',l:'Supprimer tout - bordure',g:'Boutons'},{v:'--btn-delall-tx',l:'Supprimer tout - texte',g:'Boutons'},{v:'--btn-export-bg',l:'Export - fond',g:'Boutons'},{v:'--btn-export-bd',l:'Export - bordure',g:'Boutons'},{v:'--btn-export-tx',l:'Export - texte',g:'Boutons'},{v:'--btn-import-bg',l:'Import - fond',g:'Boutons'},{v:'--btn-import-bd',l:'Import - bordure',g:'Boutons'},{v:'--btn-import-tx',l:'Import - texte',g:'Boutons'},{v:'--btn-g-bg',l:'Ghost fond',g:'Boutons'},{v:'--btn-g-bd',l:'Ghost bordure',g:'Boutons'},{v:'--btn-img-bg',l:'Image fond',g:'Boutons'},{v:'--btn-img-bd',l:'Image bordure',g:'Boutons'},{v:'--btn-img-tx',l:'Image texte',g:'Boutons'},{v:'--btn-pin-bg',l:'PIN fond',g:'Boutons'},{v:'--btn-pin-bd',l:'PIN bordure',g:'Boutons'},{v:'--btn-pin-tx',l:'PIN texte',g:'Boutons'},{v:'--btn-deco-bg',l:'Déco fond',g:'Boutons'},{v:'--btn-deco-bd',l:'Déco bordure',g:'Boutons'},{v:'--btn-deco-tx',l:'Déco texte',g:'Boutons'},
+{v:'--bt-bg',l:'Badge BT - fond',g:'Boutons'},{v:'--bt-tx',l:'Badge BT - texte',g:'Boutons'},{v:'--btn-save-bg',l:'Sauvegarder - fond (PC)',g:'Boutons'},{v:'--btn-save-bg-mobile',l:'Sauvegarder - fond (mobile)',g:'Boutons'},{v:'--btn-save-bd',l:'Sauvegarder - bordure',g:'Boutons'},{v:'--btn-save-tx',l:'Sauvegarder - texte (PC)',g:'Boutons'},{v:'--btn-save-tx-mobile',l:'Sauvegarder - texte (mobile)',g:'Boutons'},{v:'--btn-delall-bg',l:'Supprimer tout - fond',g:'Boutons'},{v:'--btn-delall-bd',l:'Supprimer tout - bordure',g:'Boutons'},{v:'--btn-delall-tx',l:'Supprimer tout - texte',g:'Boutons'},{v:'--btn-export-bg',l:'Export - fond',g:'Boutons'},{v:'--btn-export-bd',l:'Export - bordure',g:'Boutons'},{v:'--btn-export-tx',l:'Export - texte',g:'Boutons'},{v:'--btn-import-bg',l:'Import - fond',g:'Boutons'},{v:'--btn-import-bd',l:'Import - bordure',g:'Boutons'},{v:'--btn-import-tx',l:'Import - texte',g:'Boutons'},{v:'--btn-g-bg',l:'Ghost fond',g:'Boutons'},{v:'--btn-g-bd',l:'Ghost bordure',g:'Boutons'},{v:'--btn-img-bg',l:'Image fond',g:'Boutons'},{v:'--btn-img-bd',l:'Image bordure',g:'Boutons'},{v:'--btn-img-tx',l:'Image texte',g:'Boutons'},{v:'--btn-pin-bg',l:'PIN fond',g:'Boutons'},{v:'--btn-pin-bd',l:'PIN bordure',g:'Boutons'},{v:'--btn-pin-tx',l:'PIN texte',g:'Boutons'},{v:'--btn-deco-bg',l:'Déco fond',g:'Boutons'},{v:'--btn-deco-bd',l:'Déco bordure',g:'Boutons'},{v:'--btn-deco-tx',l:'Déco texte',g:'Boutons'},
   {v:'--tgl-off',l:'Toggle off',g:'Boutons'},{v:'--tgl-on',l:'Toggle on',g:'Boutons'},{v:'--tgl-thumb',l:'Toggle rond',g:'Boutons'},
   {v:'--tag-long-bg',l:'LONG fond',g:'Tags'},{v:'--tag-long-tx',l:'LONG texte',g:'Tags'},{v:'--tag-long-bd',l:'LONG bordure',g:'Tags'},
   {v:'--tag-short-bg',l:'SHORT fond',g:'Tags'},{v:'--tag-short-tx',l:'SHORT texte',g:'Tags'},{v:'--tag-short-bd',l:'SHORT bordure',g:'Tags'},
@@ -2283,10 +2289,6 @@ function saveEditTrade(){markUserAction();
       <div class="fg"><label>Résultat (€)</label><input type="number" id="e-res"></div>
       <div class="fg"><label>Management</label><select id="e-mgmt"></select></div>
       <div class="fg"><label>Reprendrais-tu ?</label><select id="e-reprend"></select></div>
-      <div class="fg" style="display:flex;align-items:center;gap:8px;">
-        <input type="checkbox" id="e-backtest" style="width:18px;height:18px;cursor:pointer;accent-color:var(--gold);">
-        <label for="e-backtest" style="cursor:pointer;">Trade backtest</label>
-      </div>
       <div class="fg span2"><label>Note ⭐</label>
         <div class="star-picker" id="e-stars-picker" data-val="0">
           <span class="star-pick" data-v="1">★</span>
@@ -2306,7 +2308,11 @@ function saveEditTrade(){markUserAction();
         <button class="btn" style="font-size:11px;padding:6px 12px;background:var(--btn-img-bg);color:var(--btn-img-tx);border:2px solid var(--btn-img-bd);border-radius:6px;cursor:pointer;" onclick="document.getElementById('e-img-input').click()"><span class="deco-emoji">📷</span> Ajouter image(s)</button>
       </div>
     </div>
-    <div style="display:flex;gap:8px;justify-content:flex-end;">
+    <div style="display:flex;gap:8px;justify-content:flex-end;align-items:center;flex-wrap:wrap;">
+      <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:12px;color:var(--muted);margin-right:auto;">
+        <input type="checkbox" id="e-backtest" style="width:16px;height:16px;cursor:pointer;accent-color:var(--bt-bg);">
+        <span>Backtest</span>
+      </label>
       <button class="btn btn-g" onclick="closeEditTrade()">ANNULER</button>
       <button class="btn btn-p" onclick="saveEditTrade()">SAUVEGARDER</button>
     </div>
