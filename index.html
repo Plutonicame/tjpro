@@ -1278,7 +1278,7 @@ function computeRiskHistory(){
   return{hist,finalRp:rp,finalWs:ws,finalLs:ls2,finalRealWs:realWS,finalRealLs:realLS,maxRealWs:maxRealWS,maxRealLs:maxRealLS};
 }
 function computeRR(t){if(t&&t.rrAuto===false&&typeof t.rrPris==='number'&&t.rrPris!==0){return t.rrPris;}const re=Math.max(1,Math.round(CAPITAL()*RBASE()/100));return parseFloat((t.res/re).toFixed(2));}
-function getCurrentCap(){return realTrades().reduce((s,t)=>s+(t.res||0),CAPITAL());}
+function getCurrentCap(){const totalPayouts=ls('tj_payouts',[]).reduce((s,p)=>s+(p.amount||0),0);return realTrades().reduce((s,t)=>s+(t.res||0),CAPITAL())-totalPayouts;}
 function getCurrentRiskPct(){return computeRiskHistory().finalRp;}
 function getCurrentRiskEur(){return Math.round(getCurrentCap()*getCurrentRiskPct()/100*100)/100;}
 // Formate un pourcentage de risque selon le réglage "Affichage risk : Décimales"
