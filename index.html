@@ -1781,6 +1781,8 @@ function filterT(period){
     if(period==='jour')return td.toDateString()===now.toDateString();return true;
   }).sort((a,b)=>a.date.localeCompare(b.date)||(a.heure||'').localeCompare(b.heure||''));
 }
+// Sans backtests (comportement par défaut)
+function filterRealT(period){return filterT(period).filter(t=>!t.backtest);}
 // État BT par graphique — true = inclure les backtests dans ce graphique
 const BT_STATE={eq:false,pnl:false,pie:false,risk:false,mgmt:false,conf:false,pairs:false,sessions:false,jours:false,tf:false,top5:false,cal:false,pc:false};
 function btFilter(key,period){return BT_STATE[key]?filterT(period):filterRealT(period);}
