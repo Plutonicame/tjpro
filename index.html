@@ -484,11 +484,10 @@ tbody td{padding:6px 8px;vertical-align:middle;white-space:nowrap;}
 <div class="mobile-menu" id="mobileMenu">
   <button class="mobile-menu-close" onclick="closeMobileMenu()">✕ Fermer</button>
   <button class="nav-tab" onclick="showPage('trackrecord');closeMobileMenu()">Track Record</button>
-  <button class="nav-tab" onclick="showPage('journal');closeMobileMenu()">Journal</button>
+  <button class="nav-tab" onclick="showPage('journal');closeMobileMenu()">Journal de trading</button>
   <button class="nav-tab" onclick="showPage('calendrier');closeMobileMenu()">Calendrier</button>
-  
-  <button class="nav-tab" onclick="showPage('modifs');closeMobileMenu()">Modifications</button>
-  <button class="nav-tab" onclick="showPage('pointscles');closeMobileMenu()">Points Clés</button>
+  <button class="nav-tab" onclick="showPage('pointscles');closeMobileMenu()">Analyse IA</button>
+  <button class="nav-tab" onclick="showPage('modifs');closeMobileMenu()">Paramètres</button>
 </div>
 
 <!-- NAV DESKTOP (une seule ligne) -->
@@ -496,11 +495,10 @@ tbody td{padding:6px 8px;vertical-align:middle;white-space:nowrap;}
   <div class="nav-desktop" style="position:relative;">
     <div class="nav-logo" data-editable>TJP</div>
     <button class="nav-tab active" onclick="showPage('trackrecord',this)"><span data-editable>Track Record</span></button>
-    <button class="nav-tab" onclick="showPage('journal',this)"><span data-editable>Journal</span></button>
+    <button class="nav-tab" onclick="showPage('journal',this)"><span data-editable>Journal de trading</span></button>
     <button class="nav-tab" onclick="showPage('calendrier',this)"><span data-editable>Calendrier</span></button>
-    
-    <button class="nav-tab" onclick="showPage('modifs',this)"><span data-editable>Modifications</span></button>
-    <button class="nav-tab" onclick="showPage('pointscles',this)"><span data-editable>Points Clés</span></button>
+    <button class="nav-tab" onclick="showPage('pointscles',this)"><span data-editable>Analyse IA</span></button>
+    <button class="nav-tab" onclick="showPage('modifs',this)"><span data-editable>Paramètres</span></button>
     <!-- Horloges centrées absolument -->
     <div class="nav-clocks" style="position:absolute;left:50%;transform:translateX(-50%);">
       <div class="clock-item"><span class="clock-city">NEW YORK</span><span class="clock-time" id="clkNY">--:--:--</span></div>
