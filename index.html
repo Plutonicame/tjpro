@@ -3171,20 +3171,20 @@ document.addEventListener('DOMContentLoaded', () => {
 
   const mobileMenu = document.querySelector('.mobile-menu');
   if (mobileMenu) {
+    const syncBtn = document.createElement('button');
+    syncBtn.className='nav-tab';
+    syncBtn.id='mobileSyncBtn';
+    syncBtn.style.cssText='font-size:14px;padding:14px 16px;border:1px solid var(--btn-save-bd);border-radius:6px;text-align:left;color:var(--btn-save-tx-mobile);background:var(--btn-save-bg-mobile);cursor:pointer;font-family:var(--mono);';
+    syncBtn.textContent='SAUVEGARDE';
+    syncBtn.onclick=()=>{manualSyncSave();};
+    mobileMenu.appendChild(syncBtn);
+
     const logoutBtn = document.createElement('button');
     logoutBtn.className='nav-tab';
     logoutBtn.style.cssText='font-size:14px;padding:14px 16px;border:1px solid #ef4444;border-radius:6px;text-align:left;color:#ef4444;background:none;cursor:pointer;font-family:var(--mono);';
     logoutBtn.textContent='⏻ DÉCONNEXION';
     logoutBtn.onclick=()=>{closeMobileMenu();resetPin();};
     mobileMenu.appendChild(logoutBtn);
-
-    const syncBtn = document.createElement('button');
-    syncBtn.className='nav-tab';
-    syncBtn.id='mobileSyncBtn';
-    syncBtn.style.cssText='font-size:14px;padding:14px 16px;border:1px solid var(--btn-save-bd);border-radius:6px;text-align:left;color:var(--btn-save-tx-mobile);background:var(--btn-save-bg-mobile);cursor:pointer;font-family:var(--mono);';
-    syncBtn.textContent='SAUVEGARDER ET SYNCHRONISER';
-    syncBtn.onclick=()=>{manualSyncSave();};
-    mobileMenu.appendChild(syncBtn);
 
     const exportBtn = document.createElement('button');
     exportBtn.className='nav-tab';
