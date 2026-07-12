@@ -65,6 +65,8 @@
   --rm-up-border:#00e5a0;--rm-up-text:#00e5a0;--rm-down-border:#ef4444;--rm-down-text:#ef4444;
   --btn-save-bg:#0062d2;--btn-save-bg-mobile:transparent;--btn-save-bd:#0062d2;--btn-save-tx:#fff;--btn-save-tx-mobile:#0062d2;
   --btn-delall-bg:transparent;--btn-delall-bd:#ef4444;--btn-delall-tx:#ef4444;
+  --btn-newgoogle-bg:transparent;--btn-newgoogle-bd:#1e2d45;--btn-newgoogle-tx:#6b7a99;
+  --acc-menu-bg:var(--surface);--acc-menu-bd:var(--border);--acc-menu-tx:var(--text);--acc-menu-tx2:var(--muted);
   --bt-bg:var(--gold);--bt-tx:#000;
   --btn-export-bg:transparent;--btn-export-bd:#00e5a0;--btn-export-tx:#00e5a0;
   --btn-import-bg:transparent;--btn-import-bd:#f59e0b;--btn-import-tx:#f59e0b;
@@ -84,7 +86,21 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);min-height:1
 
 /* Desktop: une seule ligne avec tout */
 .nav-desktop{display:flex;align-items:center;padding:0 16px;min-height:52px;gap:8px;}
-.nav-logo{font-family:var(--mono);font-size:13px;color:var(--nav-logo);letter-spacing:2px;white-space:nowrap;flex-shrink:0;font-weight:700;}
+.nav-logo{font-family:var(--mono);font-size:13px;color:var(--nav-logo);letter-spacing:2px;white-space:nowrap;flex-shrink:0;font-weight:700;cursor:pointer;user-select:none;position:relative;}
+/* Menu déroulant multi-comptes */
+.acc-menu{position:absolute;top:calc(100% + 6px);left:0;z-index:800;background:var(--acc-menu-bg,var(--surface));border:1px solid var(--acc-menu-bd,var(--border));border-radius:8px;min-width:220px;box-shadow:0 8px 24px rgba(0,0,0,.4);overflow:hidden;display:none;}
+.acc-menu.open{display:block;}
+.acc-item{display:flex;align-items:center;justify-content:space-between;padding:10px 14px;cursor:pointer;border-bottom:1px solid var(--border);transition:background .15s;}
+.acc-item:last-child{border-bottom:none;}
+.acc-item.active-acc{background:color-mix(in srgb,var(--green) 8%,transparent);}
+.acc-item:hover{background:var(--chip-h-bg);}
+.acc-item-info{flex:1;}
+.acc-item-name{font-family:var(--mono);font-size:12px;color:var(--acc-menu-tx,var(--text));}
+.acc-item-cap{font-size:10px;color:var(--acc-menu-tx2,var(--muted));margin-top:2px;}
+.acc-item-dots{font-size:16px;padding:2px 6px;border-radius:4px;color:var(--muted);cursor:pointer;flex-shrink:0;}
+.acc-item-dots:hover{background:var(--border);color:var(--text);}
+.acc-add-btn{width:100%;padding:10px 14px;background:none;border:none;color:var(--green);font-family:var(--mono);font-size:11px;cursor:pointer;text-align:left;display:flex;align-items:center;gap:8px;}
+.acc-add-btn:hover{background:color-mix(in srgb,var(--green) 8%,transparent);}
 .nav-tab{font-family:var(--mono);font-size:10px;letter-spacing:.8px;text-transform:uppercase;padding:8px 12px;border:none;background:transparent;color:var(--muted);cursor:pointer;border-bottom:2px solid transparent;transition:all .15s;white-space:nowrap;flex-shrink:0;}
 .nav-tab:hover{color:var(--text);}.nav-tab.active{color:var(--green);border-bottom-color:var(--green);}
 .nav-clocks{display:flex;align-items:center;gap:22px;margin:0 auto;}
@@ -493,7 +509,7 @@ tbody td{padding:6px 8px;vertical-align:middle;white-space:nowrap;}
 <!-- NAV DESKTOP (une seule ligne) -->
 <nav class="nav">
   <div class="nav-desktop" style="position:relative;">
-    <div class="nav-logo" data-editable>TJP</div>
+    <div class="nav-logo" id="navLogoBtn" data-editable onclick="toggleAccountMenu(event)">TJP▾<div class="acc-menu" id="accMenu"></div></div>
     <button class="nav-tab active" onclick="showPage('trackrecord',this)"><span data-editable>Track Record</span></button>
     <button class="nav-tab" onclick="showPage('journal',this)"><span data-editable>Journal de trading</span></button>
     <button class="nav-tab" onclick="showPage('calendrier',this)"><span data-editable>Calendrier</span></button>
@@ -1000,57 +1016,292 @@ const ALL_S=[...BASE,...gen2025()];
 
 // ══ STATE ══
 const DEF={paires:["EURUSD","GBPUSD","USDJPY","XAUUSD","XAGUSD","NAS100","SPX500","DAX40","DOW30","AUDUSD","USDCAD","EURGBP","GBPJPY","BTC/USD","ETH/USD"],sessions:["Londres","New York","Asie","Chevauchement LN","Pre-Marche"],confluences:["FVG","OB","BOS","CHOCH","Chandelier Japonais","EMA Cross","Support/Résistance","Liquidité","VWAP","SMT","Divergence RSI","Golden Zone Fib"],timeframes:["M1","M5","M15","M30","H1","H4","Daily","Weekly"],mgmt_opts:["Oui","Non"],reprend_opts:["Oui","Non","Peut-être"]};
+// ══════════════════════════════════════════════════════
+// SYSTÈME MULTI-COMPTES
+// ══════════════════════════════════════════════════════
+// Chaque compte secondaire a un id unique (acc_1, acc_2...).
+// Toutes les clés localStorage sont préfixées par l'accountId actif.
+// Le compte principal Google est le conteneur de tous les comptes.
+
+const ACCOUNTS_KEY = 'tjp_accounts';     // liste des comptes [{id,name,pinHash}]
+const ACTIVE_ACC_KEY = 'tjp_active_acc'; // id du compte actif
+
+function getAccounts(){
+  try { return JSON.parse(localStorage.getItem(ACCOUNTS_KEY)||'[]'); } catch(e){ return []; }
+}
+function saveAccounts(accs){ localStorage.setItem(ACCOUNTS_KEY, JSON.stringify(accs)); }
+function getActiveAccId(){
+  const id = localStorage.getItem(ACTIVE_ACC_KEY);
+  const accs = getAccounts();
+  if(id && accs.find(a=>a.id===id)) return id;
+  if(accs.length) return accs[0].id;
+  return 'acc_1';
+}
+function setActiveAccId(id){ localStorage.setItem(ACTIVE_ACC_KEY, id); }
+
+// Clé préfixée selon le compte actif (transparente pour le reste du code)
+let _currentAccId = null; // sera initialisé après connexion Google
+function accKey(k){ return _currentAccId ? `${k}__${_currentAccId}` : k; }
+
+// Initialise les comptes si aucun n'existe encore (migration depuis version sans comptes)
+function initAccountsIfNeeded(){
+  let accs = getAccounts();
+  if(!accs.length){
+    const firstAcc = {id:'acc_1', name:'Compte 1', pinHash: null, createdAt: Date.now()};
+    accs = [firstAcc];
+    saveAccounts(accs);
+    setActiveAccId('acc_1');
+    // Migration : les données existantes sans préfixe appartiennent au compte 1
+    // On les copie avec le bon préfixe pour cohérence
+    const keys = ['tj_trades','tj_lists','tj_nextId','tj_capital','tj_risk','tj_smart_risk',
+      'tj_risk_max','tj_risk_decimal','tj_theme_vars','tj_pencil_edits','tj_payouts',
+      'tjp_ia_config','tjp_recap_history','tj_rm_up_trigger','tj_rm_up_trades','tj_rm_up_pct',
+      'tj_rm_up_var_type','tj_rm_up_var_val','tj_rm_down_trigger','tj_rm_down_trades',
+      'tj_rm_down_pct','tj_rm_down_var_type','tj_rm_down_var_val'];
+    keys.forEach(k=>{
+      const v = localStorage.getItem(k);
+      if(v !== null) localStorage.setItem(`${k}__acc_1`, v);
+    });
+  }
+  _currentAccId = getActiveAccId();
+}
+
+// Valeurs par défaut pour un nouveau compte
+function defaultAccSettings(sourceAccId){
+  // Hérite les listes et le thème du compte source
+  const srcKey = k => sourceAccId ? `${k}__${sourceAccId}` : k;
+  return {
+    trades: [],
+    nextId: 9000,
+    capital: '1000',
+    risk: '1',
+    smart_risk: 'true',
+    risk_decimal: 'false',
+    risk_max: '5',
+    payouts: '[]',
+    lists: localStorage.getItem(srcKey('tj_lists')) || null,
+    theme: localStorage.getItem(srcKey('tj_theme_vars')) || null,
+    pencil_edits: null,
+    rm_up_trigger: '"trades"',
+    rm_up_trades: '3',
+    rm_up_pct: '5',
+    rm_up_var_type: '"pct"',
+    rm_up_var_val: '1',
+    rm_down_trigger: '"pct"',
+    rm_down_trades: '3',
+    rm_down_pct: '5',
+    rm_down_var_type: '"pct"',
+    rm_down_var_val: '0.5',
+  };
+}
+
+function createAccount(sourcAccId){
+  const accs = getAccounts();
+  const newId = 'acc_'+(Date.now());
+  const newName = 'Compte '+(accs.length+1);
+  const newAcc = {id:newId, name:newName, pinHash:null, createdAt:Date.now()};
+  accs.push(newAcc);
+  saveAccounts(accs);
+  // Initialiser localStorage du nouveau compte avec valeurs par défaut
+  const defs = defaultAccSettings(sourcAccId);
+  const k = key => `${key}__${newId}`;
+  localStorage.setItem(k('tj_trades'), JSON.stringify(defs.trades));
+  localStorage.setItem(k('tj_nextId'), JSON.stringify(defs.nextId));
+  localStorage.setItem(k('tj_capital'), defs.capital);
+  localStorage.setItem(k('tj_risk'), defs.risk);
+  localStorage.setItem(k('tj_smart_risk'), defs.smart_risk);
+  localStorage.setItem(k('tj_risk_decimal'), defs.risk_decimal);
+  localStorage.setItem(k('tj_risk_max'), defs.risk_max);
+  localStorage.setItem(k('tj_payouts'), defs.payouts);
+  if(defs.lists) localStorage.setItem(k('tj_lists'), defs.lists);
+  if(defs.theme) localStorage.setItem(k('tj_theme_vars'), defs.theme);
+  localStorage.setItem(k('tj_rm_up_trigger'), defs.rm_up_trigger);
+  localStorage.setItem(k('tj_rm_up_trades'), defs.rm_up_trades);
+  localStorage.setItem(k('tj_rm_up_pct'), defs.rm_up_pct);
+  localStorage.setItem(k('tj_rm_up_var_type'), defs.rm_up_var_type);
+  localStorage.setItem(k('tj_rm_up_var_val'), defs.rm_up_var_val);
+  localStorage.setItem(k('tj_rm_down_trigger'), defs.rm_down_trigger);
+  localStorage.setItem(k('tj_rm_down_trades'), defs.rm_down_trades);
+  localStorage.setItem(k('tj_rm_down_pct'), defs.rm_down_pct);
+  localStorage.setItem(k('tj_rm_down_var_type'), defs.rm_down_var_type);
+  localStorage.setItem(k('tj_rm_down_var_val'), defs.rm_down_var_val);
+  return newAcc;
+}
+
+function switchAccount(accId, force){
+  const accs = getAccounts();
+  const acc = accs.find(a=>a.id===accId);
+  if(!acc) return;
+  // Vérification PIN si défini pour ce compte
+  if(acc.pinHash && !force){
+    openAccountPinPrompt(accId);
+    return;
+  }
+  _doSwitchAccount(accId);
+}
+
+function _doSwitchAccount(accId){
+  setActiveAccId(accId);
+  _currentAccId = accId;
+  // Recharger tout l'état depuis les clés du nouveau compte
+  APP.trades = ls(accKey('tj_trades'), []);
+  APP.lists = ls(accKey('tj_lists'), DEF);
+  APP.nextId = ls(accKey('tj_nextId'), 9000);
+  ['confluences','mgmt_opts','reprend_opts'].forEach(k=>{if(!APP.lists[k])APP.lists[k]=DEF[k];});
+  // Appliquer le thème du nouveau compte
+  loadSavedTheme();
+  renderTable(); updateNavBadges(); updateKPIs();
+  refreshAllCharts(); renderTop5();
+  if(document.getElementById('page-modifs')?.classList.contains('active')) renderModifs();
+  closeAccountMenu();
+  renderAccountMenu();
+}
+
+function getAccCapital(accId){
+  const k = key => `${key}__${accId}`;
+  const trades = JSON.parse(localStorage.getItem(k('tj_trades'))||'[]').filter(t=>!t.backtest);
+  const capital = parseFloat(localStorage.getItem(k('tj_capital'))||'1000');
+  const payouts = JSON.parse(localStorage.getItem(k('tj_payouts'))||'[]').reduce((s,p)=>s+(p.amount||0),0);
+  return trades.reduce((s,t)=>s+(t.res||0), capital) - payouts;
+}
+
+function renameAccount(accId, newName){
+  const accs = getAccounts();
+  const acc = accs.find(a=>a.id===accId);
+  if(acc){ acc.name = newName; saveAccounts(accs); renderAccountMenu(); }
+}
+
+// ── Variables CSS du menu comptes ──
+// --acc-menu-bg, --acc-menu-bd, --acc-menu-tx, --acc-menu-tx2
+// --acc-item-bg-N, --acc-item-bd-N (N = index 1,2,3...)
+
 function ls(k,d){try{const v=localStorage.getItem(k);return v?JSON.parse(v):d;}catch(e){return d;}}
 function lss(k,v){
   try {
     localStorage.setItem(k,JSON.stringify(v));
   } catch(e) {
-    console.error('Erreur localStorage (probablement quota dépassé):', e);
-    pcShowSyncFailureWarning('Stockage local plein — exporte une sauvegarde immédiatement (bouton Modifications) et réduis le nombre/la taille des images jointes aux trades.');
+    console.error('Erreur localStorage:', e);
+    if(typeof pcShowSyncFailureWarning==='function')pcShowSyncFailureWarning('Stockage local plein.');
   }
 }
-function loadState(){return{trades:ls('tj_trades',ALL_S),lists:ls('tj_lists',DEF),nextId:ls('tj_nextId',9000)};}
+function lsAcc(k,d){return ls(accKey(k),d);}
+function lssAcc(k,v){lss(accKey(k),v);}
+function loadState(){return{trades:lsAcc('tj_trades',ALL_S),lists:lsAcc('tj_lists',DEF),nextId:lsAcc('tj_nextId',9000)};}
 function saveState(){
-  lss('tj_trades',APP.trades);
-  lss('tj_lists',APP.lists);
-  lss('tj_nextId',APP.nextId);
+  lssAcc('tj_trades',APP.trades);
+  lssAcc('tj_lists',APP.lists);
+  lssAcc('tj_nextId',APP.nextId);
   if(typeof currentUser !== 'undefined' && currentUser && typeof _isSyncing !== 'undefined' && !_isSyncing && window._userActionHappened) {
     clearTimeout(window._pushTimer);
     schedulePush(300);
   }
 }
-// Marquer qu'une action utilisateur a eu lieu (pour éviter push au démarrage)
 function markUserAction(){ window._userActionHappened = true; }
+// Initialiser le système multi-comptes AVANT de charger l'état
+// (accKey() dépend de _currentAccId qui est défini dans initAccountsIfNeeded)
+initAccountsIfNeeded();
 const APP=loadState();
 // Trades réels uniquement (hors backtest) — utilisé pour tous les calculs financiers :
 // P&L, capital, risk intelligent, séries de gains/pertes, calendrier.
 // Les backtests restent dans APP.trades pour l'analyse stratégique (confluences, TF, etc.)
 const realTrades=()=>APP.trades.filter(t=>!t.backtest);
 ['confluences','mgmt_opts','reprend_opts'].forEach(k=>{if(!APP.lists[k])APP.lists[k]=DEF[k];});
-const CAPITAL=()=>parseFloat(ls('tj_capital','10000'));
-const RBASE=()=>parseFloat(ls('tj_risk','1'));
-const RDEC=()=>ls('tj_risk_decimal',false);
-const SMART=()=>ls('tj_smart_risk',true);
-const RMAX=()=>parseFloat(ls('tj_risk_max','10'));
+const CAPITAL=()=>parseFloat(lsAcc('tj_capital','10000'));
+const RBASE=()=>parseFloat(lsAcc('tj_risk','1'));
+const RDEC=()=>lsAcc('tj_risk_decimal',false);
+const SMART=()=>lsAcc('tj_smart_risk',true);
+const RMAX=()=>parseFloat(lsAcc('tj_risk_max','10'));
 
 // ══ CONFIG RISK MANAGEMENT PERSONNALISABLE ══
-// Montée : déclencheur 'trades' (X gains consécutifs) ou 'pct' (X% de gain sur le compte)
-const RM_UP_TRIGGER=()=>ls('tj_rm_up_trigger','trades'); // 'trades' | 'pct'
-const RM_UP_TRADES=()=>parseFloat(ls('tj_rm_up_trades','3'));
-const RM_UP_PCT=()=>parseFloat(ls('tj_rm_up_pct','5'));
-// Montée : variation 'pct' (X% de risque) ou 'eur' (X€ de risque)
-const RM_UP_VAR_TYPE=()=>ls('tj_rm_up_var_type','pct'); // 'pct' | 'eur'
-const RM_UP_VAR_VAL=()=>parseFloat(ls('tj_rm_up_var_val','0.5'));
+const RM_UP_TRIGGER=()=>lsAcc('tj_rm_up_trigger','trades');
+const RM_UP_TRADES=()=>parseFloat(lsAcc('tj_rm_up_trades','3'));
+const RM_UP_PCT=()=>parseFloat(lsAcc('tj_rm_up_pct','5'));
+const RM_UP_VAR_TYPE=()=>lsAcc('tj_rm_up_var_type','pct');
+const RM_UP_VAR_VAL=()=>parseFloat(lsAcc('tj_rm_up_var_val','0.5'));
 
-// Descente : déclencheur 'trades' (X pertes consécutives) ou 'pct' (X% de drawdown)
-const RM_DOWN_TRIGGER=()=>ls('tj_rm_down_trigger','pct'); // 'trades' | 'pct'
-const RM_DOWN_TRADES=()=>parseFloat(ls('tj_rm_down_trades','3'));
-const RM_DOWN_PCT=()=>parseFloat(ls('tj_rm_down_pct','5'));
-// Descente : variation 'pct' (X% de risque) ou 'eur' (X€ de risque)
-const RM_DOWN_VAR_TYPE=()=>ls('tj_rm_down_var_type','pct'); // 'pct' | 'eur'
-const RM_DOWN_VAR_VAL=()=>parseFloat(ls('tj_rm_down_var_val','0.5'));
+// Descente
+const RM_DOWN_TRIGGER=()=>lsAcc('tj_rm_down_trigger','pct');
+const RM_DOWN_TRADES=()=>parseFloat(lsAcc('tj_rm_down_trades','3'));
+const RM_DOWN_PCT=()=>parseFloat(lsAcc('tj_rm_down_pct','5'));
+const RM_DOWN_VAR_TYPE=()=>lsAcc('tj_rm_down_var_type','pct');
+const RM_DOWN_VAR_VAL=()=>parseFloat(lsAcc('tj_rm_down_var_val','0.5'));
 
 // ══ CLOCKS ══
+// ══ MENU MULTI-COMPTES ══
+function toggleAccountMenu(e){
+  e.stopPropagation();
+  const menu=document.getElementById('accMenu');
+  if(!menu)return;
+  const isOpen=menu.classList.contains('open');
+  closeAccountMenu();
+  if(!isOpen){renderAccountMenu();menu.classList.add('open');}
+}
+function closeAccountMenu(){
+  const menu=document.getElementById('accMenu');
+  if(menu)menu.classList.remove('open');
+}
+document.addEventListener('click',()=>closeAccountMenu());
+
+function renderAccountMenu(){
+  const menu=document.getElementById('accMenu');
+  if(!menu)return;
+  const accs=getAccounts();
+  const activeId=_currentAccId;
+  let html='';
+  accs.forEach((acc,i)=>{
+    const cap=getAccCapital(acc.id);
+    const capStr=(cap>=0?'+':'')+cap.toLocaleString('fr-FR',{maximumFractionDigits:0})+'€';
+    const isActive=acc.id===activeId;
+    const bgVar=`var(--acc-item-bg-${i+1},transparent)`;
+    const bdVar=`var(--acc-item-bd-${i+1},transparent)`;
+    html+=`<div class="acc-item${isActive?' active-acc':''}" style="background:${bgVar};border-left:3px solid ${bdVar};" onclick="switchAccount('${acc.id}')">
+      <div class="acc-item-info">
+        <div class="acc-item-name">${escapeHtml(acc.name)}${isActive?' ✓':''}</div>
+        <div class="acc-item-cap">${capStr}</div>
+      </div>
+      <div class="acc-item-dots" onclick="event.stopPropagation();openAccOptions('${acc.id}')">⋮</div>
+    </div>`;
+  });
+  html+=`<button class="acc-add-btn" onclick="event.stopPropagation();addNewAccount()">＋ Ajouter un compte</button>`;
+  menu.innerHTML=html;
+}
+
+function openAccOptions(accId){
+  const accs=getAccounts();
+  const acc=accs.find(a=>a.id===accId);
+  if(!acc)return;
+  const newName=prompt('Renommer le compte :', acc.name);
+  if(newName && newName.trim()) renameAccount(accId, newName.trim());
+}
+
+function addNewAccount(){
+  closeAccountMenu();
+  const newAcc=createAccount(_currentAccId);
+  // Demander un nom personnalisé
+  const name=prompt('Nom du nouveau compte :', newAcc.name);
+  if(name && name.trim()){
+    const accs=getAccounts();
+    const a=accs.find(x=>x.id===newAcc.id);
+    if(a){a.name=name.trim();saveAccounts(accs);}
+  }
+  // Basculer sur le nouveau compte
+  _doSwitchAccount(newAcc.id);
+}
+
+function openAccountPinPrompt(accId){
+  // Simple prompt PIN pour le changement de compte protégé
+  const entered=prompt('Code PIN requis pour accéder à ce compte :');
+  if(!entered)return;
+  const accs=getAccounts();
+  const acc=accs.find(a=>a.id===accId);
+  if(acc && entered===acc.pinHash) _doSwitchAccount(accId);
+  else alert('Code PIN incorrect.');
+}
+
+function updateAccountMenuInNav(){
+  renderAccountMenu();
+}
+
 function updateClocks(){
   const n=new Date();
   const f=tz=>n.toLocaleTimeString('fr-FR',{timeZone:tz,hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false});
@@ -1083,13 +1334,13 @@ function togglePencil(){
   document.getElementById('pencilBtn').style.color=pencilActive?'var(--green)':'';
   document.getElementById('pencilToolbar').classList.toggle('show',pencilActive);
   if(!pencilActive){
-    const edits=ls('tj_pencil_edits',{});
+    const edits=lsAcc('tj_pencil_edits',{});
     document.querySelectorAll('[data-editable]').forEach(el=>{
       el.removeAttribute('contenteditable');
       const k=getEK(el);
       if(el.style.fontSize||el.style.color||el.innerHTML)edits[k]={html:el.innerHTML,fs:el.style.fontSize||'',col:el.style.color||''};
     });
-    lss('tj_pencil_edits',edits);
+    lssAcc('tj_pencil_edits',edits);
     if(typeof currentUser!=="undefined"&&currentUser&&!_isSyncing){schedulePush(300);}
   } else setupPencil();
 }
@@ -1131,10 +1382,10 @@ if(!window._pencilDelegateSet){
 }
 function saveOneEdit(el){
   const k=getEK(el);
-  const edits=ls('tj_pencil_edits',{});
+  const edits=lsAcc('tj_pencil_edits',{});
   const isDynamic=/^disp[0-9]$/.test(el.id||''); // valeurs calculées en direct : ne jamais figer le texte
   edits[k]={html:isDynamic?undefined:el.innerHTML,fs:el.style.fontSize||'',col:el.style.color||''};
-  lss('tj_pencil_edits',edits);
+  lssAcc('tj_pencil_edits',edits);
   if(typeof currentUser!=="undefined"&&currentUser&&!_isSyncing){schedulePush(300);}
 }
 function openCPforPencil(){openCP('Couleur texte',pencilColor,hex=>{pencilColor=hex;document.getElementById('pencilColorSwatch').style.background=hex;});}
@@ -1150,7 +1401,7 @@ function applyPencilStyle(){
 }
 
 function applyPencilEdits(){
-  const edits=ls('tj_pencil_edits',{});
+  const edits=lsAcc('tj_pencil_edits',{});
   document.querySelectorAll('[data-editable]').forEach(el=>{
     const k=getEK(el);
     if(edits[k]){
@@ -1276,7 +1527,7 @@ function computeRiskHistory(){
   return{hist,finalRp:rp,finalWs:ws,finalLs:ls2,finalRealWs:realWS,finalRealLs:realLS,maxRealWs:maxRealWS,maxRealLs:maxRealLS};
 }
 function computeRR(t){if(t&&t.rrAuto===false&&typeof t.rrPris==='number'&&t.rrPris!==0){return t.rrPris;}const re=Math.max(1,Math.round(CAPITAL()*RBASE()/100));return parseFloat((t.res/re).toFixed(2));}
-function getCurrentCap(){const totalPayouts=ls('tj_payouts',[]).reduce((s,p)=>s+(p.amount||0),0);return realTrades().reduce((s,t)=>s+(t.res||0),CAPITAL())-totalPayouts;}
+function getCurrentCap(){const totalPayouts=lsAcc('tj_payouts',[]).reduce((s,p)=>s+(p.amount||0),0);return realTrades().reduce((s,t)=>s+(t.res||0),CAPITAL())-totalPayouts;}
 function getCurrentRiskPct(){return computeRiskHistory().finalRp;}
 function getCurrentRiskEur(){return Math.round(getCurrentCap()*getCurrentRiskPct()/100*100)/100;}
 // Formate un pourcentage de risque selon le réglage "Affichage risk : Décimales"
@@ -1611,8 +1862,8 @@ function updateNavBadges(){
 }
 
 // ══ MODIFS ══
-function toggleDecimal(){const c=RDEC();lss('tj_risk_decimal',!c);document.getElementById('tglDec').classList.toggle('on',!c);renderModifs();updateNavBadges();updateKPIs();if(typeof currentUser!=="undefined"&&currentUser&&!_isSyncing){schedulePush(300);}}
-function toggleSmartRisk(){const c=SMART();lss('tj_smart_risk',!c);document.getElementById('tglSmart').classList.toggle('on',!c);document.getElementById('smartLbl').textContent=!c?'Activé':'Désactivé';document.getElementById('riskCard').style.display=!c?'':'none';renderModifs();updateNavBadges();refreshAllCharts();if(typeof currentUser!=="undefined"&&currentUser&&!_isSyncing){schedulePush(300);}}
+function toggleDecimal(){const c=RDEC();lssAcc('tj_risk_decimal',!c);document.getElementById('tglDec').classList.toggle('on',!c);renderModifs();updateNavBadges();updateKPIs();if(typeof currentUser!=="undefined"&&currentUser&&!_isSyncing){schedulePush(300);}}
+function toggleSmartRisk(){const c=SMART();lssAcc('tj_smart_risk',!c);document.getElementById('tglSmart').classList.toggle('on',!c);document.getElementById('smartLbl').textContent=!c?'Activé':'Désactivé';document.getElementById('riskCard').style.display=!c?'':'none';renderModifs();updateNavBadges();refreshAllCharts();if(typeof currentUser!=="undefined"&&currentUser&&!_isSyncing){schedulePush(300);}}
 // Toggle RR Pris auto/manuel, par formulaire ('f' pour ajout, 'e' pour édition)
 function toggleFormRrAuto(prefix){
   const tgl=document.getElementById(prefix+'-tglRrAuto');
@@ -1626,11 +1877,11 @@ function toggleFormRrAuto(prefix){
   group.style.display=nowOn?'none':'';
 }
 function saveCapitalRisk(){
-  lss('tj_capital',parseFloat(document.getElementById('capInput').value)||10000);
+  lssAcc('tj_capital',parseFloat(document.getElementById('capInput').value)||10000);
   const riskVal=parseFloat(document.getElementById('riskInput').value)||1;
-  lss('tj_risk',riskVal);
+  lssAcc('tj_risk',riskVal);
   const rm=parseFloat(document.getElementById('riskMaxInput').value)||10;
-  lss('tj_risk_max',rm);
+  lssAcc('tj_risk_max',rm);
   if(typeof currentUser!=="undefined"&&currentUser&&!_isSyncing){schedulePush(300);}
   const lbl=document.getElementById('riskMaxLabel');if(lbl)lbl.textContent=rm;
   renderModifs();updateNavBadges();updateKPIs();refreshAllCharts();
@@ -1660,17 +1911,17 @@ function loadRmConfigUI(){
   updateRmTriggerUI('down');
 }
 function saveRmConfig(){
-  lss('tj_rm_up_trigger',document.getElementById('rmUpTrigger').value);
-  lss('tj_rm_up_trades',parseFloat(document.getElementById('rmUpTradesVal').value)||3);
-  lss('tj_rm_up_pct',parseFloat(document.getElementById('rmUpPctVal').value)||5);
-  lss('tj_rm_up_var_type',document.getElementById('rmUpVarType').value);
-  lss('tj_rm_up_var_val',parseFloat(document.getElementById('rmUpVarVal').value)||0.5);
+  lssAcc('tj_rm_up_trigger',document.getElementById('rmUpTrigger').value);
+  lssAcc('tj_rm_up_trades',parseFloat(document.getElementById('rmUpTradesVal').value)||3);
+  lssAcc('tj_rm_up_pct',parseFloat(document.getElementById('rmUpPctVal').value)||5);
+  lssAcc('tj_rm_up_var_type',document.getElementById('rmUpVarType').value);
+  lssAcc('tj_rm_up_var_val',parseFloat(document.getElementById('rmUpVarVal').value)||0.5);
 
-  lss('tj_rm_down_trigger',document.getElementById('rmDownTrigger').value);
-  lss('tj_rm_down_trades',parseFloat(document.getElementById('rmDownTradesVal').value)||3);
-  lss('tj_rm_down_pct',parseFloat(document.getElementById('rmDownPctVal').value)||5);
-  lss('tj_rm_down_var_type',document.getElementById('rmDownVarType').value);
-  lss('tj_rm_down_var_val',parseFloat(document.getElementById('rmDownVarVal').value)||0.5);
+  lssAcc('tj_rm_down_trigger',document.getElementById('rmDownTrigger').value);
+  lssAcc('tj_rm_down_trades',parseFloat(document.getElementById('rmDownTradesVal').value)||3);
+  lssAcc('tj_rm_down_pct',parseFloat(document.getElementById('rmDownPctVal').value)||5);
+  lssAcc('tj_rm_down_var_type',document.getElementById('rmDownVarType').value);
+  lssAcc('tj_rm_down_var_val',parseFloat(document.getElementById('rmDownVarVal').value)||0.5);
 
   if(typeof currentUser!=="undefined"&&currentUser&&!_isSyncing){schedulePush(300);}
   renderModifs();updateNavBadges();updateKPIs();refreshAllCharts();
@@ -1678,15 +1929,15 @@ function saveRmConfig(){
 function addPayout(){
   const v=parseFloat(document.getElementById('payoutInput').value)||0;
   if(v<=0)return;
-  const payouts=ls('tj_payouts',[]);
+  const payouts=lsAcc('tj_payouts',[]);
   payouts.push({date:new Date().toISOString().split('T')[0],amount:v});
-  lss('tj_payouts',payouts);
+  lssAcc('tj_payouts',payouts);
   document.getElementById('payoutInput').value='';
   renderPayouts();updateNavBadges();updateKPIs();refreshAllCharts();
 }
-function removePayout(i){const payouts=ls('tj_payouts',[]);payouts.splice(i,1);lss('tj_payouts',payouts);renderPayouts();updateNavBadges();updateKPIs();refreshAllCharts();if(typeof currentUser!=="undefined"&&currentUser&&!_isSyncing){schedulePush(300);}}
+function removePayout(i){const payouts=ls('tj_payouts',[]);payouts.splice(i,1);lssAcc('tj_payouts',payouts);renderPayouts();updateNavBadges();updateKPIs();refreshAllCharts();if(typeof currentUser!=="undefined"&&currentUser&&!_isSyncing){schedulePush(300);}}
 function renderPayouts(){
-  const payouts=ls('tj_payouts',[]);
+  const payouts=lsAcc('tj_payouts',[]);
   const total=payouts.reduce((s,p)=>s+p.amount,0);
   // payoutTotal removed from modifs, shown in KPI instead
   const hist=document.getElementById('payoutHistory');
@@ -1697,10 +1948,10 @@ function renderPayouts(){
   </div>`).join('');
 }
 function renderModifs(){
-  document.getElementById('capInput').value=ls('tj_capital','10000');
-  document.getElementById('riskInput').value=ls('tj_risk','1');
-  document.getElementById('riskMaxInput').value=ls('tj_risk_max','10');
-  const rmLbl=document.getElementById('riskMaxLabel');if(rmLbl)rmLbl.textContent=ls('tj_risk_max','10');
+  document.getElementById('capInput').value=lsAcc('tj_capital','10000');
+  document.getElementById('riskInput').value=lsAcc('tj_risk','1');
+  document.getElementById('riskMaxInput').value=lsAcc('tj_risk_max','10');
+  const rmLbl=document.getElementById('riskMaxLabel');if(rmLbl)rmLbl.textContent=lsAcc('tj_risk_max','10');
   renderPayouts();
   document.getElementById('tglDec').classList.toggle('on',RDEC());
   const smart=SMART();document.getElementById('tglSmart').classList.toggle('on',smart);document.getElementById('smartLbl').textContent=smart?'Activé':'Désactivé';document.getElementById('riskCard').style.display=smart?'':'none';
@@ -1832,7 +2083,7 @@ function updateKPIs(){
   k1.style.color=pnl>=0?'var(--green)':'var(--red)';
   document.getElementById('k2').textContent=wr.toFixed(1)+'%';document.getElementById('k3').textContent=rrMoy.toFixed(2)+'R';
   document.getElementById('k4').textContent=pf.toFixed(2);
-  {const totalPO=ls('tj_payouts',[]).reduce((s,p)=>s+p.amount,0);
+  {const totalPO=lsAcc('tj_payouts',[]).reduce((s,p)=>s+p.amount,0);
    const k5el=document.getElementById('k5');
    if(k5el){k5el.textContent=(totalPO>0?'-':'')+fr(totalPO)+' €';k5el.style.color=totalPO>0?'var(--gold)':'var(--muted)';}
   }
@@ -2063,6 +2314,9 @@ const TV=[
 {v:'--pc-positif',l:'Points Clés - Positif',g:'Points Clés'},{v:'--pc-negatif',l:'Points Clés - Négatif',g:'Points Clés'},
 {v:'--rm-up-border',l:'Risk Mgmt - Bordure (monte)',g:'Risk Management'},{v:'--rm-up-text',l:'Risk Mgmt - Texte (monte)',g:'Risk Management'},{v:'--rm-down-border',l:'Risk Mgmt - Bordure (descend)',g:'Risk Management'},{v:'--rm-down-text',l:'Risk Mgmt - Texte (descend)',g:'Risk Management'},
   {v:'--auth-bg',l:'Connexion fond',g:'Connexion'},{v:'--auth-title',l:'Connexion titre',g:'Connexion'},{v:'--auth-sub',l:'Connexion sous-titre',g:'Connexion'},{v:'--auth-btn-bg',l:'Bouton continuer fond',g:'Connexion'},{v:'--auth-btn-tx',l:'Bouton continuer texte',g:'Connexion'},{v:'--auth-input-bg',l:'Champ email fond',g:'Connexion'},{v:'--auth-input-bd',l:'Champ email bordure',g:'Connexion'},{v:'--pin-btn-bg',l:'Touche PIN fond',g:'Connexion'},{v:'--pin-btn-bd',l:'Touche PIN bordure',g:'Connexion'},{v:'--pin-btn-tx',l:'Touche PIN texte',g:'Connexion'},{v:'--pin-dot-off',l:'Point PIN inactif',g:'Connexion'},{v:'--pin-dot-on',l:'Point PIN actif',g:'Connexion'},{v:'--btn-p-bg',l:'Bouton fond',g:'Boutons'},{v:'--btn-p-tx',l:'Bouton texte',g:'Boutons'},
+{v:'--btn-newgoogle-bg',l:'Connexion Google - fond',g:'Connexion'},{v:'--btn-newgoogle-bd',l:'Connexion Google - bordure',g:'Connexion'},{v:'--btn-newgoogle-tx',l:'Connexion Google - texte',g:'Connexion'},
+{v:'--acc-menu-bg',l:'Menu comptes - fond',g:'Menu Comptes'},{v:'--acc-menu-bd',l:'Menu comptes - bordure',g:'Menu Comptes'},{v:'--acc-menu-tx',l:'Menu comptes - texte principal',g:'Menu Comptes'},{v:'--acc-menu-tx2',l:'Menu comptes - texte secondaire',g:'Menu Comptes'},
+...getAccounts().flatMap((acc,i)=>[{v:`--acc-item-bg-${i+1}`,l:`${acc.name} - fond`,g:'Menu Comptes'},{v:`--acc-item-bd-${i+1}`,l:`${acc.name} - bordure`,g:'Menu Comptes'}]),
 {v:'--bt-bg',l:'Badge BT - fond',g:'Boutons'},{v:'--bt-tx',l:'Badge BT - texte',g:'Boutons'},{v:'--btn-save-bg',l:'Sauvegarder - fond (PC)',g:'Boutons'},{v:'--btn-save-bg-mobile',l:'Sauvegarder - fond (mobile)',g:'Boutons'},{v:'--btn-save-bd',l:'Sauvegarder - bordure',g:'Boutons'},{v:'--btn-save-tx',l:'Sauvegarder - texte (PC)',g:'Boutons'},{v:'--btn-save-tx-mobile',l:'Sauvegarder - texte (mobile)',g:'Boutons'},{v:'--btn-delall-bg',l:'Supprimer tout - fond',g:'Boutons'},{v:'--btn-delall-bd',l:'Supprimer tout - bordure',g:'Boutons'},{v:'--btn-delall-tx',l:'Supprimer tout - texte',g:'Boutons'},{v:'--btn-export-bg',l:'Export - fond',g:'Boutons'},{v:'--btn-export-bd',l:'Export - bordure',g:'Boutons'},{v:'--btn-export-tx',l:'Export - texte',g:'Boutons'},{v:'--btn-import-bg',l:'Import - fond',g:'Boutons'},{v:'--btn-import-bd',l:'Import - bordure',g:'Boutons'},{v:'--btn-import-tx',l:'Import - texte',g:'Boutons'},{v:'--btn-g-bg',l:'Ghost fond',g:'Boutons'},{v:'--btn-g-bd',l:'Ghost bordure',g:'Boutons'},{v:'--btn-img-bg',l:'Image fond',g:'Boutons'},{v:'--btn-img-bd',l:'Image bordure',g:'Boutons'},{v:'--btn-img-tx',l:'Image texte',g:'Boutons'},{v:'--btn-pin-bg',l:'PIN fond',g:'Boutons'},{v:'--btn-pin-bd',l:'PIN bordure',g:'Boutons'},{v:'--btn-pin-tx',l:'PIN texte',g:'Boutons'},{v:'--btn-deco-bg',l:'Déco fond',g:'Boutons'},{v:'--btn-deco-bd',l:'Déco bordure',g:'Boutons'},{v:'--btn-deco-tx',l:'Déco texte',g:'Boutons'},
   {v:'--tgl-off',l:'Toggle off',g:'Boutons'},{v:'--tgl-on',l:'Toggle on',g:'Boutons'},{v:'--tgl-thumb',l:'Toggle rond',g:'Boutons'},
   {v:'--tag-long-bg',l:'LONG fond',g:'Tags'},{v:'--tag-long-tx',l:'LONG texte',g:'Tags'},{v:'--tag-long-bd',l:'LONG bordure',g:'Tags'},
@@ -2119,10 +2373,10 @@ function teOCP(v,l){
     renderTE();
   });
 }
-function applyTheme(){Object.entries(teVals).forEach(([v,c])=>document.documentElement.style.setProperty(v,c));lss('tj_theme_vars',teVals);refreshAllCharts();if(typeof currentUser!=="undefined"&&currentUser&&!_isSyncing){schedulePush(300);}}
+function applyTheme(){Object.entries(teVals).forEach(([v,c])=>document.documentElement.style.setProperty(v,c));lssAcc('tj_theme_vars',teVals);refreshAllCharts();if(typeof currentUser!=="undefined"&&currentUser&&!_isSyncing){schedulePush(300);}}
 function undoTheme(){if(!teHist.length)return;teVals=teHist.pop();renderTE();applyTheme();}
-function askResetTheme(){showConfirm('Réinitialiser','Supprimer toutes les personnalisations ?',()=>{teVals={};lss('tj_theme_vars',{});document.documentElement.removeAttribute('style');renderTE();refreshAllCharts();if(typeof currentUser!=="undefined"&&currentUser&&!_isSyncing){schedulePush(300);}});}
-function loadSavedTheme(){const s=ls('tj_theme_vars',null);if(s){Object.entries(s).forEach(([v,c])=>document.documentElement.style.setProperty(v,c));teVals=s;}}
+function askResetTheme(){showConfirm('Réinitialiser','Supprimer toutes les personnalisations ?',()=>{teVals={};lssAcc('tj_theme_vars',{});document.documentElement.removeAttribute('style');renderTE();refreshAllCharts();if(typeof currentUser!=="undefined"&&currentUser&&!_isSyncing){schedulePush(300);}});}
+function loadSavedTheme(){const s=lsAcc('tj_theme_vars',null);if(s){Object.entries(s).forEach(([v,c])=>document.documentElement.style.setProperty(v,c));teVals=s;}}
 
 // ══ INIT ══
 // ── INIT inside DOMContentLoaded ──
@@ -2361,7 +2615,7 @@ function saveEditTrade(){markUserAction();
 .pin-btn.empty{visibility:hidden;}
 .google-btn{display:flex;align-items:center;gap:12px;background:#fff;color:#1a1a1a;border:none;border-radius:8px;padding:12px 24px;font-size:15px;font-weight:600;cursor:pointer;font-family:'DM Sans',sans-serif;}
 .google-btn:disabled{opacity:.6;cursor:not-allowed;}
-.change-pin-btn{font-family:'Space Mono',monospace;font-size:10px;color:#6b7a99;background:none;border:1px solid #1e2d45;border-radius:4px;padding:6px 12px;cursor:pointer;margin-top:4px;}
+.change-pin-btn{font-family:'Space Mono',monospace;font-size:10px;color:var(--btn-newgoogle-tx);background:var(--btn-newgoogle-bg);border:1px solid var(--btn-newgoogle-bd);border-radius:4px;padding:6px 12px;cursor:pointer;margin-top:4px;}
 </style>
 
 <!-- ÉTAPE 1 : Google Login (1ère fois ou reset) -->
@@ -2749,8 +3003,8 @@ function pcShowPullSuspectWarning(msg){
   bar.style.display = 'block';
 }
 function pcForceKeepLocal(){
-  // On garde notre version locale et on la pousse pour écraser la version cloud suspecte
   window._pendingCloudData = null;
+  window._safetyCheckDone = true;
   pcHideSyncFailureWarning();
   schedulePush(0);
 }
@@ -2771,19 +3025,19 @@ async function pushToCloud() {
   try {
     const data = {
       user_id: currentUser.id, trades: APP.trades, lists: APP.lists, next_id: APP.nextId,
-      capital: localStorage.getItem('tj_capital'), risk: localStorage.getItem('tj_risk'),
-      smart_risk: localStorage.getItem('tj_smart_risk'), risk_max: localStorage.getItem('tj_risk_max'),
-      risk_decimal: localStorage.getItem('tj_risk_decimal'), theme: localStorage.getItem('tj_theme_vars'),
+      capital: localStorage.getItem(accKey('tj_capital')), risk: localStorage.getItem(accKey('tj_risk')),
+      smart_risk: localStorage.getItem(accKey('tj_smart_risk')), risk_max: localStorage.getItem(accKey('tj_risk_max')),
+      risk_decimal: localStorage.getItem(accKey('tj_risk_decimal')), theme: localStorage.getItem(accKey('tj_theme_vars')),
       pencil_edits: (() => {
         try {
-          const edits = JSON.parse(localStorage.getItem('tj_pencil_edits') || '{}');
+          const edits = JSON.parse(localStorage.getItem(accKey('tj_pencil_edits')) || '{}');
           const toSync = {};
           Object.entries(edits).forEach(([k,v]) => { toSync[k] = { html: v.html || '', col: v.col || '' }; });
           return JSON.stringify(toSync);
-        } catch(e) { return localStorage.getItem('tj_pencil_edits'); }
+        } catch(e) { return localStorage.getItem(accKey('tj_pencil_edits')); }
       })(),
       ia_config: localStorage.getItem('tjp_ia_config'),
-      recap_history: localStorage.getItem('tjp_recap_history'), payouts: localStorage.getItem('tj_payouts'),
+      recap_history: localStorage.getItem('tjp_recap_history'), payouts: localStorage.getItem(accKey('tj_payouts')),
       updated_at: new Date().toISOString()
     };
     _lastPushTimestamp = data.updated_at;
@@ -2816,35 +3070,51 @@ async function manualSyncSave() {
 // Indépendante du cloud : un vrai filet de sécurité contre toute perte de données,
 // même en cas de bug de synchronisation, de panne Supabase, ou de mauvaise manipulation.
 function exportLocalBackup(){
+  const accs = getAccounts();
+  const allAccountsData = accs.map(acc => {
+    const k = key => `${key}__${acc.id}`;
+    return {
+      id: acc.id, name: acc.name, pinHash: acc.pinHash, createdAt: acc.createdAt,
+      trades: JSON.parse(localStorage.getItem(k('tj_trades'))||'[]'),
+      lists: JSON.parse(localStorage.getItem(k('tj_lists'))||'null'),
+      nextId: JSON.parse(localStorage.getItem(k('tj_nextId'))||'9000'),
+      capital: localStorage.getItem(k('tj_capital')),
+      risk: localStorage.getItem(k('tj_risk')),
+      smartRisk: localStorage.getItem(k('tj_smart_risk')),
+      riskMax: localStorage.getItem(k('tj_risk_max')),
+      riskDecimal: localStorage.getItem(k('tj_risk_decimal')),
+      theme: localStorage.getItem(k('tj_theme_vars')),
+      pencilEdits: localStorage.getItem(k('tj_pencil_edits')),
+      payouts: localStorage.getItem(k('tj_payouts')),
+      rmConfig: {
+        upTrigger: localStorage.getItem(k('tj_rm_up_trigger')),
+        upTrades: localStorage.getItem(k('tj_rm_up_trades')),
+        upPct: localStorage.getItem(k('tj_rm_up_pct')),
+        upVarType: localStorage.getItem(k('tj_rm_up_var_type')),
+        upVarVal: localStorage.getItem(k('tj_rm_up_var_val')),
+        downTrigger: localStorage.getItem(k('tj_rm_down_trigger')),
+        downTrades: localStorage.getItem(k('tj_rm_down_trades')),
+        downPct: localStorage.getItem(k('tj_rm_down_pct')),
+        downVarType: localStorage.getItem(k('tj_rm_down_var_type')),
+        downVarVal: localStorage.getItem(k('tj_rm_down_var_val')),
+      },
+    };
+  });
   const backup = {
-    type: 'tjp_backup',
-    version: 1,
+    type: 'tjp_backup_multi',
+    version: 2,
     exportedAt: new Date().toISOString(),
+    activeAccId: _currentAccId,
+    accounts: allAccountsData,
+    iaConfig: localStorage.getItem('tjp_ia_config'),
+    recapHistory: localStorage.getItem('tjp_recap_history'),
+    // Rétrocompatibilité : données du compte actif au niveau racine
     trades: APP.trades,
     lists: APP.lists,
     nextId: APP.nextId,
-    capital: localStorage.getItem('tj_capital'),
-    risk: localStorage.getItem('tj_risk'),
-    smartRisk: localStorage.getItem('tj_smart_risk'),
-    riskMax: localStorage.getItem('tj_risk_max'),
-    riskDecimal: localStorage.getItem('tj_risk_decimal'),
-    theme: localStorage.getItem('tj_theme_vars'),
-    pencilEdits: localStorage.getItem('tj_pencil_edits'),
-    payouts: localStorage.getItem('tj_payouts'),
-    iaConfig: localStorage.getItem('tjp_ia_config'),
-    recapHistory: localStorage.getItem('tjp_recap_history'),
-    rmConfig: {
-      upTrigger: localStorage.getItem('tj_rm_up_trigger'),
-      upTrades: localStorage.getItem('tj_rm_up_trades'),
-      upPct: localStorage.getItem('tj_rm_up_pct'),
-      upVarType: localStorage.getItem('tj_rm_up_var_type'),
-      upVarVal: localStorage.getItem('tj_rm_up_var_val'),
-      downTrigger: localStorage.getItem('tj_rm_down_trigger'),
-      downTrades: localStorage.getItem('tj_rm_down_trades'),
-      downPct: localStorage.getItem('tj_rm_down_pct'),
-      downVarType: localStorage.getItem('tj_rm_down_var_type'),
-      downVarVal: localStorage.getItem('tj_rm_down_var_val'),
-    },
+    capital: localStorage.getItem(accKey('tj_capital')),
+    risk: localStorage.getItem(accKey('tj_risk')),
+    theme: localStorage.getItem(accKey('tj_theme_vars')),
   };
   const blob = new Blob([JSON.stringify(backup, null, 2)], {type: 'application/json'});
   const url = URL.createObjectURL(blob);
@@ -2867,8 +3137,50 @@ function importLocalBackup(event){
     let backup;
     try { backup = JSON.parse(e.target.result); }
     catch(err) { alert('Fichier invalide : ce n\'est pas un fichier de sauvegarde TJP valide.'); return; }
-    if (backup.type !== 'tjp_backup' || !Array.isArray(backup.trades)) {
+    if ((!['tjp_backup','tjp_backup_multi'].includes(backup.type)) || (!Array.isArray(backup.trades) && !Array.isArray(backup.accounts))) {
       alert('Fichier invalide : ce n\'est pas un fichier de sauvegarde TJP valide.');
+      return;
+    }
+    // Import multi-comptes (version 2)
+    if (backup.type === 'tjp_backup_multi' && Array.isArray(backup.accounts)) {
+      const n = backup.accounts.reduce((s,a)=>s+a.trades.length,0);
+      showConfirm('Restaurer une sauvegarde complète',
+        `Cette sauvegarde contient ${backup.accounts.length} compte(s) et ${n} trade(s) au total. Restaurer remplacera TOUS tes comptes actuels. Continuer ?`,
+        () => {
+          saveAccounts(backup.accounts.map(a=>({id:a.id,name:a.name,pinHash:a.pinHash||null,createdAt:a.createdAt||Date.now()})));
+          backup.accounts.forEach(acc => {
+            const k = key => `${key}__${acc.id}`;
+            if(acc.trades) localStorage.setItem(k('tj_trades'), JSON.stringify(acc.trades));
+            if(acc.lists) localStorage.setItem(k('tj_lists'), JSON.stringify(acc.lists));
+            if(acc.nextId) localStorage.setItem(k('tj_nextId'), JSON.stringify(acc.nextId));
+            if(acc.capital) localStorage.setItem(k('tj_capital'), acc.capital);
+            if(acc.risk) localStorage.setItem(k('tj_risk'), acc.risk);
+            if(acc.smartRisk) localStorage.setItem(k('tj_smart_risk'), acc.smartRisk);
+            if(acc.riskMax) localStorage.setItem(k('tj_risk_max'), acc.riskMax);
+            if(acc.riskDecimal) localStorage.setItem(k('tj_risk_decimal'), acc.riskDecimal);
+            if(acc.theme) localStorage.setItem(k('tj_theme_vars'), acc.theme);
+            if(acc.pencilEdits) localStorage.setItem(k('tj_pencil_edits'), acc.pencilEdits);
+            if(acc.payouts) localStorage.setItem(k('tj_payouts'), acc.payouts);
+            if(acc.rmConfig){const rm=acc.rmConfig,kk=key=>k('tj_'+key);
+              if(rm.upTrigger)localStorage.setItem(kk('rm_up_trigger'),rm.upTrigger);
+              if(rm.upTrades)localStorage.setItem(kk('rm_up_trades'),rm.upTrades);
+              if(rm.upPct)localStorage.setItem(kk('rm_up_pct'),rm.upPct);
+              if(rm.upVarType)localStorage.setItem(kk('rm_up_var_type'),rm.upVarType);
+              if(rm.upVarVal)localStorage.setItem(kk('rm_up_var_val'),rm.upVarVal);
+              if(rm.downTrigger)localStorage.setItem(kk('rm_down_trigger'),rm.downTrigger);
+              if(rm.downTrades)localStorage.setItem(kk('rm_down_trades'),rm.downTrades);
+              if(rm.downPct)localStorage.setItem(kk('rm_down_pct'),rm.downPct);
+              if(rm.downVarType)localStorage.setItem(kk('rm_down_var_type'),rm.downVarType);
+              if(rm.downVarVal)localStorage.setItem(kk('rm_down_var_val'),rm.downVarVal);
+            }
+          });
+          if(backup.iaConfig) localStorage.setItem('tjp_ia_config', backup.iaConfig);
+          if(backup.recapHistory) localStorage.setItem('tjp_recap_history', backup.recapHistory);
+          const targetAcc = backup.activeAccId || backup.accounts[0]?.id;
+          if(targetAcc){ setActiveAccId(targetAcc); _currentAccId=targetAcc; }
+          _doSwitchAccount(_currentAccId);
+          showSync('✓ Sauvegarde multi-comptes restaurée', '#22c55e');
+        });
       return;
     }
     const currentCount = APP.trades.length;
@@ -2883,28 +3195,28 @@ function importLocalBackup(event){
         APP.trades = backup.trades;
         if (backup.lists) APP.lists = backup.lists;
         if (backup.nextId) APP.nextId = backup.nextId;
-        if (backup.capital) localStorage.setItem('tj_capital', backup.capital);
-        if (backup.risk) localStorage.setItem('tj_risk', backup.risk);
-        if (backup.smartRisk) localStorage.setItem('tj_smart_risk', backup.smartRisk);
-        if (backup.riskMax) localStorage.setItem('tj_risk_max', backup.riskMax);
-        if (backup.riskDecimal) localStorage.setItem('tj_risk_decimal', backup.riskDecimal);
-        if (backup.theme) localStorage.setItem('tj_theme_vars', backup.theme);
-        if (backup.pencilEdits) localStorage.setItem('tj_pencil_edits', backup.pencilEdits);
-        if (backup.payouts) localStorage.setItem('tj_payouts', backup.payouts);
+        if (backup.capital) localStorage.setItem(accKey('tj_capital'), backup.capital);
+        if (backup.risk) localStorage.setItem(accKey('tj_risk'), backup.risk);
+        if (backup.smartRisk) localStorage.setItem(accKey('tj_smart_risk'), backup.smartRisk);
+        if (backup.riskMax) localStorage.setItem(accKey('tj_risk_max'), backup.riskMax);
+        if (backup.riskDecimal) localStorage.setItem(accKey('tj_risk_decimal'), backup.riskDecimal);
+        if (backup.theme) localStorage.setItem(accKey('tj_theme_vars'), backup.theme);
+        if (backup.pencilEdits) localStorage.setItem(accKey('tj_pencil_edits'), backup.pencilEdits);
+        if (backup.payouts) localStorage.setItem(accKey('tj_payouts'), backup.payouts);
         if (backup.iaConfig) localStorage.setItem('tjp_ia_config', backup.iaConfig);
         if (backup.recapHistory) localStorage.setItem('tjp_recap_history', backup.recapHistory);
         if (backup.rmConfig) {
           const rm = backup.rmConfig;
-          if (rm.upTrigger) localStorage.setItem('tj_rm_up_trigger', rm.upTrigger);
-          if (rm.upTrades) localStorage.setItem('tj_rm_up_trades', rm.upTrades);
-          if (rm.upPct) localStorage.setItem('tj_rm_up_pct', rm.upPct);
-          if (rm.upVarType) localStorage.setItem('tj_rm_up_var_type', rm.upVarType);
-          if (rm.upVarVal) localStorage.setItem('tj_rm_up_var_val', rm.upVarVal);
-          if (rm.downTrigger) localStorage.setItem('tj_rm_down_trigger', rm.downTrigger);
-          if (rm.downTrades) localStorage.setItem('tj_rm_down_trades', rm.downTrades);
-          if (rm.downPct) localStorage.setItem('tj_rm_down_pct', rm.downPct);
-          if (rm.downVarType) localStorage.setItem('tj_rm_down_var_type', rm.downVarType);
-          if (rm.downVarVal) localStorage.setItem('tj_rm_down_var_val', rm.downVarVal);
+          if (rm.upTrigger) localStorage.setItem(accKey('tj_rm_up_trigger'), rm.upTrigger);
+          if (rm.upTrades) localStorage.setItem(accKey('tj_rm_up_trades'), rm.upTrades);
+          if (rm.upPct) localStorage.setItem(accKey('tj_rm_up_pct'), rm.upPct);
+          if (rm.upVarType) localStorage.setItem(accKey('tj_rm_up_var_type'), rm.upVarType);
+          if (rm.upVarVal) localStorage.setItem(accKey('tj_rm_up_var_val'), rm.upVarVal);
+          if (rm.downTrigger) localStorage.setItem(accKey('tj_rm_down_trigger'), rm.downTrigger);
+          if (rm.downTrades) localStorage.setItem(accKey('tj_rm_down_trades'), rm.downTrades);
+          if (rm.downPct) localStorage.setItem(accKey('tj_rm_down_pct'), rm.downPct);
+          if (rm.downVarType) localStorage.setItem(accKey('tj_rm_down_var_type'), rm.downVarType);
+          if (rm.downVarVal) localStorage.setItem(accKey('tj_rm_down_var_val'), rm.downVarVal);
         }
         // Réappliquer le thème visuellement si restauré
         if (backup.theme) {
@@ -2943,17 +3255,17 @@ function applyCloudData(data, skipSafetyCheck) {
   const localCount = APP.trades.length;
   const cloudCount = cloudTrades.length;
 
-  // Garde-fou anti-perte de données : si le cloud propose une chute BRUTALE du nombre
-  // de trades (perte de plus de 30%, et au moins 5 trades de différence) alors qu'on
-  // n'a pas nous-même déclenché une suppression volontaire (ex: "Supprimer tous les trades"),
-  // on ne l'applique pas silencieusement — on alerte et on garde la version locale,
-  // car c'est plus probablement une donnée cloud périmée/un conflit qu'une vraie suppression.
-  if (!skipSafetyCheck && !window._intentionalBulkDelete && localCount >= 5) {
+  // Garde-fou one-shot : ne se déclenche qu'une seule fois par session.
+  // Après que l'utilisateur a fait son choix (garder local ou cloud), le flag
+  // _safetyCheckDone est posé et le bandeau ne réapparaît plus, même si le
+  // polling continue de détecter la même divergence.
+  if (!skipSafetyCheck && !window._intentionalBulkDelete && !window._safetyCheckDone && localCount >= 5) {
     const lostRatio = (localCount - cloudCount) / localCount;
     if (cloudCount < localCount && lostRatio > 0.3 && (localCount - cloudCount) >= 5) {
-      console.warn(`Pull cloud suspect ignoré : ${localCount} trades locaux vs ${cloudCount} sur le cloud (perte de ${(lostRatio*100).toFixed(0)}%).`);
+      window._safetyCheckDone = true; // ne plus jamais redemander dans cette session
+      console.warn(`Pull cloud suspect : ${localCount} trades locaux vs ${cloudCount} sur le cloud.`);
       pcShowPullSuspectWarning(`Le cloud a ${cloudCount} trades, ton appareil en a ${localCount}. Choisis quelle version garder :`);
-      window._pendingCloudData = data; // permet de forcer l'application plus tard si l'utilisateur confirme
+      window._pendingCloudData = data;
       return;
     }
   }
@@ -2967,14 +3279,14 @@ function applyCloudData(data, skipSafetyCheck) {
     APP.lists = merged;
   }
   APP.nextId = data.next_id || APP.nextId;
-  if (data.capital) localStorage.setItem('tj_capital', data.capital);
-  if (data.risk) localStorage.setItem('tj_risk', data.risk);
-  if (data.smart_risk != null) localStorage.setItem('tj_smart_risk', data.smart_risk);
-  if (data.risk_max) localStorage.setItem('tj_risk_max', data.risk_max);
-  if (data.risk_decimal != null) localStorage.setItem('tj_risk_decimal', data.risk_decimal);
-  if (data.payouts) localStorage.setItem('tj_payouts', data.payouts);
+  if (data.capital) localStorage.setItem(accKey('tj_capital'), data.capital);
+  if (data.risk) localStorage.setItem(accKey('tj_risk'), data.risk);
+  if (data.smart_risk != null) localStorage.setItem(accKey('tj_smart_risk'), data.smart_risk);
+  if (data.risk_max) localStorage.setItem(accKey('tj_risk_max'), data.risk_max);
+  if (data.risk_decimal != null) localStorage.setItem(accKey('tj_risk_decimal'), data.risk_decimal);
+  if (data.payouts) localStorage.setItem(accKey('tj_payouts'), data.payouts);
   if (data.theme) {
-    localStorage.setItem('tj_theme_vars', data.theme);
+    localStorage.setItem(accKey('tj_theme_vars'), data.theme);
     try {
       const v=JSON.parse(data.theme);
       Object.entries(v).forEach(([k,c])=>document.documentElement.style.setProperty(k,c));
@@ -2991,7 +3303,7 @@ function applyCloudData(data, skipSafetyCheck) {
   if (data.pencil_edits) {
     try {
       const remoteEdits = JSON.parse(data.pencil_edits);
-      const localEdits = JSON.parse(localStorage.getItem('tj_pencil_edits') || '{}');
+      const localEdits = JSON.parse(localStorage.getItem(accKey('tj_pencil_edits')) || '{}');
       // Fusionner : textes et couleurs viennent du cloud, font-sizes restent locaux par appareil
       const merged = {};
       Object.keys({...remoteEdits, ...localEdits}).forEach(k => {
@@ -3001,16 +3313,16 @@ function applyCloudData(data, skipSafetyCheck) {
           col: remoteEdits[k]?.col ?? localEdits[k]?.col ?? ''
         };
       });
-      localStorage.setItem('tj_pencil_edits', JSON.stringify(merged));
-    } catch(e) { localStorage.setItem('tj_pencil_edits', data.pencil_edits); }
+      localStorage.setItem(accKey('tj_pencil_edits'), JSON.stringify(merged));
+    } catch(e) { localStorage.setItem(accKey('tj_pencil_edits'), data.pencil_edits); }
   }
   if (data.ia_config) localStorage.setItem('tjp_ia_config', data.ia_config);
   if (data.recap_history) localStorage.setItem('tjp_recap_history', data.recap_history);
   // Sauvegarder localement SANS déclencher un push (on reçoit du cloud)
   _isSyncing = true;
-  lss('tj_trades', APP.trades);
-  lss('tj_lists', APP.lists);
-  lss('tj_nextId', APP.nextId);
+  lssAcc('tj_trades', APP.trades);
+  lssAcc('tj_lists', APP.lists);
+  lssAcc('tj_nextId', APP.nextId);
   renderTable(); 
   updateNavBadges();
   // Toujours tout rafraîchir après un pull cloud
