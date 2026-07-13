@@ -1267,11 +1267,87 @@ function renderAccountMenu(){
 }
 
 function openAccOptions(accId){
-  const accs=getAccounts();
-  const acc=accs.find(a=>a.id===accId);
-  if(!acc)return;
-  const newName=prompt('Renommer le compte :', acc.name);
-  if(newName && newName.trim()) renameAccount(accId, newName.trim());
+  // Fermer tout menu contextuel existant
+  const existing = document.getElementById('accOptionsMenu');
+  if(existing) existing.remove();
+  if(existing && existing.dataset.forAcc === accId) return; // toggle
+
+  const accs = getAccounts();
+  const acc = accs.find(a=>a.id===accId);
+  if(!acc) return;
+
+  const menu = document.createElement('div');
+  menu.id = 'accOptionsMenu';
+  menu.dataset.forAcc = accId;
+  menu.style.cssText = 'position:fixed;background:var(--surface);border:1px solid var(--border);border-radius:8px;z-index:4000;min-width:160px;box-shadow:0 4px 16px rgba(0,0,0,.3);';
+  menu.innerHTML = `
+    <button onclick="startRenameAccount('${accId}')" style="display:block;width:100%;text-align:left;padding:12px 16px;background:none;border:none;color:var(--text);font-family:var(--mono);font-size:12px;cursor:pointer;">✎ Renommer</button>
+    ${accs.length>1?`<button onclick="startDeleteAccount('${accId}')" style="display:block;width:100%;text-align:left;padding:12px 16px;background:none;border:none;color:#ef4444;font-family:var(--mono);font-size:12px;cursor:pointer;border-top:1px solid var(--border);">✕ Supprimer</button>`:''}
+  `;
+  document.body.appendChild(menu);
+
+  // Positionner près du bouton ⋮
+  const btn = event.target;
+  const rect = btn.getBoundingClientRect();
+  menu.style.top = (rect.bottom + 4) + 'px';
+  menu.style.right = (window.innerWidth - rect.right) + 'px';
+
+  // Fermer en cliquant ailleurs
+  setTimeout(() => document.addEventListener('click', function h(){ menu.remove(); document.removeEventListener('click',h); }, {once:true}), 50);
+}
+
+function startRenameAccount(accId){
+  const existing = document.getElementById('accOptionsMenu');
+  if(existing) existing.remove();
+  const accs = getAccounts();
+  const acc = accs.find(a=>a.id===accId);
+  if(!acc) return;
+  // Mini modal de renommage inline
+  showConfirm('Renommer le compte', `Nouveau nom pour "${acc.name}" :`, ()=>{
+    const inp = document.getElementById('renameAccInput');
+    const val = inp ? inp.value.trim() : '';
+    if(val) renameAccount(accId, val);
+  });
+  // Injecter un input dans la modale de confirmation
+  const msg = document.getElementById('confirmMsg');
+  if(msg) msg.innerHTML = `Nouveau nom pour "<strong>${escapeHtml(acc.name)}</strong>" :<br><input id="renameAccInput" type="text" value="${escapeHtml(acc.name)}" style="margin-top:8px;width:100%;font-size:14px;" maxlength="30">`;
+}
+
+function startDeleteAccount(accId){
+  const existing = document.getElementById('accOptionsMenu');
+  if(existing) existing.remove();
+  const accs = getAccounts();
+  const acc = accs.find(a=>a.id===accId);
+  if(!acc || accs.length<=1) return;
+  // Demander PIN comme pour "Supprimer tous les trades"
+  document.getElementById('deleteAllCount').textContent = `le compte "${acc.name}"`;
+  document.getElementById('deleteAllModal').classList.add('open');
+  buildPad('deleteAllPad','deleteAllDots',(val,reset)=>{
+    const stored = currentUser ? localStorage.getItem(pinKey(currentUser.id)) : null;
+    if(!stored||val!==stored){
+      const err=document.getElementById('deleteAllErr');
+      err.textContent='Code PIN incorrect.';err.style.display='block';
+      reset(true);return;
+    }
+    closeDeleteAllModal();
+    deleteAccount(accId);
+  },'deleteAllErr');
+}
+
+function deleteAccount(accId){
+  let accs = getAccounts();
+  if(accs.length<=1){ alert('Impossible de supprimer le dernier compte.'); return; }
+  // Nettoyer le localStorage de ce compte
+  const keys = ['tj_trades','tj_lists','tj_nextId','tj_capital','tj_risk','tj_smart_risk',
+    'tj_risk_max','tj_risk_decimal','tj_payouts','tjp_ia_config','tjp_recap_history',
+    'tj_rm_up_trigger','tj_rm_up_trades','tj_rm_up_pct','tj_rm_up_var_type','tj_rm_up_var_val',
+    'tj_rm_down_trigger','tj_rm_down_trades','tj_rm_down_pct','tj_rm_down_var_type','tj_rm_down_var_val'];
+  keys.forEach(k => localStorage.removeItem(`${k}__${accId}`));
+  accs = accs.filter(a=>a.id!==accId);
+  saveAccounts(accs);
+  // Basculer sur un autre compte si on était sur celui-ci
+  if(_currentAccId === accId) _doSwitchAccount(accs[0].id);
+  else renderAccountMenu();
 }
 
 function addNewAccount(){
@@ -1334,13 +1410,13 @@ function togglePencil(){
   document.getElementById('pencilBtn').style.color=pencilActive?'var(--green)':'';
   document.getElementById('pencilToolbar').classList.toggle('show',pencilActive);
   if(!pencilActive){
-    const edits=lsAcc('tj_pencil_edits',{});
+    const edits=ls('tj_pencil_edits',{});
     document.querySelectorAll('[data-editable]').forEach(el=>{
       el.removeAttribute('contenteditable');
       const k=getEK(el);
       if(el.style.fontSize||el.style.color||el.innerHTML)edits[k]={html:el.innerHTML,fs:el.style.fontSize||'',col:el.style.color||''};
     });
-    lssAcc('tj_pencil_edits',edits);
+    lss('tj_pencil_edits',edits);
     if(typeof currentUser!=="undefined"&&currentUser&&!_isSyncing){schedulePush(300);}
   } else setupPencil();
 }
@@ -1382,10 +1458,10 @@ if(!window._pencilDelegateSet){
 }
 function saveOneEdit(el){
   const k=getEK(el);
-  const edits=lsAcc('tj_pencil_edits',{});
+  const edits=ls('tj_pencil_edits',{});
   const isDynamic=/^disp[0-9]$/.test(el.id||''); // valeurs calculées en direct : ne jamais figer le texte
   edits[k]={html:isDynamic?undefined:el.innerHTML,fs:el.style.fontSize||'',col:el.style.color||''};
-  lssAcc('tj_pencil_edits',edits);
+  lss('tj_pencil_edits',edits);
   if(typeof currentUser!=="undefined"&&currentUser&&!_isSyncing){schedulePush(300);}
 }
 function openCPforPencil(){openCP('Couleur texte',pencilColor,hex=>{pencilColor=hex;document.getElementById('pencilColorSwatch').style.background=hex;});}
@@ -1401,7 +1477,7 @@ function applyPencilStyle(){
 }
 
 function applyPencilEdits(){
-  const edits=lsAcc('tj_pencil_edits',{});
+  const edits=ls('tj_pencil_edits',{});
   document.querySelectorAll('[data-editable]').forEach(el=>{
     const k=getEK(el);
     if(edits[k]){
@@ -2373,10 +2449,10 @@ function teOCP(v,l){
     renderTE();
   });
 }
-function applyTheme(){Object.entries(teVals).forEach(([v,c])=>document.documentElement.style.setProperty(v,c));lssAcc('tj_theme_vars',teVals);refreshAllCharts();if(typeof currentUser!=="undefined"&&currentUser&&!_isSyncing){schedulePush(300);}}
+function applyTheme(){Object.entries(teVals).forEach(([v,c])=>document.documentElement.style.setProperty(v,c));lss('tj_theme_vars',teVals);refreshAllCharts();if(typeof currentUser!=="undefined"&&currentUser&&!_isSyncing){schedulePush(300);}}
 function undoTheme(){if(!teHist.length)return;teVals=teHist.pop();renderTE();applyTheme();}
-function askResetTheme(){showConfirm('Réinitialiser','Supprimer toutes les personnalisations ?',()=>{teVals={};lssAcc('tj_theme_vars',{});document.documentElement.removeAttribute('style');renderTE();refreshAllCharts();if(typeof currentUser!=="undefined"&&currentUser&&!_isSyncing){schedulePush(300);}});}
-function loadSavedTheme(){const s=lsAcc('tj_theme_vars',null);if(s){Object.entries(s).forEach(([v,c])=>document.documentElement.style.setProperty(v,c));teVals=s;}}
+function askResetTheme(){showConfirm('Réinitialiser','Supprimer toutes les personnalisations ?',()=>{teVals={};lss('tj_theme_vars',{});document.documentElement.removeAttribute('style');renderTE();refreshAllCharts();if(typeof currentUser!=="undefined"&&currentUser&&!_isSyncing){schedulePush(300);}});}
+function loadSavedTheme(){const s=ls('tj_theme_vars',null);if(s){Object.entries(s).forEach(([v,c])=>document.documentElement.style.setProperty(v,c));teVals=s;}}
 
 // ══ INIT ══
 // ── INIT inside DOMContentLoaded ──
@@ -2835,11 +2911,37 @@ async function afterPinValidated() {
   }
 }
 
+// Flag posé quand une sauvegarde locale a été exportée dans la session courante
+window._backupExportedThisSession = false;
+
 async function resetPin() {
+  // Si aucune sauvegarde n'a été exportée cette session, proposer d'en faire une
+  if (!window._backupExportedThisSession && APP.trades.length > 0) {
+    showConfirm(
+      'Exporter avant de partir ?',
+      `Tu n'as pas encore exporté de sauvegarde locale cette session (${APP.trades.length} trade(s)). Exporter maintenant protège tes données en cas de problème de synchronisation.`,
+      async () => {
+        exportLocalBackup();
+        window._backupExportedThisSession = true;
+        await _doResetPin();
+      }
+    );
+    // Personnaliser les boutons pour ce contexte
+    const acceptBtn = document.querySelector('#confirmModal .btn-d');
+    const rejectBtn = document.querySelector('#confirmModal .btn-g');
+    if(acceptBtn) acceptBtn.textContent = 'Exporter puis déconnecter';
+    if(rejectBtn){ rejectBtn.textContent = 'Se déconnecter sans exporter'; rejectBtn.onclick = async()=>{ document.getElementById('confirmModal').classList.remove('open'); confirmCB=null; await _doResetPin(); }; }
+    return;
+  }
+  await _doResetPin();
+}
+
+async function _doResetPin() {
   stopRealtime();
   if (window._pollInterval) { clearInterval(window._pollInterval); window._pollInterval = null; }
   currentUser = null;
   localStorage.removeItem('tjp_last_uid');
+  window._backupExportedThisSession = false;
   await sb.auth.signOut();
   showOverlay('overlayGoogle');
 }
@@ -2989,31 +3091,82 @@ function pcHideSyncFailureWarning(){
 }
 // Bandeau spécifique : le cloud a beaucoup moins de trades que l'appareil local.
 // On laisse le choix explicite à l'utilisateur plutôt que de trancher tout seul.
-function pcShowPullSuspectWarning(msg){
+// ── Dialog de conflit pull cloud ──
+// Affiché dès que le cloud propose moins de trades qu'en local (même -1 trade)
+function showPullConflictDialog(localCount, cloudCount){
+  let modal = document.getElementById('pullConflictModal');
+  if(!modal){
+    modal = document.createElement('div');
+    modal.id = 'pullConflictModal';
+    modal.className = 'confirm-modal';
+    document.body.appendChild(modal);
+  }
+  modal.innerHTML = `
+    <div class="confirm-box">
+      <h3>⚠ Conflit de synchronisation</h3>
+      <p>Le cloud a <strong>${cloudCount} trade(s)</strong> mais ton appareil en a <strong>${localCount}</strong>.<br>
+      Appliquer la version cloud ramènerait ton journal à <strong>${cloudCount} trade(s)</strong>.</p>
+      <div style="display:flex;flex-direction:column;gap:10px;margin-top:14px;">
+        <button class="btn btn-d" onclick="pullConflictAskPin()">Utiliser la version cloud (−${localCount-cloudCount} trade(s))</button>
+        <button class="btn btn-p" onclick="pullConflictKeepLocal()">Imposer mes trades locaux au cloud</button>
+        <button class="btn btn-g" onclick="pullConflictDoNothing()">Ne rien faire</button>
+      </div>
+      <div id="pullConflictPinZone" style="display:none;margin-top:12px;">
+        <p style="font-size:12px;color:var(--muted);">Entre ton code PIN pour confirmer :</p>
+        <div class="pin-dots" id="pullConflictDots" style="justify-content:center;margin:8px auto;">
+          <div class="pin-dot"></div><div class="pin-dot"></div><div class="pin-dot"></div><div class="pin-dot"></div>
+        </div>
+        <p class="auth-err" id="pullConflictErr" style="display:none;">Code PIN incorrect.</p>
+        <div class="pin-pad" id="pullConflictPad"></div>
+      </div>
+    </div>`;
+  modal.classList.add('open');
+}
+function pullConflictAskPin(){
+  document.getElementById('pullConflictPinZone').style.display='block';
+  buildPad('pullConflictPad','pullConflictDots',(val,reset)=>{
+    const stored = currentUser ? localStorage.getItem(pinKey(currentUser.id)) : null;
+    if(!stored||val!==stored){
+      const e=document.getElementById('pullConflictErr');e.style.display='block';e.textContent='Code PIN incorrect.';
+      reset(true);return;
+    }
+    document.getElementById('pullConflictModal').classList.remove('open');
+    _applyCloudDataDirect(window._pendingCloudData, window._pendingCloudData?.trades||[]);
+    window._pendingCloudData=null;
+  },'pullConflictErr');
+}
+function pullConflictKeepLocal(){
+  document.getElementById('pullConflictModal').classList.remove('open');
+  window._pendingCloudData=null;
+  window._safetyCheckDone=true;
+  // Bloquer TOUT pull pendant 15 secondes pour laisser le push se terminer
+  // et éviter que le polling ou le realtime n'écrase immédiatement avec les données cloud
+  window._blockPull = true;
+  clearTimeout(window._blockPullTimer);
+  window._blockPullTimer = setTimeout(()=>{ window._blockPull=false; }, 15000);
+  schedulePush(0); // impose le local au cloud
+}
+function pullConflictDoNothing(){
+  document.getElementById('pullConflictModal').classList.remove('open');
+  window._pendingCloudData=null;
+  window._safetyCheckDone=true; // ne plus re-poser la question cette session
+}
+
+function pcShowSyncFailureWarning(msg){
   let bar = document.getElementById('syncFailBar');
   if (!bar) {
     bar = document.createElement('div');
     bar.id = 'syncFailBar';
-    bar.style.cssText = 'position:relative;width:100%;background:#ef4444;color:#fff;font-family:var(--mono);font-size:12px;padding:10px 14px;text-align:center;z-index:900;box-sizing:border-box;';
+    bar.style.cssText = 'position:relative;width:100%;background:#ef4444;color:#fff;font-family:var(--mono);font-size:12px;padding:8px 14px;text-align:center;z-index:900;cursor:pointer;box-sizing:border-box;';
     document.body.prepend(bar);
   }
-  bar.onclick = null;
-  bar.innerHTML = '⚠ ' + msg + '<br><button onclick="pcForceKeepLocal()" style="margin:6px 6px 0;padding:5px 10px;background:#fff;color:#ef4444;border:none;border-radius:4px;font-family:var(--mono);font-size:11px;cursor:pointer;">Garder mes trades locaux</button>' +
-    '<button onclick="pcForceUseCloud()" style="margin:6px 0 0;padding:5px 10px;background:none;color:#fff;border:1px solid #fff;border-radius:4px;font-family:var(--mono);font-size:11px;cursor:pointer;">Utiliser la version du cloud</button>';
+  bar.onclick = () => manualSyncSave();
+  bar.textContent = '⚠ Sauvegarde échouée (' + msg + ') — touche ici pour réessayer.';
   bar.style.display = 'block';
 }
-function pcForceKeepLocal(){
-  window._pendingCloudData = null;
-  window._safetyCheckDone = true;
-  pcHideSyncFailureWarning();
-  schedulePush(0);
-}
-function pcForceUseCloud(){
-  if (window._pendingCloudData) {
-    applyCloudData(window._pendingCloudData, true);
-    window._pendingCloudData = null;
-  }
-  pcHideSyncFailureWarning();
+function pcHideSyncFailureWarning(){
+  const bar = document.getElementById('syncFailBar');
+  if (bar) bar.style.display = 'none';
 }
 
 let _pushGeneration = 0;
@@ -3050,7 +3203,7 @@ async function pushToCloud() {
       showSync('⚠ '+(error.message||'Erreur sauvegarde'), '#ef4444');
       pcShowSyncFailureWarning(error.message||'Erreur inconnue');
     }
-    else { showSync('✓ Sauvegardé', '#22c55e'); localStorage.setItem('tjp_last_updated_at', new Date().toISOString()); pcHideSyncFailureWarning(); }
+    else { showSync('✓ Sauvegardé', '#22c55e'); localStorage.setItem('tjp_last_updated_at', new Date().toISOString()); pcHideSyncFailureWarning(); window._blockPull=false; }
   } catch(e) { if (myGen === _pushGeneration) showSync('⚠ Réseau', '#f59e0b'); }
   if (myGen === _pushGeneration) setTimeout(() => { _isPushing = false; }, 500);
 }
@@ -3126,6 +3279,7 @@ function exportLocalBackup(){
   a.click();
   document.body.removeChild(a);
   URL.revokeObjectURL(url);
+  window._backupExportedThisSession = true;
   showSync('✓ Sauvegarde téléchargée', '#22c55e');
 }
 
@@ -3251,28 +3405,30 @@ async function pullFromCloud() {
 }
 
 function applyCloudData(data, skipSafetyCheck) {
+  // Si on vient de choisir "imposer le local", bloquer tout pull entrant
+  if(window._blockPull && !skipSafetyCheck) return;
+
   const cloudTrades = data.trades || [];
   const localCount = APP.trades.length;
   const cloudCount = cloudTrades.length;
 
-  // Garde-fou one-shot : ne se déclenche qu'une seule fois par session.
-  // Après que l'utilisateur a fait son choix (garder local ou cloud), le flag
-  // _safetyCheckDone est posé et le bandeau ne réapparaît plus, même si le
-  // polling continue de détecter la même divergence.
-  if (!skipSafetyCheck && !window._intentionalBulkDelete && !window._safetyCheckDone && localCount >= 5) {
-    const lostRatio = (localCount - cloudCount) / localCount;
-    if (cloudCount < localCount && lostRatio > 0.3 && (localCount - cloudCount) >= 5) {
-      window._safetyCheckDone = true; // ne plus jamais redemander dans cette session
-      console.warn(`Pull cloud suspect : ${localCount} trades locaux vs ${cloudCount} sur le cloud.`);
-      pcShowPullSuspectWarning(`Le cloud a ${cloudCount} trades, ton appareil en a ${localCount}. Choisis quelle version garder :`);
+  // SÉCURITÉ : si le cloud propose MOINS de trades qu'en local (même -1),
+  // on ne l'applique JAMAIS silencieusement — on demande confirmation.
+  // Exception : suppression volontaire via "Supprimer tous les trades" ou skipSafetyCheck explicite.
+  if (!skipSafetyCheck && !window._intentionalBulkDelete && !window._safetyCheckDone) {
+    if (cloudCount < localCount) {
+      window._safetyCheckDone = true;
       window._pendingCloudData = data;
+      showPullConflictDialog(localCount, cloudCount);
       return;
     }
   }
   window._intentionalBulkDelete = false;
+  _applyCloudDataDirect(data, cloudTrades);
+}
 
-  APP.trades = cloudTrades;
-  // Ne pas écraser les listes si celles du cloud sont vides
+function _applyCloudDataDirect(data, cloudTrades) {
+  APP.trades = cloudTrades || data.trades || [];
   if(data.lists) {
     const merged = {...APP.lists};
     Object.entries(data.lists).forEach(([k,v])=>{ if(v&&v.length>0) merged[k]=v; });
