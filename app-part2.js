@@ -163,7 +163,7 @@ async function resetPin() {
   if (!window._backupExportedThisSession && APP.trades.length > 0) {
     showConfirm(
       'Exporter avant de partir ?',
-      `Tu n'as pas encore exporté de sauvegarde locale cette session (${APP.trades.length} trade(s)). Exporter maintenant protège tes données en cas de problème de synchronisation.`,
+      `Veux-tu exporter tes trades avant de te déconnecter ? En cas de problème de synchronisation, ça protège tes ${APP.trades.length} trade(s).`,
       async () => {
         exportLocalBackup();
         window._backupExportedThisSession = true;
@@ -173,8 +173,8 @@ async function resetPin() {
     // Personnaliser les boutons pour ce contexte
     const acceptBtn = document.querySelector('#confirmModal .btn-d');
     const rejectBtn = document.querySelector('#confirmModal .btn-g');
-    if(acceptBtn) acceptBtn.textContent = 'Exporter puis déconnecter';
-    if(rejectBtn){ rejectBtn.textContent = 'Se déconnecter sans exporter'; rejectBtn.onclick = async()=>{ document.getElementById('confirmModal').classList.remove('open'); confirmCB=null; await _doResetPin(); }; }
+    if(acceptBtn) acceptBtn.textContent = 'Oui';
+    if(rejectBtn){ rejectBtn.textContent = 'Non'; rejectBtn.onclick = async()=>{ document.getElementById('confirmModal').classList.remove('open'); confirmCB=null; await _doResetPin(); }; }
     return;
   }
   await _doResetPin();
