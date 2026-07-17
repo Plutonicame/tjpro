@@ -377,6 +377,7 @@ function pullConflictAskPin(){
     document.getElementById('pullConflictModal').classList.remove('open');
     _applyCloudDataDirect(window._pendingCloudData, window._pendingCloudData?.trades||[]);
     window._pendingCloudData=null;
+    window._safetyCheckDone=false; // réactiver la vérification pour les prochains conflits
   },'pullConflictErr');
 }
 function pullConflictKeepLocal(){
@@ -387,13 +388,13 @@ function pullConflictKeepLocal(){
   // et éviter que le polling ou le realtime n'écrase immédiatement avec les données cloud
   window._blockPull = true;
   clearTimeout(window._blockPullTimer);
-  window._blockPullTimer = setTimeout(()=>{ window._blockPull=false; }, 15000);
+  window._blockPullTimer = setTimeout(()=>{ window._blockPull=false; window._safetyCheckDone=false; }, 15000);
   schedulePush(0, {force:true}); // impose le local au cloud
 }
 function pullConflictDoNothing(){
   document.getElementById('pullConflictModal').classList.remove('open');
   window._pendingCloudData=null;
-  window._safetyCheckDone=true; // ne plus re-poser la question cette session
+  window._safetyCheckDone=false; // réactiver la vérification pour les prochains conflits
 }
 
 function pcShowSyncFailureWarning(msg){
