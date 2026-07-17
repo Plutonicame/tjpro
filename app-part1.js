@@ -851,7 +851,7 @@ function executeDeleteAllTrades(){
   }
   APP.trades = [];
   saveState(); renderTable(); updateNavBadges();
-  schedulePush(250);
+  schedulePush(250, {force:true});
   closeDeleteAllModal();
   pcUpdateUndoBtnVisibility();
   showSync('✓ Tous les trades supprimés', '#ef4444');

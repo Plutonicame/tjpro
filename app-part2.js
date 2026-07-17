@@ -388,7 +388,7 @@ function pullConflictKeepLocal(){
   window._blockPull = true;
   clearTimeout(window._blockPullTimer);
   window._blockPullTimer = setTimeout(()=>{ window._blockPull=false; }, 15000);
-  schedulePush(0); // impose le local au cloud
+  schedulePush(0, {force:true}); // impose le local au cloud
 }
 function pullConflictDoNothing(){
   document.getElementById('pullConflictModal').classList.remove('open');
@@ -414,12 +414,14 @@ function pcHideSyncFailureWarning(){
 }
 
 let _pushGeneration = 0;
-async function pushToCloud() {
+async function pushToCloud(opts) {
+  opts = opts || {};
   if (!currentUser || !currentUser.id) return;
   _isPushing = true;
   const myGen = ++_pushGeneration; // identifie ce push précis parmi d'éventuels chevauchements
   try { await sb.auth.refreshSession(); } catch(e) {}
   try {
+    const now = new Date().toISOString();
     const data = {
       user_id: currentUser.id, trades: APP.trades, lists: APP.lists, next_id: APP.nextId,
       capital: localStorage.getItem(accKey('tj_capital')), risk: localStorage.getItem(accKey('tj_risk')),
@@ -435,19 +437,26 @@ async function pushToCloud() {
       })(),
       ia_config: localStorage.getItem('tjp_ia_config'),
       recap_history: localStorage.getItem('tjp_recap_history'), payouts: localStorage.getItem(accKey('tj_payouts')),
-      updated_at: new Date().toISOString()
+      updated_at: now
     };
-    _lastPushTimestamp = data.updated_at;
-    const { error } = await sb.from('journal_data').upsert(data, { onConflict: 'user_id' });
+    _lastPushTimestamp = now;
+    // Trades explicitement supprimés localement récemment : à exclure de la fusion
+    // même s'ils traînent encore dans le cloud (sinon la fusion les ressusciterait).
+    const deletedIds = (window._deletedTradesStack || []).map(d => d.trade && d.trade.id).filter(id => id != null);
+    // Sauvegarde atomique côté serveur avec FUSION : jamais d'écrasement silencieux,
+    // les trades locaux sont gardés + tout trade cloud inconnu localement est réintégré
+    // (sauf p_force, utilisé pour une suppression totale ou une restauration volontaire).
+    const { data: rpcData, error } = await sb.rpc('tjp_save_journal_data', {
+      p_user_id: currentUser.id, p_data: data, p_deleted_ids: deletedIds, p_force: !!opts.force
+    });
     // Si un push plus récent a démarré pendant que celui-ci était en vol, on ignore
     // son résultat pour ne pas remettre _isPushing à false trop tôt ni écraser l'état.
     if (myGen !== _pushGeneration) return;
     if (error) {
-      console.error('Erreur upsert journal_data:', error);
+      console.error('Erreur sauvegarde journal_data:', error);
       showSync('⚠ '+(error.message||'Erreur sauvegarde'), '#ef4444');
       pcShowSyncFailureWarning(error.message||'Erreur inconnue');
-    }
-    else { showSync('✓ Sauvegardé', '#22c55e'); localStorage.setItem('tjp_last_updated_at', new Date().toISOString()); pcHideSyncFailureWarning(); window._blockPull=false; }
+    } else { showSync('✓ Sauvegardé', '#22c55e'); localStorage.setItem('tjp_last_updated_at', now); pcHideSyncFailureWarning(); window._blockPull=false; }
   } catch(e) { if (myGen === _pushGeneration) showSync('⚠ Réseau', '#f59e0b'); }
   if (myGen === _pushGeneration) setTimeout(() => { _isPushing = false; }, 500);
 }
@@ -624,7 +633,7 @@ function importLocalBackup(event){
         applyPencilEdits();
         if (document.getElementById('page-trackrecord')?.classList.contains('active')) refreshAllCharts();
         if (document.getElementById('page-modifs')?.classList.contains('active')) renderModifs();
-        schedulePush(0);
+        schedulePush(0, {force:true});
         showSync('✓ Sauvegarde restaurée (' + backupCount + ' trades)', '#22c55e');
       }
     );
@@ -744,11 +753,14 @@ let _isPushing = false; // on est en train de pusher — ignorer le realtime ent
 // Planifie un push vers le cloud, en posant le verrou _isPushing IMMÉDIATEMENT
 // (avant même le délai de debounce) pour empêcher le polling ou le realtime de
 // s'intercaler avec une version périmée pendant qu'on s'apprête à sauvegarder.
-function schedulePush(delay){
+function schedulePush(delay, opts){
   _isPushing = true;
+  window._pushOpts = Object.assign({}, window._pushOpts, opts||{});
   clearTimeout(window._pushTimer);
   window._pushTimer = setTimeout(() => {
-    if (typeof pushToCloud === 'function') pushToCloud();
+    const o = window._pushOpts || {};
+    window._pushOpts = {};
+    if (typeof pushToCloud === 'function') pushToCloud(o);
   }, delay);
 }
 
