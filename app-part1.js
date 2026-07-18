@@ -250,6 +250,23 @@ function lsAcc(k,d){return ls(accKey(k),d);}
 function lssAcc(k,v){lss(accKey(k),v);}
 function loadState(){return{trades:lsAcc('tj_trades',ALL_S),lists:lsAcc('tj_lists',DEF),nextId:lsAcc('tj_nextId',9000)};}
 function saveState(){
+  // Garde-fou générique : quelle que soit la cause (bug, course entre sync, etc.),
+  // on ne persiste JAMAIS silencieusement un passage de plusieurs trades à 0.
+  // Ça bloque le symptôme à la racine, peu importe d'où vient exactement le bug,
+  // et ça log la pile d'appel pour identifier précisément le coupable.
+  try {
+    const prevTrades = lsAcc('tj_trades', null);
+    const prevCount = Array.isArray(prevTrades) ? prevTrades.length : 0;
+    const nextCount = Array.isArray(APP.trades) ? APP.trades.length : 0;
+    if (prevCount > 0 && nextCount === 0 && !window._intentionalBulkDelete && !window._allowEmptySave) {
+      console.error('🛑 saveState() BLOQUÉ : tentative de passer de '+prevCount+' à 0 trade(s) sans suppression volontaire. Pile d\'appel :');
+      console.trace();
+      APP.trades = prevTrades; // on restaure la version connue plutôt que de perdre la donnée
+      showSync('⚠ Sauvegarde bloquée (anti-perte) — ouvre la console (F12) et envoie la trace', '#ef4444');
+      renderTable();
+      return;
+    }
+  } catch(e) { console.warn('Vérif anti-perte saveState() a échoué (ignorée) :', e); }
   lssAcc('tj_trades',APP.trades);
   lssAcc('tj_lists',APP.lists);
   lssAcc('tj_nextId',APP.nextId);

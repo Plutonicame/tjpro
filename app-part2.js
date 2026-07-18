@@ -375,7 +375,9 @@ function pullConflictAskPin(){
       reset(true);return;
     }
     document.getElementById('pullConflictModal').classList.remove('open');
+    window._allowEmptySave = true; // confirmé par PIN : réduction volontaire autorisée
     _applyCloudDataDirect(window._pendingCloudData, window._pendingCloudData?.trades||[]);
+    window._allowEmptySave = false;
     window._pendingCloudData=null;
     window._safetyCheckDone=false; // réactiver la vérification pour les prochains conflits
   },'pullConflictErr');
@@ -699,7 +701,21 @@ function applyCloudData(data, skipSafetyCheck) {
 }
 
 function _applyCloudDataDirect(data, cloudTrades) {
-  APP.trades = cloudTrades || data.trades || [];
+  const incomingTrades = cloudTrades || data.trades || [];
+  // Même garde-fou que saveState() : on ne remplace jamais silencieusement des
+  // trades existants par un tableau vide, sauf confirmation explicite (PIN,
+  // suppression volontaire). C'est ici que la donnée était perdue jusqu'ici,
+  // car ce chemin écrit dans le localStorage SANS passer par saveState().
+  const prevCount = Array.isArray(APP.trades) ? APP.trades.length : 0;
+  const nextCount = Array.isArray(incomingTrades) ? incomingTrades.length : 0;
+  if (prevCount > 0 && nextCount === 0 && !window._intentionalBulkDelete && !window._allowEmptySave) {
+    console.error('🛑 _applyCloudDataDirect() BLOQUÉ : le cloud proposait 0 trade alors qu\'il y en avait '+prevCount+' en local. Pile d\'appel :');
+    console.trace();
+    showSync('⚠ Synchronisation bloquée (anti-perte) — ouvre la console (F12) et envoie la trace', '#ef4444');
+    return;
+  }
+  APP.trades = incomingTrades;
+  window._intentionalBulkDelete = false;
   if(data.lists) {
     const merged = {...APP.lists};
     Object.entries(data.lists).forEach(([k,v])=>{ if(v&&v.length>0) merged[k]=v; });
