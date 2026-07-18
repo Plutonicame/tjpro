@@ -10,6 +10,12 @@ window.sb = supabase.createClient(window.SUPABASE_URL, window.SUPABASE_KEY, {
     detectSessionInUrl: false,
     persistSession: true,
     autoRefreshToken: true
+  },
+  global: {
+    // Empêche le navigateur de servir une réponse mise en cache pour une lecture
+    // (select) identique à une précédente — sinon une synchro peut "voir" une
+    // vieille version (ex: 0 trades) au lieu de l'état réel actuel du cloud.
+    headers: { 'Cache-Control': 'no-cache, no-store, must-revalidate' }
   }
 });
 function getSb() { return window.sb; }
