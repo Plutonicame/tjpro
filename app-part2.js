@@ -422,9 +422,28 @@ async function pushToCloud(opts) {
   const myGen = ++_pushGeneration; // identifie ce push précis parmi d'éventuels chevauchements
   try { await sb.auth.refreshSession(); } catch(e) {}
   try {
+    // Fusion faite ici, côté application (rapide, aucun risque d'expiration serveur) :
+    // on récupère juste les trades actuellement dans le cloud, et on réintègre ceux que
+    // cet appareil ne connaît pas encore — sans jamais supprimer un trade local.
+    let finalTrades = APP.trades;
+    if (!opts.force) {
+      try {
+        const { data: cloudRow, error: fetchErr } = await sb.from('journal_data')
+          .select('trades').eq('user_id', currentUser.id).maybeSingle();
+        if (!fetchErr && cloudRow && Array.isArray(cloudRow.trades) && cloudRow.trades.length) {
+          const localIds = new Set(APP.trades.map(t => t.id));
+          // Trades explicitement supprimés localement récemment : à exclure de la fusion
+          // même s'ils traînent encore dans le cloud (sinon la fusion les ressusciterait).
+          const deletedIds = new Set((window._deletedTradesStack || []).map(d => d.trade && d.trade.id).filter(id => id != null));
+          const recovered = cloudRow.trades.filter(t => !localIds.has(t.id) && !deletedIds.has(t.id));
+          if (recovered.length) finalTrades = APP.trades.concat(recovered);
+        }
+      } catch(e) { console.warn('Fusion cloud impossible, envoi de la version locale seule:', e); }
+    }
+    if (myGen !== _pushGeneration) return;
     const now = new Date().toISOString();
     const data = {
-      user_id: currentUser.id, trades: APP.trades, lists: APP.lists, next_id: APP.nextId,
+      user_id: currentUser.id, trades: finalTrades, lists: APP.lists, next_id: APP.nextId,
       capital: localStorage.getItem(accKey('tj_capital')), risk: localStorage.getItem(accKey('tj_risk')),
       smart_risk: localStorage.getItem(accKey('tj_smart_risk')), risk_max: localStorage.getItem(accKey('tj_risk_max')),
       risk_decimal: localStorage.getItem(accKey('tj_risk_decimal')), theme: localStorage.getItem(accKey('tj_theme_vars')),
@@ -441,15 +460,9 @@ async function pushToCloud(opts) {
       updated_at: now
     };
     _lastPushTimestamp = now;
-    // Trades explicitement supprimés localement récemment : à exclure de la fusion
-    // même s'ils traînent encore dans le cloud (sinon la fusion les ressusciterait).
-    const deletedIds = (window._deletedTradesStack || []).map(d => d.trade && d.trade.id).filter(id => id != null);
-    // Sauvegarde atomique côté serveur avec FUSION : jamais d'écrasement silencieux,
-    // les trades locaux sont gardés + tout trade cloud inconnu localement est réintégré
-    // (sauf p_force, utilisé pour une suppression totale ou une restauration volontaire).
-    const { data: rpcData, error } = await sb.rpc('tjp_save_journal_data', {
-      p_user_id: currentUser.id, p_data: data, p_deleted_ids: deletedIds, p_force: !!opts.force
-    });
+    // Enregistrement simple : la fusion a déjà été faite juste au-dessus, donc plus besoin
+    // de logique complexe côté serveur (c'est justement ça qui provoquait le timeout).
+    const { error } = await sb.from('journal_data').upsert(data, { onConflict: 'user_id' });
     // Si un push plus récent a démarré pendant que celui-ci était en vol, on ignore
     // son résultat pour ne pas remettre _isPushing à false trop tôt ni écraser l'état.
     if (myGen !== _pushGeneration) return;
@@ -457,7 +470,11 @@ async function pushToCloud(opts) {
       console.error('Erreur sauvegarde journal_data:', error);
       showSync('⚠ '+(error.message||'Erreur sauvegarde'), '#ef4444');
       pcShowSyncFailureWarning(error.message||'Erreur inconnue');
-    } else { showSync('✓ Sauvegardé', '#22c55e'); localStorage.setItem('tjp_last_updated_at', now); pcHideSyncFailureWarning(); window._blockPull=false; }
+    } else {
+      showSync('✓ Sauvegardé', '#22c55e'); localStorage.setItem('tjp_last_updated_at', now); pcHideSyncFailureWarning(); window._blockPull=false;
+      // Si des trades cloud inconnus ont été réintégrés, on les ajoute aussi à l'affichage local tout de suite.
+      if (finalTrades !== APP.trades) { APP.trades = finalTrades; saveState(); renderTable(); updateNavBadges(); }
+    }
   } catch(e) { if (myGen === _pushGeneration) showSync('⚠ Réseau', '#f59e0b'); }
   if (myGen === _pushGeneration) setTimeout(() => { _isPushing = false; }, 500);
 }
