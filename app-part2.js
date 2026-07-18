@@ -130,6 +130,13 @@ async function afterPinValidated() {
 
   if (pulled) showSync('✓ Données chargées', '#22c55e');
 
+  // Migration automatique des images encore en local vers le stockage cloud —
+  // une seule fois par compte (marqueur posé uniquement en cas de succès complet,
+  // donc ça réessaiera tout seul à la prochaine connexion si ça a été interrompu).
+  if (currentUser && !localStorage.getItem(accKey('tjp_images_migrated'))) {
+    migrateImagesToStorage();
+  }
+
   // Realtime + poll 30s
   setTimeout(startRealtime, 500);
   if (!window._pollInterval) {
@@ -155,18 +162,28 @@ async function afterPinValidated() {
   }
 }
 
-// Flag posé quand une sauvegarde locale a été exportée dans la session courante
-window._backupExportedThisSession = false;
+// Empreinte simple (non cryptographique, juste pour détecter un changement) du
+// contenu actuel des trades, comparée à celle de la dernière sauvegarde locale
+// exportée — pour ne proposer l'export que si quelque chose a réellement changé
+// depuis (trade ajouté, supprimé, OU modifié même sans changer le nombre total).
+function _tradesFingerprint(trades) {
+  const str = JSON.stringify(trades || []);
+  let h = 5381;
+  for (let i = 0; i < str.length; i++) { h = ((h << 5) + h) + str.charCodeAt(i); h = h & h; }
+  return String(trades.length) + '_' + h.toString(36);
+}
 
 async function resetPin() {
-  // Si aucune sauvegarde n'a été exportée cette session, proposer d'en faire une
-  if (!window._backupExportedThisSession && APP.trades.length > 0) {
+  // Ne proposer d'exporter que si le contenu a changé depuis la dernière
+  // sauvegarde locale exportée (nombre de trades différent, ou un trade modifié).
+  const lastHash = localStorage.getItem(accKey('tj_last_backup_hash'));
+  const currentHash = _tradesFingerprint(APP.trades);
+  if (currentHash !== lastHash && APP.trades.length > 0) {
     showConfirm(
       'Exporter avant de partir ?',
       `Veux-tu exporter tes trades avant de te déconnecter ? En cas de problème de synchronisation, ça protège tes ${APP.trades.length} trade(s).`,
       async () => {
         exportLocalBackup();
-        window._backupExportedThisSession = true;
         await _doResetPin();
       }
     );
@@ -185,7 +202,6 @@ async function _doResetPin() {
   if (window._pollInterval) { clearInterval(window._pollInterval); window._pollInterval = null; }
   currentUser = null;
   localStorage.removeItem('tjp_last_uid');
-  window._backupExportedThisSession = false;
   await sb.auth.signOut();
   showOverlay('overlayGoogle');
 }
@@ -332,71 +348,6 @@ function pcShowSyncFailureWarning(msg){
 function pcHideSyncFailureWarning(){
   const bar = document.getElementById('syncFailBar');
   if (bar) bar.style.display = 'none';
-}
-// Bandeau spécifique : le cloud a beaucoup moins de trades que l'appareil local.
-// On laisse le choix explicite à l'utilisateur plutôt que de trancher tout seul.
-// ── Dialog de conflit pull cloud ──
-// Affiché dès que le cloud propose moins de trades qu'en local (même -1 trade)
-function showPullConflictDialog(localCount, cloudCount){
-  let modal = document.getElementById('pullConflictModal');
-  if(!modal){
-    modal = document.createElement('div');
-    modal.id = 'pullConflictModal';
-    modal.className = 'confirm-modal';
-    document.body.appendChild(modal);
-  }
-  modal.innerHTML = `
-    <div class="confirm-box">
-      <h3>⚠ Conflit de synchronisation</h3>
-      <p>Le cloud a <strong>${cloudCount} trade(s)</strong> mais ton appareil en a <strong>${localCount}</strong>.<br>
-      Appliquer la version cloud ramènerait ton journal à <strong>${cloudCount} trade(s)</strong>.</p>
-      <div style="display:flex;flex-direction:column;gap:10px;margin-top:14px;">
-        <button class="btn btn-d" onclick="pullConflictAskPin()">Utiliser la version cloud (−${localCount-cloudCount} trade(s))</button>
-        <button class="btn btn-p" onclick="pullConflictKeepLocal()">Imposer mes trades locaux au cloud</button>
-        <button class="btn btn-g" onclick="pullConflictDoNothing()">Ne rien faire</button>
-      </div>
-      <div id="pullConflictPinZone" style="display:none;margin-top:12px;">
-        <p style="font-size:12px;color:var(--muted);">Entre ton code PIN pour confirmer :</p>
-        <div class="pin-dots" id="pullConflictDots" style="justify-content:center;margin:8px auto;">
-          <div class="pin-dot"></div><div class="pin-dot"></div><div class="pin-dot"></div><div class="pin-dot"></div>
-        </div>
-        <p class="auth-err" id="pullConflictErr" style="display:none;">Code PIN incorrect.</p>
-        <div class="pin-pad" id="pullConflictPad"></div>
-      </div>
-    </div>`;
-  modal.classList.add('open');
-}
-function pullConflictAskPin(){
-  document.getElementById('pullConflictPinZone').style.display='block';
-  buildPad('pullConflictPad','pullConflictDots',(val,reset)=>{
-    const stored = currentUser ? localStorage.getItem(pinKey(currentUser.id)) : null;
-    if(!stored||val!==stored){
-      const e=document.getElementById('pullConflictErr');e.style.display='block';e.textContent='Code PIN incorrect.';
-      reset(true);return;
-    }
-    document.getElementById('pullConflictModal').classList.remove('open');
-    window._allowEmptySave = true; // confirmé par PIN : réduction volontaire autorisée
-    _applyCloudDataDirect(window._pendingCloudData, window._pendingCloudData?.trades||[]);
-    window._allowEmptySave = false;
-    window._pendingCloudData=null;
-    window._safetyCheckDone=false; // réactiver la vérification pour les prochains conflits
-  },'pullConflictErr');
-}
-function pullConflictKeepLocal(){
-  document.getElementById('pullConflictModal').classList.remove('open');
-  window._pendingCloudData=null;
-  window._safetyCheckDone=true;
-  // Bloquer TOUT pull pendant 15 secondes pour laisser le push se terminer
-  // et éviter que le polling ou le realtime n'écrase immédiatement avec les données cloud
-  window._blockPull = true;
-  clearTimeout(window._blockPullTimer);
-  window._blockPullTimer = setTimeout(()=>{ window._blockPull=false; window._safetyCheckDone=false; }, 15000);
-  schedulePush(0, {force:true}); // impose le local au cloud
-}
-function pullConflictDoNothing(){
-  document.getElementById('pullConflictModal').classList.remove('open');
-  window._pendingCloudData=null;
-  window._safetyCheckDone=false; // réactiver la vérification pour les prochains conflits
 }
 
 function pcShowSyncFailureWarning(msg){
@@ -552,7 +503,7 @@ function exportLocalBackup(){
   a.click();
   document.body.removeChild(a);
   URL.revokeObjectURL(url);
-  window._backupExportedThisSession = true;
+  localStorage.setItem(accKey('tj_last_backup_hash'), _tradesFingerprint(APP.trades));
   showSync('✓ Sauvegarde téléchargée', '#22c55e');
 }
 
@@ -685,14 +636,18 @@ function applyCloudData(data, skipSafetyCheck) {
   const localCount = APP.trades.length;
   const cloudCount = cloudTrades.length;
 
-  // SÉCURITÉ : si le cloud propose MOINS de trades qu'en local (même -1),
-  // on ne l'applique JAMAIS silencieusement — on demande confirmation.
+  // Si le cloud propose MOINS de trades qu'en local (même -1), on n'applique
+  // JAMAIS ça silencieusement en écrasant le local — on impose automatiquement
+  // la version locale au cloud à la place, sans jamais rien demander.
   // Exception : suppression volontaire via "Supprimer tous les trades" ou skipSafetyCheck explicite.
-  if (!skipSafetyCheck && !window._intentionalBulkDelete && !window._safetyCheckDone) {
+  if (!skipSafetyCheck && !window._intentionalBulkDelete) {
     if (cloudCount < localCount) {
-      window._safetyCheckDone = true;
-      window._pendingCloudData = data;
-      showPullConflictDialog(localCount, cloudCount);
+      // Bloquer tout pull pendant 15s pour laisser le push se terminer sans
+      // que le polling ou le realtime ne revienne écraser avec les données cloud.
+      window._blockPull = true;
+      clearTimeout(window._blockPullTimer);
+      window._blockPullTimer = setTimeout(()=>{ window._blockPull=false; }, 15000);
+      schedulePush(0, {force:true});
       return;
     }
   }
@@ -880,6 +835,74 @@ function initStarPicker(pickerId, hiddenId, val) {
 window._formImages = [];
 // Compresse une image (redimensionne + recompresse en JPEG) avant stockage,
 // pour éviter de saturer le quota localStorage avec des captures haute résolution.
+// ══ Stockage des images de trades dans Supabase Storage (au lieu du localStorage) ══
+// Le localStorage du navigateur a une limite dure d'environ 5-10 Mo au total ; le
+// stocker dans un bucket Supabase Storage supprime cette limite (plusieurs Go
+// disponibles) et allège au passage le volume synchronisé avec le cloud.
+const TRADE_IMAGES_BUCKET = 'trade-images';
+
+function _tradeImagePathFromUrl(url) {
+  if (!url || typeof url !== 'string') return null;
+  const marker = `/${TRADE_IMAGES_BUCKET}/`;
+  const idx = url.indexOf(marker);
+  if (idx === -1) return null; // pas une URL de ce bucket (ex: encore une ancienne image en base64)
+  return url.slice(idx + marker.length).split('?')[0];
+}
+
+// Upload une image déjà compressée (data URL) vers Supabase Storage et renvoie son
+// URL publique. Si l'upload échoue (pas de réseau, pas connecté...), on garde
+// l'image compressée en base64 en secours plutôt que de perdre la donnée.
+async function uploadTradeImageToStorage(compressedDataUrl) {
+  try {
+    if (!currentUser || !currentUser.id || !window.sb) return compressedDataUrl;
+    const res = await fetch(compressedDataUrl);
+    const blob = await res.blob();
+    const fileName = `${currentUser.id}/${Date.now()}_${Math.random().toString(36).slice(2,8)}.jpg`;
+    const { error: uploadErr } = await sb.storage.from(TRADE_IMAGES_BUCKET).upload(fileName, blob, { contentType: 'image/jpeg', upsert: false });
+    if (uploadErr) { console.warn('Upload image vers Storage échoué, conservation en local :', uploadErr); return compressedDataUrl; }
+    const { data: urlData } = sb.storage.from(TRADE_IMAGES_BUCKET).getPublicUrl(fileName);
+    return (urlData && urlData.publicUrl) ? urlData.publicUrl : compressedDataUrl;
+  } catch(e) {
+    console.warn('Upload image vers Storage échoué (exception), conservation en local :', e);
+    return compressedDataUrl;
+  }
+}
+
+// Supprime le fichier correspondant dans Storage (silencieux, best-effort — si ça
+// échoue on n'embête pas l'utilisateur, ça laissera juste un fichier orphelin).
+function deleteTradeImageFromStorage(url) {
+  const path = _tradeImagePathFromUrl(url);
+  if (!path || !window.sb) return;
+  sb.storage.from(TRADE_IMAGES_BUCKET).remove([path]).catch(e => console.warn('Suppression image Storage échouée (ignorée) :', e));
+}
+
+// Migre toutes les images déjà stockées en base64 (ancien système) vers Supabase
+// Storage, trade par trade. Idempotent : une image déjà migrée (URL, pas data:)
+// est simplement ignorée. Appelée automatiquement une seule fois par compte,
+// à la première connexion suivant la mise à jour (voir initAuth).
+async function migrateImagesToStorage() {
+  if (!currentUser || !currentUser.id) return;
+  const toMigrate = [];
+  APP.trades.forEach((t, ti) => {
+    (t.images||[]).forEach((src, ii) => { if (typeof src === 'string' && src.startsWith('data:')) toMigrate.push({ti,ii}); });
+  });
+  if (!toMigrate.length) return;
+  let done = 0, failed = 0;
+  for (const {ti, ii} of toMigrate) {
+    const t = APP.trades[ti];
+    if (!t || !t.images || !t.images[ii]) continue;
+    const original = t.images[ii];
+    try {
+      const compressed = await compressImage(original);
+      const uploaded = await uploadTradeImageToStorage(compressed);
+      if (uploaded && !uploaded.startsWith('data:')) { t.images[ii] = uploaded; done++; } else { failed++; }
+    } catch(e) { console.warn('Migration image échouée (conservée en local) :', e); failed++; }
+  }
+  saveState(); renderTable();
+  if (done) showSync(`✓ ${done} image(s) déplacée(s) vers le stockage cloud`, '#22c55e');
+  if (!failed) localStorage.setItem(accKey('tjp_images_migrated'), '1'); // tout est passé : plus besoin de réessayer aux prochaines connexions
+}
+
 function compressImage(dataUrl, maxWidth=1000, quality=0.7){
   return new Promise((resolve) => {
     const img = new Image();
@@ -906,7 +929,8 @@ function addFormImage() {
     const reader = new FileReader();
     reader.onload = async e => {
       const compressed = await compressImage(e.target.result);
-      window._formImages.push(compressed);
+      const finalSrc = await uploadTradeImageToStorage(compressed);
+      window._formImages.push(finalSrc);
       renderFormImages();
     };
     reader.readAsDataURL(file);
@@ -919,7 +943,11 @@ function renderFormImages() {
     <button onclick="removeFormImg(${i})" style="position:absolute;top:2px;right:2px;background:#ef4444;color:#fff;border:none;border-radius:3px;padding:1px 4px;cursor:pointer;font-size:9px;">×</button>
   </div>`).join('');
 }
-function removeFormImg(i) { window._formImages.splice(i,1); renderFormImages(); }
+function removeFormImg(i) {
+  const removed=(window._formImages||[])[i];
+  if(typeof deleteTradeImageFromStorage==='function') deleteTradeImageFromStorage(removed);
+  window._formImages.splice(i,1); renderFormImages();
+}
 
 // ══ INIT ══
 document.addEventListener('DOMContentLoaded', () => {

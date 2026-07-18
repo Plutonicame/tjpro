@@ -77,8 +77,9 @@
 
 <!-- NAV DESKTOP (une seule ligne) -->
 <nav class="nav">
+  <div class="acc-menu" id="accMenu"></div>
   <div class="nav-desktop" style="position:relative;">
-    <div class="nav-logo" id="navLogoBtn" data-editable onclick="toggleAccountMenu(event)">TJP▾<div class="acc-menu" id="accMenu"></div></div>
+    <div class="nav-logo" id="navLogoBtn" data-editable onclick="toggleAccountMenu(event)">TJP▾</div>
     <button class="nav-tab active" onclick="showPage('trackrecord',this)"><span data-editable>Track Record</span></button>
     <button class="nav-tab" onclick="showPage('journal',this)"><span data-editable>Journal de trading</span></button>
     <button class="nav-tab" onclick="showPage('calendrier',this)"><span data-editable>Calendrier</span></button>
@@ -106,7 +107,7 @@
   <div class="nav-mobile">
     <div class="nav-mobile-row1">
       <button class="hamburger" onclick="openMobileMenu()">☰</button>
-      <div class="nav-mobile-logo" data-editable>TJP</div>
+      <div class="nav-mobile-logo" data-editable onclick="toggleAccountMenu(event)" style="cursor:pointer;">TJP▾</div>
       <div class="nav-mobile-clocks">
         <div class="clock-item"><span class="clock-city">NEW YORK</span><span class="clock-time" id="clkNY2">--:--:--</span></div>
         <div class="clock-item"><span class="clock-city">LONDON</span><span class="clock-time" id="clkLN2">--:--:--</span></div>

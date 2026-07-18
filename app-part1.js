@@ -944,7 +944,8 @@ function openFullscreen(src){
 function deleteTradeImage(id,idx){
   const t=APP.trades.find(x=>x.id===id);
   if(!t||!t.images)return;
-  t.images.splice(idx,1);
+  const [removed]=t.images.splice(idx,1);
+  if(typeof deleteTradeImageFromStorage==='function') deleteTradeImageFromStorage(removed);
   saveState();viewTradeImages(id);renderTable();
 }
 function renderTable(){
@@ -1629,10 +1630,15 @@ function renderEditImages(existing){
 }
 function removeExistingImg(i){
   const t=APP.trades.find(x=>x.id===_editId);
-  if(t&&t.images)t.images.splice(i,1);
+  if(t&&t.images){
+    const [removed]=t.images.splice(i,1);
+    if(typeof deleteTradeImageFromStorage==='function') deleteTradeImageFromStorage(removed);
+  }
   renderEditImages(t?t.images:[]);
 }
 function removeNewImg(i){
+  const removed=(window._editImages||[])[i];
+  if(typeof deleteTradeImageFromStorage==='function') deleteTradeImageFromStorage(removed);
   (window._editImages||[]).splice(i,1);
   const t=APP.trades.find(x=>x.id===_editId);
   renderEditImages(t?t.images:[]);
@@ -1642,9 +1648,11 @@ function addEditImage(){
   if(!inp||!inp.files||!inp.files.length)return;
   Array.from(inp.files).forEach(file=>{
     const reader=new FileReader();
-    reader.onload=e=>{
+    reader.onload=async e=>{
       if(!window._editImages)window._editImages=[];
-      window._editImages.push(e.target.result);
+      const compressed = (typeof compressImage === 'function') ? await compressImage(e.target.result) : e.target.result;
+      const finalSrc = (typeof uploadTradeImageToStorage === 'function') ? await uploadTradeImageToStorage(compressed) : compressed;
+      window._editImages.push(finalSrc);
       const t=APP.trades.find(x=>x.id===_editId);
       renderEditImages(t?t.images:[]);
     };
