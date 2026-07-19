@@ -506,11 +506,20 @@ function pencilVarForEl(el){
 // (au lieu de laisser les valeurs du texte précédemment édité).
 function pencilSyncPanelToEl(el){
   if(!el)return;
-  const themeVar = pencilVarForEl(el);
   const cs = getComputedStyle(el);
-  pencilColor = themeVar
-    ? (rgba2hex(getComputedStyle(document.documentElement).getPropertyValue(themeVar).trim()) || getComputedStyle(document.documentElement).getPropertyValue(themeVar).trim() || '#e2e8f0')
-    : (rgba2hex(el.style.color || cs.color) || el.style.color || cs.color || '#e2e8f0');
+  // Priorité à ce qui est VRAIMENT affiché à l'écran : si ce texte a encore une
+  // couleur fixée localement (réglage d'avant la synchro avec le thème), c'est
+  // elle qui est réellement visible — on ne doit jamais afficher autre chose.
+  // Sinon, s'il est piloté par une variable de thème partagée, on lit celle-ci.
+  const themeVar = pencilVarForEl(el);
+  if(el.style.color){
+    pencilColor = rgba2hex(el.style.color) || el.style.color;
+  } else if(themeVar){
+    const v = getComputedStyle(document.documentElement).getPropertyValue(themeVar).trim();
+    pencilColor = rgba2hex(v) || v || '#e2e8f0';
+  } else {
+    pencilColor = rgba2hex(cs.color) || cs.color || '#e2e8f0';
+  }
   const swatch = document.getElementById('pencilColorSwatch');
   if(swatch) swatch.style.background = pencilColor;
   const fsInput = document.getElementById('pencilFontSize');
@@ -1355,7 +1364,7 @@ function drawPie(period){
   const g=tr.filter(t=>t.res>0).length,p=tr.filter(t=>t.res<0).length,n=tr.filter(t=>t.res===0).length;
   const ctx=document.getElementById('cPie').getContext('2d');
   CH['pie']=new Chart(ctx,{type:'doughnut',data:{labels:['Gagnants','Perdants','Nuls'],
-    datasets:[{data:[g,p,n],backgroundColor:[gc('--pie-win'),gc('--pie-lose'),gc('--pie-neutral')],borderColor:gc('--bg')||'#0b0f1a',borderWidth:3,hoverOffset:5}]},
+    datasets:[{data:[g,p,n],backgroundColor:[gc('--pie-win'),gc('--pie-lose'),gc('--pie-neutral')],borderColor:gc('--winrate-slice-border')||'#0b0f1a',borderWidth:3,hoverOffset:5}]},
     options:{responsive:true,maintainAspectRatio:true,cutout:'60%',layout:{padding:{bottom:8}},plugins:{
       legend:{position:'bottom',align:'center',labels:{padding:16,color:'#94a3b8',font:{size:11},boxWidth:13,boxHeight:13}},
       tooltip:{callbacks:{label:i=>' '+i.label+' : '+i.parsed+(tr.length?' ('+Math.round(i.parsed/tr.length*100)+'%)':'')}}}}});
@@ -1511,8 +1520,8 @@ function cpConfirm(){const hex=document.getElementById('cpHex').value;if(!cpMem.
 // ══ THEME ══
 const TV=[
   // ══ Général ══
-  {v:'--bg',l:'Fond principal',page:'Général',section:'Fond & structure'},{v:'--surface',l:'Surfaces',page:'Général',section:'Fond & structure'},
-  {v:'--card',l:'Cartes',page:'Général',section:'Fond & structure'},{v:'--border',l:'Bordures',page:'Général',section:'Fond & structure'},
+  {v:'--bg',l:'Fond principal',page:'Général',section:'Fond & structure'},
+  
   {v:'--row-hover',l:'Survol lignes',page:'Général',section:'Fond & structure'},{v:'--nav-bg',l:'Nav fond',page:'Général',section:'Navigation'},
   {v:'--nav-border',l:'Nav bordure',page:'Général',section:'Navigation'},{v:'--nav-logo',l:'Logo',page:'Général',section:'Navigation'},
   {v:'--session-bg',l:'Session fond',page:'Général',section:'Navigation'},{v:'--session-border',l:'Session bordure',page:'Général',section:'Navigation'},
@@ -1523,9 +1532,9 @@ const TV=[
   {v:'--badge-r-bd',l:'Badge Risk bord',page:'Général',section:'Navigation'},{v:'--badge-r-tx',l:'Badge Risk texte',page:'Général',section:'Navigation'},
   {v:'--btn-deco-bg',l:'Bouton déconnexion - fond',page:'Général',section:'Navigation'},{v:'--btn-deco-bd',l:'Bouton déconnexion - bordure',page:'Général',section:'Navigation'},
   {v:'--btn-deco-tx',l:'Bouton déconnexion - texte',page:'Général',section:'Navigation'},{v:'--text',l:'Texte principal',page:'Général',section:'Texte & accents'},
-  {v:'--muted',l:'Texte secondaire',page:'Général',section:'Texte & accents'},{v:'--green',l:'Vert accent',page:'Général',section:'Texte & accents'},
-  {v:'--red',l:'Rouge accent',page:'Général',section:'Texte & accents'},{v:'--gold',l:'Or',page:'Général',section:'Texte & accents'},
-  {v:'--purple',l:'Violet',page:'Général',section:'Texte & accents'},{v:'--btn-p-bg',l:'Bouton principal - fond',page:'Général',section:'Boutons génériques'},
+  
+  
+  {v:'--btn-p-bg',l:'Bouton principal - fond',page:'Général',section:'Boutons génériques'},
   {v:'--btn-p-tx',l:'Bouton principal - texte',page:'Général',section:'Boutons génériques'},{v:'--btn-g-bg',l:'Bouton Non - fond',page:'Général',section:'Boutons génériques'},
   {v:'--btn-g-bd',l:'Bouton Non - bordure',page:'Général',section:'Boutons génériques'},{v:'--btn-g-tx',l:'Bouton Non - texte',page:'Général',section:'Boutons génériques'},
   {v:'--btn-d-bg',l:'Bouton Oui - fond',page:'Général',section:'Boutons génériques'},{v:'--btn-d-bd',l:'Bouton Oui - bordure',page:'Général',section:'Boutons génériques'},
@@ -1627,8 +1636,8 @@ const TV=[
   {v:'--hamburger-border',l:'.hamburger — bordure',page:'Général',section:'Navigation'},{v:'--hamburger-color',l:'.hamburger — texte',page:'Général',section:'Navigation'},
   {v:'--mobile-menu-nav-tab-border',l:'.mobile-menu .nav-tab — bordure',page:'Général',section:'Navigation'},{v:'--mobile-menu-nav-tab-borderbott',l:'.mobile-menu .nav-tab — bordure',page:'Général',section:'Navigation'},
   // Général > Mode stylo
-  {v:'--body-pencil-mode-data-editable-hove-outlinecol',l:'body.pencil-mode [data-editable]:hover — contour',page:'Général',section:'Mode stylo'},{v:'--penciltoolbar-background',l:'#pencilToolbar — fond',page:'Général',section:'Mode stylo'},
-  {v:'--penciltoolbar-border',l:'#pencilToolbar — bordure',page:'Général',section:'Mode stylo'},{v:'--pencilfontsize-background',l:'#pencilFontSize — fond',page:'Général',section:'Mode stylo'},
+  {v:'--pencil-hover-outline',l:'Contour au survol (avant de cliquer)',page:'Général',section:'Mode stylo'},{v:'--pencil-toolbar-bg',l:'Barre d\'outils - fond',page:'Général',section:'Mode stylo'},
+  {v:'--pencil-toolbar-border',l:'Barre d\'outils - bordure',page:'Général',section:'Mode stylo'},{v:'--pencilfontsize-background',l:'#pencilFontSize — fond',page:'Général',section:'Mode stylo'},
   {v:'--pencilfontsize-border',l:'#pencilFontSize — bordure',page:'Général',section:'Mode stylo'},{v:'--pencilfontsize-color',l:'#pencilFontSize — texte',page:'Général',section:'Mode stylo'},
   {v:'--pencilcolorswatch-border',l:'#pencilColorSwatch — bordure',page:'Général',section:'Mode stylo'},
   // Général > Titres de page
@@ -1722,6 +1731,7 @@ const TV=[
   {v:'--alert-color',l:'.alert — texte',page:'Général',section:'Boîtes de dialogue'},
   // Général > Pied de page
   {v:'--footer-color',l:'.footer — texte',page:'Général',section:'Pied de page'},
+  {v:'--winrate-slice-border',l:'Bordure des tranches',page:'Track Record',section:'Win Rate'},{v:'--loading-screen-bg',l:'Fond',page:'Général',section:'Écran de chargement'},
   ...getAccounts().flatMap((acc,i)=>[{v:`--acc-item-bg-${i+1}`,l:`${acc.name} - fond`,page:'Général',section:'Menu comptes'},{v:`--acc-item-bd-${i+1}`,l:`${acc.name} - bordure`,page:'Général',section:'Menu comptes'}]),
 ];
 let teVals={},teHist=[];

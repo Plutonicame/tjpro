@@ -97,7 +97,7 @@ async function afterPinValidated() {
   showOverlay(null);
   const loadEl = document.createElement('div');
   loadEl.id = 'loadingScreen';
-  loadEl.style.cssText = 'position:fixed;inset:0;background:var(--bg,#0b0f1a);z-index:9998;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;';
+  loadEl.style.cssText = 'position:fixed;inset:0;background:var(--loading-screen-bg,#0b0f1a);z-index:9998;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;';
   loadEl.innerHTML = '<div style="font-family:var(--mono,monospace);font-size:14px;color:var(--muted,#6b7a99);">Chargement...</div>';
   document.body.appendChild(loadEl);
 
