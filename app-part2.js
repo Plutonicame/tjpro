@@ -399,7 +399,7 @@ async function pushToCloud(opts) {
       user_id: currentUser.id, trades: finalTrades, lists: APP.lists, next_id: APP.nextId,
       capital: localStorage.getItem(accKey('tj_capital')), risk: localStorage.getItem(accKey('tj_risk')),
       smart_risk: localStorage.getItem(accKey('tj_smart_risk')), risk_max: localStorage.getItem(accKey('tj_risk_max')),
-      risk_decimal: localStorage.getItem(accKey('tj_risk_decimal')), theme: localStorage.getItem(accKey('tj_theme_vars')),
+      risk_decimal: localStorage.getItem(accKey('tj_risk_decimal')), theme: localStorage.getItem('tj_theme_vars'), // thème global, pas par compte
       pencil_edits: (() => {
         try {
           const edits = JSON.parse(localStorage.getItem(accKey('tj_pencil_edits')) || '{}');
@@ -460,7 +460,7 @@ function exportLocalBackup(){
       smartRisk: localStorage.getItem(k('tj_smart_risk')),
       riskMax: localStorage.getItem(k('tj_risk_max')),
       riskDecimal: localStorage.getItem(k('tj_risk_decimal')),
-      theme: localStorage.getItem(k('tj_theme_vars')),
+      theme: localStorage.getItem('tj_theme_vars'), // thème global, pas par compte
       pencilEdits: localStorage.getItem(k('tj_pencil_edits')),
       payouts: localStorage.getItem(k('tj_payouts')),
       rmConfig: {
@@ -491,7 +491,7 @@ function exportLocalBackup(){
     nextId: APP.nextId,
     capital: localStorage.getItem(accKey('tj_capital')),
     risk: localStorage.getItem(accKey('tj_risk')),
-    theme: localStorage.getItem(accKey('tj_theme_vars')),
+    theme: localStorage.getItem('tj_theme_vars'), // thème global, pas par compte
   };
   const blob = new Blob([JSON.stringify(backup, null, 2)], {type: 'application/json'});
   const url = URL.createObjectURL(blob);
@@ -536,7 +536,7 @@ function importLocalBackup(event){
             if(acc.smartRisk) localStorage.setItem(k('tj_smart_risk'), acc.smartRisk);
             if(acc.riskMax) localStorage.setItem(k('tj_risk_max'), acc.riskMax);
             if(acc.riskDecimal) localStorage.setItem(k('tj_risk_decimal'), acc.riskDecimal);
-            if(acc.theme) localStorage.setItem(k('tj_theme_vars'), acc.theme);
+            // thème global : ignoré ici (déjà partagé par tous les comptes)
             if(acc.pencilEdits) localStorage.setItem(k('tj_pencil_edits'), acc.pencilEdits);
             if(acc.payouts) localStorage.setItem(k('tj_payouts'), acc.payouts);
             if(acc.rmConfig){const rm=acc.rmConfig,kk=key=>k('tj_'+key);
@@ -578,7 +578,7 @@ function importLocalBackup(event){
         if (backup.smartRisk) localStorage.setItem(accKey('tj_smart_risk'), backup.smartRisk);
         if (backup.riskMax) localStorage.setItem(accKey('tj_risk_max'), backup.riskMax);
         if (backup.riskDecimal) localStorage.setItem(accKey('tj_risk_decimal'), backup.riskDecimal);
-        if (backup.theme) localStorage.setItem(accKey('tj_theme_vars'), backup.theme);
+        if (backup.theme) localStorage.setItem('tj_theme_vars', backup.theme);
         if (backup.pencilEdits) localStorage.setItem(accKey('tj_pencil_edits'), backup.pencilEdits);
         if (backup.payouts) localStorage.setItem(accKey('tj_payouts'), backup.payouts);
         if (backup.iaConfig) localStorage.setItem('tjp_ia_config', backup.iaConfig);
@@ -684,7 +684,7 @@ function _applyCloudDataDirect(data, cloudTrades) {
   if (data.risk_decimal != null) localStorage.setItem(accKey('tj_risk_decimal'), data.risk_decimal);
   if (data.payouts) localStorage.setItem(accKey('tj_payouts'), data.payouts);
   if (data.theme) {
-    localStorage.setItem(accKey('tj_theme_vars'), data.theme);
+    localStorage.setItem('tj_theme_vars', data.theme);
     try {
       const v=JSON.parse(data.theme);
       Object.entries(v).forEach(([k,c])=>document.documentElement.style.setProperty(k,c));

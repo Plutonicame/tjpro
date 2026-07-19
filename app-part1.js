@@ -122,7 +122,7 @@ function initAccountsIfNeeded(){
     // Migration : les données existantes sans préfixe appartiennent au compte 1
     // On les copie avec le bon préfixe pour cohérence
     const keys = ['tj_trades','tj_lists','tj_nextId','tj_capital','tj_risk','tj_smart_risk',
-      'tj_risk_max','tj_risk_decimal','tj_theme_vars','tj_pencil_edits','tj_payouts',
+      'tj_risk_max','tj_risk_decimal','tj_pencil_edits','tj_payouts',
       'tjp_ia_config','tjp_recap_history','tj_rm_up_trigger','tj_rm_up_trades','tj_rm_up_pct',
       'tj_rm_up_var_type','tj_rm_up_var_val','tj_rm_down_trigger','tj_rm_down_trades',
       'tj_rm_down_pct','tj_rm_down_var_type','tj_rm_down_var_val'];
@@ -136,7 +136,7 @@ function initAccountsIfNeeded(){
 
 // Valeurs par défaut pour un nouveau compte
 function defaultAccSettings(sourceAccId){
-  // Hérite les listes et le thème du compte source
+  // Hérite les listes du compte source (le thème, lui, est global — voir plus bas)
   const srcKey = k => sourceAccId ? `${k}__${sourceAccId}` : k;
   return {
     trades: [],
@@ -148,7 +148,6 @@ function defaultAccSettings(sourceAccId){
     risk_max: '5',
     payouts: '[]',
     lists: localStorage.getItem(srcKey('tj_lists')) || null,
-    theme: localStorage.getItem(srcKey('tj_theme_vars')) || null,
     pencil_edits: null,
     rm_up_trigger: '"trades"',
     rm_up_trades: '3',
@@ -182,7 +181,6 @@ function createAccount(sourcAccId){
   localStorage.setItem(k('tj_risk_max'), defs.risk_max);
   localStorage.setItem(k('tj_payouts'), defs.payouts);
   if(defs.lists) localStorage.setItem(k('tj_lists'), defs.lists);
-  if(defs.theme) localStorage.setItem(k('tj_theme_vars'), defs.theme);
   localStorage.setItem(k('tj_rm_up_trigger'), defs.rm_up_trigger);
   localStorage.setItem(k('tj_rm_up_trades'), defs.rm_up_trades);
   localStorage.setItem(k('tj_rm_up_pct'), defs.rm_up_pct);
@@ -487,6 +485,37 @@ function closeMobileMenu(){document.getElementById('mobileMenu').classList.remov
 
 // ══ PENCIL ══
 let pencilActive=false,pencilColor='#e2e8f0',currentEditEl=null;
+// Certains textes modifiables en mode stylo sont aussi pilotés par une variable de
+// thème partagée (visible dans l'éditeur de thème). Si un tel lien existe, changer
+// la couleur ici modifie directement cette variable — donc les deux réglages restent
+// strictement synchronisés au lieu d'être deux systèmes indépendants.
+const PENCIL_COLOR_VAR_MAP = {
+  'card-title':'--card-title-color',
+  'kpi-label':'--kpi-label-color',
+  'chart-title':'--chart-title-color',
+  'page-title':'--page-title-color',
+  'page-sub':'--page-sub-color',
+  'nav-logo':'--nav-logo',
+};
+function pencilVarForEl(el){
+  if(!el||!el.classList)return null;
+  for(const cls of el.classList){ if(PENCIL_COLOR_VAR_MAP[cls]) return PENCIL_COLOR_VAR_MAP[cls]; }
+  return null;
+}
+// Remplit le panneau STYLO avec les réglages RÉELS du texte qu'on vient de sélectionner
+// (au lieu de laisser les valeurs du texte précédemment édité).
+function pencilSyncPanelToEl(el){
+  if(!el)return;
+  const themeVar = pencilVarForEl(el);
+  const cs = getComputedStyle(el);
+  pencilColor = themeVar
+    ? (rgba2hex(getComputedStyle(document.documentElement).getPropertyValue(themeVar).trim()) || getComputedStyle(document.documentElement).getPropertyValue(themeVar).trim() || '#e2e8f0')
+    : (rgba2hex(el.style.color || cs.color) || el.style.color || cs.color || '#e2e8f0');
+  const swatch = document.getElementById('pencilColorSwatch');
+  if(swatch) swatch.style.background = pencilColor;
+  const fsInput = document.getElementById('pencilFontSize');
+  if(fsInput) fsInput.value = parseInt(el.style.fontSize || cs.fontSize, 10) || '';
+}
 document.getElementById('pencilColorSwatch').style.background=pencilColor;
 function getEK(el){if(el.dataset.ek)return el.dataset.ek;const base=el.id?('#'+el.id):(el.tagName+el.className+(el.textContent||'').replace(/\s+/g,' ').trim());return el.dataset.ek=base.substring(0,60);}
 function togglePencil(){
@@ -514,6 +543,7 @@ function setupPencil(){
         if(!isNavSpan){e.stopPropagation();e.preventDefault();}
         if(currentEditEl&&currentEditEl!==el){currentEditEl.removeAttribute('contenteditable');saveOneEdit(currentEditEl);}
         currentEditEl=el;el.setAttribute('contenteditable','true');el.focus();
+        pencilSyncPanelToEl(el);
       };
       el.addEventListener('click',el._ph);
       el.addEventListener('touchend',el._ph,{passive:false});
@@ -531,6 +561,7 @@ if(!window._pencilDelegateSet){
     e.stopPropagation(); e.preventDefault();
     if(currentEditEl && currentEditEl!==el){currentEditEl.removeAttribute('contenteditable');saveOneEdit(currentEditEl);}
     currentEditEl=el; el.setAttribute('contenteditable','true'); el.focus();
+    pencilSyncPanelToEl(el);
   }, true);
   document.addEventListener('touchend', e=>{
     if(!pencilActive) return;
@@ -539,6 +570,7 @@ if(!window._pencilDelegateSet){
     e.stopPropagation(); e.preventDefault();
     if(currentEditEl && currentEditEl!==el){currentEditEl.removeAttribute('contenteditable');saveOneEdit(currentEditEl);}
     currentEditEl=el; el.setAttribute('contenteditable','true'); el.focus();
+    pencilSyncPanelToEl(el);
   }, {capture:true, passive:false});
 }
 function saveOneEdit(el){
@@ -557,7 +589,19 @@ function applyPencilStyle(){
     currentEditEl.style.setProperty('font-size', sz+'px', 'important');
     currentEditEl.dataset.userFs='1';
   }
-  currentEditEl.style.setProperty('color', pencilColor, 'important');
+  const themeVar = pencilVarForEl(currentEditEl);
+  if(themeVar){
+    // Ce texte est piloté par une variable de thème partagée : on modifie CETTE
+    // variable directement, donc l'éditeur de thème et le mode stylo restent
+    // strictement synchronisés (même réglage, pas deux systèmes séparés).
+    document.documentElement.style.setProperty(themeVar, pencilColor);
+    teVals[themeVar] = pencilColor;
+    lss('tj_theme_vars', teVals);
+    currentEditEl.style.removeProperty('color'); // pas de fixation locale qui masquerait la variable
+    if(typeof currentUser!=="undefined"&&currentUser&&!_isSyncing){schedulePush(300);}
+  } else {
+    currentEditEl.style.setProperty('color', pencilColor, 'important');
+  }
   saveOneEdit(currentEditEl);
 }
 
@@ -1466,53 +1510,256 @@ function cpConfirm(){const hex=document.getElementById('cpHex').value;if(!cpMem.
 
 // ══ THEME ══
 const TV=[
-  {v:'--bg',l:'Fond principal',g:'Fond'},{v:'--surface',l:'Surfaces',g:'Fond'},{v:'--card',l:'Cartes',g:'Fond'},{v:'--border',l:'Bordures',g:'Fond'},{v:'--row-hover',l:'Survol lignes',g:'Fond'},
-  {v:'--nav-bg',l:'Nav fond',g:'Navigation'},{v:'--nav-border',l:'Nav bordure',g:'Navigation'},{v:'--nav-logo',l:'Logo',g:'Navigation'},
-  {v:'--session-bg',l:'Session fond',g:'Navigation'},{v:'--session-border',l:'Session bordure',g:'Navigation'},{v:'--session-text',l:'Session texte',g:'Navigation'},
-  {v:'--badge-t-bg',l:'Badge Trades fond',g:'Navigation'},{v:'--badge-t-bd',l:'Badge Trades bord',g:'Navigation'},{v:'--badge-t-tx',l:'Badge Trades texte',g:'Navigation'},
-  {v:'--badge-p-bg',l:'Badge P&L fond',g:'Navigation'},{v:'--badge-p-bd',l:'Badge P&L bord',g:'Navigation'},{v:'--badge-p-tx',l:'Badge P&L texte',g:'Navigation'},
-  {v:'--badge-r-bg',l:'Badge Risk fond',g:'Navigation'},{v:'--badge-r-bd',l:'Badge Risk bord',g:'Navigation'},{v:'--badge-r-tx',l:'Badge Risk texte',g:'Navigation'},
-  {v:'--kpi1',l:'Barre KPI 1',g:'KPI'},{v:'--kpi2',l:'Barre KPI 2',g:'KPI'},{v:'--kpi3',l:'Barre KPI 3',g:'KPI'},{v:'--kpi4',l:'Barre KPI 4',g:'KPI'},{v:'--kpi5',l:'Barre KPI 5',g:'KPI'},{v:'--kpi6',l:'Barre KPI 6',g:'KPI'},{v:'--kpi7',l:'Barre KPI 7',g:'KPI'},{v:'--kpi8',l:'Barre KPI 8',g:'KPI'},{v:'--kpi9',l:'Barre KPI 9',g:'KPI'},
-{v:'--pc-positif',l:'Points Clés - Positif',g:'Points Clés'},{v:'--pc-negatif',l:'Points Clés - Négatif',g:'Points Clés'},
-{v:'--rm-up-border',l:'Risk Mgmt - Bordure (monte)',g:'Risk Management'},{v:'--rm-up-text',l:'Risk Mgmt - Texte (monte)',g:'Risk Management'},{v:'--rm-down-border',l:'Risk Mgmt - Bordure (descend)',g:'Risk Management'},{v:'--rm-down-text',l:'Risk Mgmt - Texte (descend)',g:'Risk Management'},
-  {v:'--auth-bg',l:'Connexion fond',g:'Connexion'},{v:'--auth-title',l:'Connexion titre',g:'Connexion'},{v:'--auth-sub',l:'Connexion sous-titre',g:'Connexion'},{v:'--auth-btn-bg',l:'Bouton continuer fond',g:'Connexion'},{v:'--auth-btn-tx',l:'Bouton continuer texte',g:'Connexion'},{v:'--auth-input-bg',l:'Champ email fond',g:'Connexion'},{v:'--auth-input-bd',l:'Champ email bordure',g:'Connexion'},{v:'--pin-btn-bg',l:'Touche PIN fond',g:'Connexion'},{v:'--pin-btn-bd',l:'Touche PIN bordure',g:'Connexion'},{v:'--pin-btn-tx',l:'Touche PIN texte',g:'Connexion'},{v:'--pin-dot-off',l:'Point PIN inactif',g:'Connexion'},{v:'--pin-dot-on',l:'Point PIN actif',g:'Connexion'},{v:'--btn-p-bg',l:'Bouton fond',g:'Boutons'},{v:'--btn-p-tx',l:'Bouton texte',g:'Boutons'},
-{v:'--btn-newgoogle-bg',l:'Connexion Google - fond',g:'Connexion'},{v:'--btn-newgoogle-bd',l:'Connexion Google - bordure',g:'Connexion'},{v:'--btn-newgoogle-tx',l:'Connexion Google - texte',g:'Connexion'},
-{v:'--acc-menu-bg',l:'Menu comptes - fond',g:'Menu Comptes'},{v:'--acc-menu-bd',l:'Menu comptes - bordure',g:'Menu Comptes'},{v:'--acc-menu-tx',l:'Menu comptes - texte principal',g:'Menu Comptes'},{v:'--acc-menu-tx2',l:'Menu comptes - texte secondaire',g:'Menu Comptes'},
-...getAccounts().flatMap((acc,i)=>[{v:`--acc-item-bg-${i+1}`,l:`${acc.name} - fond`,g:'Menu Comptes'},{v:`--acc-item-bd-${i+1}`,l:`${acc.name} - bordure`,g:'Menu Comptes'}]),
-{v:'--bt-bg',l:'Badge BT - fond',g:'Boutons'},{v:'--bt-tx',l:'Badge BT - texte',g:'Boutons'},{v:'--btn-save-bg',l:'Sauvegarder - fond (PC)',g:'Boutons'},{v:'--btn-save-bg-mobile',l:'Sauvegarder - fond (mobile)',g:'Boutons'},{v:'--btn-save-bd',l:'Sauvegarder - bordure',g:'Boutons'},{v:'--btn-save-tx',l:'Sauvegarder - texte (PC)',g:'Boutons'},{v:'--btn-save-tx-mobile',l:'Sauvegarder - texte (mobile)',g:'Boutons'},{v:'--btn-delall-bg',l:'Supprimer tout - fond',g:'Boutons'},{v:'--btn-delall-bd',l:'Supprimer tout - bordure',g:'Boutons'},{v:'--btn-delall-tx',l:'Supprimer tout - texte',g:'Boutons'},{v:'--btn-export-bg',l:'Export - fond',g:'Boutons'},{v:'--btn-export-bd',l:'Export - bordure',g:'Boutons'},{v:'--btn-export-tx',l:'Export - texte',g:'Boutons'},{v:'--btn-import-bg',l:'Import - fond',g:'Boutons'},{v:'--btn-import-bd',l:'Import - bordure',g:'Boutons'},{v:'--btn-import-tx',l:'Import - texte',g:'Boutons'},{v:'--btn-g-bg',l:'Non - fond',g:'Boutons'},{v:'--btn-g-bd',l:'Non - bordure',g:'Boutons'},{v:'--btn-g-tx',l:'Non - texte',g:'Boutons'},{v:'--btn-d-bg',l:'Oui - fond',g:'Boutons'},{v:'--btn-d-bd',l:'Oui - bordure',g:'Boutons'},{v:'--btn-d-tx',l:'Oui - texte',g:'Boutons'},{v:'--btn-img-bg',l:'Image fond',g:'Boutons'},{v:'--btn-img-bd',l:'Image bordure',g:'Boutons'},{v:'--btn-img-tx',l:'Image texte',g:'Boutons'},{v:'--btn-pin-bg',l:'PIN fond',g:'Boutons'},{v:'--btn-pin-bd',l:'PIN bordure',g:'Boutons'},{v:'--btn-pin-tx',l:'PIN texte',g:'Boutons'},{v:'--btn-deco-bg',l:'Déco fond',g:'Boutons'},{v:'--btn-deco-bd',l:'Déco bordure',g:'Boutons'},{v:'--btn-deco-tx',l:'Déco texte',g:'Boutons'},
-  {v:'--tgl-off',l:'Toggle off',g:'Boutons'},{v:'--tgl-on',l:'Toggle on',g:'Boutons'},{v:'--tgl-thumb',l:'Toggle rond',g:'Boutons'},
-  {v:'--tag-long-bg',l:'LONG fond',g:'Tags'},{v:'--tag-long-tx',l:'LONG texte',g:'Tags'},{v:'--tag-long-bd',l:'LONG bordure',g:'Tags'},
-  {v:'--tag-short-bg',l:'SHORT fond',g:'Tags'},{v:'--tag-short-tx',l:'SHORT texte',g:'Tags'},{v:'--tag-short-bd',l:'SHORT bordure',g:'Tags'},
-  {v:'--tag-oui-bg',l:'OUI fond',g:'Tags'},{v:'--tag-oui-tx',l:'OUI texte',g:'Tags'},{v:'--tag-oui-bd',l:'OUI bordure',g:'Tags'},
-  {v:'--tag-non-bg',l:'NON fond',g:'Tags'},{v:'--tag-non-tx',l:'NON texte',g:'Tags'},{v:'--tag-non-bd',l:'NON bordure',g:'Tags'},
-  {v:'--tag-peut-bg',l:'PEUT-ÊTRE fond',g:'Tags'},{v:'--tag-peut-tx',l:'PEUT-ÊTRE texte',g:'Tags'},{v:'--tag-peut-bd',l:'PEUT-ÊTRE bordure',g:'Tags'},
-  {v:'--tag-na-bg',l:'N/A fond',g:'Tags'},{v:'--tag-na-tx',l:'N/A texte',g:'Tags'},{v:'--tag-na-bd',l:'N/A bordure',g:'Tags'},
-  {v:'--chip-h-bg',l:'Chip survol fond',g:'Chips'},{v:'--chip-h-bd',l:'Chip survol bord',g:'Chips'},{v:'--chip-h-tx',l:'Chip survol texte',g:'Chips'},
-  {v:'--chip-s-bg',l:'Chip sel. fond',g:'Chips'},{v:'--chip-s-bd',l:'Chip sel. bord',g:'Chips'},{v:'--chip-s-tx',l:'Chip sel. texte',g:'Chips'},
-  {v:'--text',l:'Texte principal',g:'Texte'},{v:'--muted',l:'Texte secondaire',g:'Texte'},
-  {v:'--green',l:'Vert accent',g:'Texte'},{v:'--red',l:'Rouge accent',g:'Texte'},{v:'--gold',l:'Or',g:'Texte'},{v:'--purple',l:'Violet',g:'Texte'},
-  // Couleurs indépendantes pour résultats journal
-  {v:'--result-pos',l:'Résultats positifs (journal)',g:'Texte'},{v:'--result-neg',l:'Résultats négatifs (journal)',g:'Texte'},{v:'--state-capital',l:'Capital actuel (modif.)',g:'État actuel'},{v:'--state-winstreak',l:'Win streak (modif.)',g:'État actuel'},{v:'--state-tf',l:'Timeframes (journal)',g:'État actuel'},{v:'--risk-euro-tx',l:'Risk €/trade couleur',g:'État actuel'},
-  {v:'--eq-bg',l:'Fond',g:'Équity'},{v:'--eq-line',l:'Courbe',g:'Équity'},{v:'--eq-fill-top',l:'Dégradé haut',g:'Équity'},{v:'--eq-fill-bot',l:'Dégradé bas',g:'Équity'},{v:'--eq-axis',l:'Axes',g:'Équity'},{v:'--eq-grid',l:'Grille',g:'Équity'},
-  {v:'--pnl-bg',l:'Fond',g:'P&L'},{v:'--pnl-bar-pos',l:'Positif',g:'P&L'},{v:'--pnl-bar-neg',l:'Négatif',g:'P&L'},
-  {v:'--pnl-axis',l:'Axes',g:'P&L'},{v:'--pnl-grid',l:'Grille',g:'P&L'},
-  {v:'--risk-bg',l:'Fond',g:'Risk'},{v:'--risk-line',l:'Courbe',g:'Risk'},{v:'--risk-fill-top',l:'Dégradé haut',g:'Risk'},{v:'--risk-fill-bot',l:'Dégradé bas',g:'Risk'},{v:'--risk-base',l:'Ligne de base',g:'Risk'},{v:'--risk-axis',l:'Axes',g:'Risk'},{v:'--risk-grid',l:'Grille',g:'Risk'},
-  {v:'--pie-win',l:'Gagnants',g:'Win Rate'},{v:'--pie-lose',l:'Perdants',g:'Win Rate'},{v:'--pie-neutral',l:'Nuls',g:'Win Rate'},
-  {v:'--mgmt-bg',l:'Fond',g:'Mgmt'},{v:'--mgmt-yes',l:'Oui — P&L fond',g:'Mgmt'},{v:'--mgmt-no',l:'Non — P&L fond',g:'Mgmt'},{v:'--mgmt-yes-alpha',l:'Oui — Win% fond',g:'Mgmt'},{v:'--mgmt-no-alpha',l:'Non — Win% fond',g:'Mgmt'},{v:'--mgmt-yes-bd',l:'Oui — Win% bordure',g:'Mgmt'},{v:'--mgmt-no-bd',l:'Non — Win% bordure',g:'Mgmt'},{v:'--mgmt-axis',l:'Axes',g:'Mgmt'},{v:'--mgmt-grid',l:'Grille',g:'Mgmt'},
-  {v:'--comp-bg',l:'Fond',g:'Comparaisons'},{v:'--comp-pos',l:'Positif',g:'Comparaisons'},{v:'--comp-neg',l:'Négatif',g:'Comparaisons'},{v:'--comp-axis',l:'Axes',g:'Comparaisons'},{v:'--comp-grid',l:'Grille',g:'Comparaisons'},{v:'--conf-pos',l:'Conf. positif',g:'Comparaisons'},{v:'--conf-neg',l:'Conf. négatif',g:'Comparaisons'},
-  {v:'--cal-bg',l:'Fond',g:'Calendrier'},{v:'--cal-nav-text',l:'Texte Mois / Année',g:'Calendrier'},{v:'--cal-pos-bg',l:'Jour + fond',g:'Calendrier'},{v:'--cal-pos-bd',l:'Jour + bordure',g:'Calendrier'},{v:'--cal-neg-bg',l:'Jour − fond',g:'Calendrier'},{v:'--cal-neg-bd',l:'Jour − bordure',g:'Calendrier'},
-  {v:'--mt-paires',l:'Titre Paires',g:'Menus'},{v:'--mt-sessions',l:'Titre Sessions',g:'Menus'},{v:'--mt-confluences',l:'Titre Confluences',g:'Menus'},{v:'--mt-timeframes',l:'Titre TF',g:'Menus'},{v:'--mt-mgmt',l:'Titre Mgmt',g:'Menus'},{v:'--mt-reprend',l:'Titre Reprend.',g:'Menus'},
+  // ══ Général ══
+  {v:'--bg',l:'Fond principal',page:'Général',section:'Fond & structure'},{v:'--surface',l:'Surfaces',page:'Général',section:'Fond & structure'},
+  {v:'--card',l:'Cartes',page:'Général',section:'Fond & structure'},{v:'--border',l:'Bordures',page:'Général',section:'Fond & structure'},
+  {v:'--row-hover',l:'Survol lignes',page:'Général',section:'Fond & structure'},{v:'--nav-bg',l:'Nav fond',page:'Général',section:'Navigation'},
+  {v:'--nav-border',l:'Nav bordure',page:'Général',section:'Navigation'},{v:'--nav-logo',l:'Logo',page:'Général',section:'Navigation'},
+  {v:'--session-bg',l:'Session fond',page:'Général',section:'Navigation'},{v:'--session-border',l:'Session bordure',page:'Général',section:'Navigation'},
+  {v:'--session-text',l:'Session texte',page:'Général',section:'Navigation'},{v:'--badge-t-bg',l:'Badge Trades fond',page:'Général',section:'Navigation'},
+  {v:'--badge-t-bd',l:'Badge Trades bord',page:'Général',section:'Navigation'},{v:'--badge-t-tx',l:'Badge Trades texte',page:'Général',section:'Navigation'},
+  {v:'--badge-p-bg',l:'Badge P&L fond',page:'Général',section:'Navigation'},{v:'--badge-p-bd',l:'Badge P&L bord',page:'Général',section:'Navigation'},
+  {v:'--badge-p-tx',l:'Badge P&L texte',page:'Général',section:'Navigation'},{v:'--badge-r-bg',l:'Badge Risk fond',page:'Général',section:'Navigation'},
+  {v:'--badge-r-bd',l:'Badge Risk bord',page:'Général',section:'Navigation'},{v:'--badge-r-tx',l:'Badge Risk texte',page:'Général',section:'Navigation'},
+  {v:'--btn-deco-bg',l:'Bouton déconnexion - fond',page:'Général',section:'Navigation'},{v:'--btn-deco-bd',l:'Bouton déconnexion - bordure',page:'Général',section:'Navigation'},
+  {v:'--btn-deco-tx',l:'Bouton déconnexion - texte',page:'Général',section:'Navigation'},{v:'--text',l:'Texte principal',page:'Général',section:'Texte & accents'},
+  {v:'--muted',l:'Texte secondaire',page:'Général',section:'Texte & accents'},{v:'--green',l:'Vert accent',page:'Général',section:'Texte & accents'},
+  {v:'--red',l:'Rouge accent',page:'Général',section:'Texte & accents'},{v:'--gold',l:'Or',page:'Général',section:'Texte & accents'},
+  {v:'--purple',l:'Violet',page:'Général',section:'Texte & accents'},{v:'--btn-p-bg',l:'Bouton principal - fond',page:'Général',section:'Boutons génériques'},
+  {v:'--btn-p-tx',l:'Bouton principal - texte',page:'Général',section:'Boutons génériques'},{v:'--btn-g-bg',l:'Bouton Non - fond',page:'Général',section:'Boutons génériques'},
+  {v:'--btn-g-bd',l:'Bouton Non - bordure',page:'Général',section:'Boutons génériques'},{v:'--btn-g-tx',l:'Bouton Non - texte',page:'Général',section:'Boutons génériques'},
+  {v:'--btn-d-bg',l:'Bouton Oui - fond',page:'Général',section:'Boutons génériques'},{v:'--btn-d-bd',l:'Bouton Oui - bordure',page:'Général',section:'Boutons génériques'},
+  {v:'--btn-d-tx',l:'Bouton Oui - texte',page:'Général',section:'Boutons génériques'},{v:'--acc-menu-bg',l:'Menu comptes - fond',page:'Général',section:'Menu comptes'},
+  {v:'--acc-menu-bd',l:'Menu comptes - bordure',page:'Général',section:'Menu comptes'},{v:'--acc-menu-tx',l:'Menu comptes - texte principal',page:'Général',section:'Menu comptes'},
+  {v:'--acc-menu-tx2',l:'Menu comptes - texte secondaire',page:'Général',section:'Menu comptes'},{v:'--msg-success',l:'Message succès (ex: Sauvegardé)',page:'Général',section:'Messages système'},
+  {v:'--msg-error',l:'Message erreur',page:'Général',section:'Messages système'},{v:'--msg-warning',l:'Message avertissement',page:'Général',section:'Messages système'},
+  {v:'--msg-neutral',l:'Message neutre',page:'Général',section:'Messages système'},{v:'--msg-banner-bg',l:'Bandeau erreur - fond',page:'Général',section:'Messages système'},
+  {v:'--msg-banner-tx',l:'Bandeau erreur - texte',page:'Général',section:'Messages système'},
+  // ══ Connexion ══
+  {v:'--auth-bg',l:'Connexion fond',page:'Connexion',section:'Écran de connexion'},{v:'--auth-title',l:'Connexion titre',page:'Connexion',section:'Écran de connexion'},
+  {v:'--auth-sub',l:'Connexion sous-titre',page:'Connexion',section:'Écran de connexion'},{v:'--auth-btn-bg',l:'Bouton continuer fond',page:'Connexion',section:'Écran de connexion'},
+  {v:'--auth-btn-tx',l:'Bouton continuer texte',page:'Connexion',section:'Écran de connexion'},{v:'--auth-input-bg',l:'Champ email fond',page:'Connexion',section:'Écran de connexion'},
+  {v:'--auth-input-bd',l:'Champ email bordure',page:'Connexion',section:'Écran de connexion'},{v:'--btn-newgoogle-bg',l:'Lien secondaire - fond',page:'Connexion',section:'Écran de connexion'},
+  {v:'--btn-newgoogle-bd',l:'Lien secondaire - bordure',page:'Connexion',section:'Écran de connexion'},{v:'--btn-newgoogle-tx',l:'Lien secondaire - texte',page:'Connexion',section:'Écran de connexion'},
+  {v:'--pin-btn-bg',l:'Touche PIN fond',page:'Connexion',section:'Code PIN'},{v:'--pin-btn-bd',l:'Touche PIN bordure',page:'Connexion',section:'Code PIN'},
+  {v:'--pin-btn-tx',l:'Touche PIN texte',page:'Connexion',section:'Code PIN'},{v:'--pin-dot-off',l:'Point PIN inactif',page:'Connexion',section:'Code PIN'},
+  {v:'--pin-dot-on',l:'Point PIN actif',page:'Connexion',section:'Code PIN'},
+  // ══ Track Record ══
+  {v:'--kpi1',l:'Capital',page:'Track Record',section:'KPI'},{v:'--kpi2',l:'P&L Total',page:'Track Record',section:'KPI'},
+  {v:'--kpi3',l:'Win Rate',page:'Track Record',section:'KPI'},{v:'--kpi4',l:'RR Moyen',page:'Track Record',section:'KPI'},
+  {v:'--kpi5',l:'Profit Factor',page:'Track Record',section:'KPI'},{v:'--kpi6',l:'Pay Out',page:'Track Record',section:'KPI'},
+  {v:'--kpi7',l:'Trades',page:'Track Record',section:'KPI'},{v:'--kpi8',l:'Risk Actuel',page:'Track Record',section:'KPI'},
+  {v:'--kpi9',l:'Drawdown Max',page:'Track Record',section:'KPI'},{v:'--pc-positif',l:'Points positifs',page:'Track Record',section:'Points Clés'},
+  {v:'--pc-negatif',l:'Points négatifs',page:'Track Record',section:'Points Clés'},{v:'--eq-bg',l:'Fond',page:'Track Record',section:'Évolution du capital'},
+  {v:'--eq-line',l:'Courbe',page:'Track Record',section:'Évolution du capital'},{v:'--eq-fill-top',l:'Dégradé haut',page:'Track Record',section:'Évolution du capital'},
+  {v:'--eq-fill-bot',l:'Dégradé bas',page:'Track Record',section:'Évolution du capital'},{v:'--eq-axis',l:'Axes',page:'Track Record',section:'Évolution du capital'},
+  {v:'--eq-grid',l:'Grille',page:'Track Record',section:'Évolution du capital'},{v:'--pnl-bg',l:'Fond',page:'Track Record',section:'P&L'},
+  {v:'--pnl-bar-pos',l:'Positif',page:'Track Record',section:'P&L'},{v:'--pnl-bar-neg',l:'Négatif',page:'Track Record',section:'P&L'},
+  {v:'--pnl-axis',l:'Axes',page:'Track Record',section:'P&L'},{v:'--pnl-grid',l:'Grille',page:'Track Record',section:'P&L'},
+  {v:'--risk-bg',l:'Fond',page:'Track Record',section:'Risk Management (graphique)'},{v:'--risk-line',l:'Courbe',page:'Track Record',section:'Risk Management (graphique)'},
+  {v:'--risk-fill-top',l:'Dégradé haut',page:'Track Record',section:'Risk Management (graphique)'},{v:'--risk-fill-bot',l:'Dégradé bas',page:'Track Record',section:'Risk Management (graphique)'},
+  {v:'--risk-base',l:'Ligne de base',page:'Track Record',section:'Risk Management (graphique)'},{v:'--risk-axis',l:'Axes',page:'Track Record',section:'Risk Management (graphique)'},
+  {v:'--risk-grid',l:'Grille',page:'Track Record',section:'Risk Management (graphique)'},{v:'--pie-win',l:'Gagnants',page:'Track Record',section:'Win Rate'},
+  {v:'--pie-lose',l:'Perdants',page:'Track Record',section:'Win Rate'},{v:'--pie-neutral',l:'Nuls',page:'Track Record',section:'Win Rate'},
+  {v:'--mgmt-bg',l:'Fond',page:'Track Record',section:'Comparaison du Management'},{v:'--mgmt-yes',l:'Oui — P&L fond',page:'Track Record',section:'Comparaison du Management'},
+  {v:'--mgmt-no',l:'Non — P&L fond',page:'Track Record',section:'Comparaison du Management'},{v:'--mgmt-yes-alpha',l:'Oui — Win% fond',page:'Track Record',section:'Comparaison du Management'},
+  {v:'--mgmt-no-alpha',l:'Non — Win% fond',page:'Track Record',section:'Comparaison du Management'},{v:'--mgmt-yes-bd',l:'Oui — Win% bordure',page:'Track Record',section:'Comparaison du Management'},
+  {v:'--mgmt-no-bd',l:'Non — Win% bordure',page:'Track Record',section:'Comparaison du Management'},{v:'--mgmt-axis',l:'Axes',page:'Track Record',section:'Comparaison du Management'},
+  {v:'--mgmt-grid',l:'Grille',page:'Track Record',section:'Comparaison du Management'},{v:'--comp-bg',l:'Fond',page:'Track Record',section:'Comparaisons'},
+  {v:'--comp-pos',l:'Positif',page:'Track Record',section:'Comparaisons'},{v:'--comp-neg',l:'Négatif',page:'Track Record',section:'Comparaisons'},
+  {v:'--comp-axis',l:'Axes',page:'Track Record',section:'Comparaisons'},{v:'--comp-grid',l:'Grille',page:'Track Record',section:'Comparaisons'},
+  {v:'--conf-pos',l:'Conf. positif',page:'Track Record',section:'Comparaisons'},{v:'--conf-neg',l:'Conf. négatif',page:'Track Record',section:'Comparaisons'},
+  // ══ Journal de trading ══
+  {v:'--tag-long-bg',l:'LONG fond',page:'Journal de trading',section:'Historique des trades'},{v:'--tag-long-tx',l:'LONG texte',page:'Journal de trading',section:'Historique des trades'},
+  {v:'--tag-long-bd',l:'LONG bordure',page:'Journal de trading',section:'Historique des trades'},{v:'--tag-short-bg',l:'SHORT fond',page:'Journal de trading',section:'Historique des trades'},
+  {v:'--tag-short-tx',l:'SHORT texte',page:'Journal de trading',section:'Historique des trades'},{v:'--tag-short-bd',l:'SHORT bordure',page:'Journal de trading',section:'Historique des trades'},
+  {v:'--tag-oui-bg',l:'OUI fond',page:'Journal de trading',section:'Historique des trades'},{v:'--tag-oui-tx',l:'OUI texte',page:'Journal de trading',section:'Historique des trades'},
+  {v:'--tag-oui-bd',l:'OUI bordure',page:'Journal de trading',section:'Historique des trades'},{v:'--tag-non-bg',l:'NON fond',page:'Journal de trading',section:'Historique des trades'},
+  {v:'--tag-non-tx',l:'NON texte',page:'Journal de trading',section:'Historique des trades'},{v:'--tag-non-bd',l:'NON bordure',page:'Journal de trading',section:'Historique des trades'},
+  {v:'--tag-peut-bg',l:'PEUT-ÊTRE fond',page:'Journal de trading',section:'Historique des trades'},{v:'--tag-peut-tx',l:'PEUT-ÊTRE texte',page:'Journal de trading',section:'Historique des trades'},
+  {v:'--tag-peut-bd',l:'PEUT-ÊTRE bordure',page:'Journal de trading',section:'Historique des trades'},{v:'--tag-na-bg',l:'N/A fond',page:'Journal de trading',section:'Historique des trades'},
+  {v:'--tag-na-tx',l:'N/A texte',page:'Journal de trading',section:'Historique des trades'},{v:'--tag-na-bd',l:'N/A bordure',page:'Journal de trading',section:'Historique des trades'},
+  {v:'--result-pos',l:'Résultats positifs (journal)',page:'Journal de trading',section:'Historique des trades'},{v:'--result-neg',l:'Résultats négatifs (journal)',page:'Journal de trading',section:'Historique des trades'},
+  {v:'--bt-bg',l:'Badge Backtest - fond',page:'Journal de trading',section:'Historique des trades'},{v:'--bt-tx',l:'Badge Backtest - texte',page:'Journal de trading',section:'Historique des trades'},
+  {v:'--chip-h-bg',l:'Chip survol fond',page:'Journal de trading',section:'Formulaire nouveau trade'},{v:'--chip-h-bd',l:'Chip survol bord',page:'Journal de trading',section:'Formulaire nouveau trade'},
+  {v:'--chip-h-tx',l:'Chip survol texte',page:'Journal de trading',section:'Formulaire nouveau trade'},{v:'--chip-s-bg',l:'Chip sel. fond',page:'Journal de trading',section:'Formulaire nouveau trade'},
+  {v:'--chip-s-bd',l:'Chip sel. bord',page:'Journal de trading',section:'Formulaire nouveau trade'},{v:'--chip-s-tx',l:'Chip sel. texte',page:'Journal de trading',section:'Formulaire nouveau trade'},
+  {v:'--btn-img-bg',l:'Image fond',page:'Journal de trading',section:'Formulaire nouveau trade'},{v:'--btn-img-bd',l:'Image bordure',page:'Journal de trading',section:'Formulaire nouveau trade'},
+  {v:'--btn-img-tx',l:'Image texte',page:'Journal de trading',section:'Formulaire nouveau trade'},
+  // ══ Calendrier ══
+  {v:'--cal-bg',l:'Fond',page:'Calendrier',section:'Calendrier'},{v:'--cal-nav-text',l:'Texte Mois / Année',page:'Calendrier',section:'Calendrier'},
+  {v:'--cal-pos-bg',l:'Jour + fond',page:'Calendrier',section:'Calendrier'},{v:'--cal-pos-bd',l:'Jour + bordure',page:'Calendrier',section:'Calendrier'},
+  {v:'--cal-neg-bg',l:'Jour − fond',page:'Calendrier',section:'Calendrier'},{v:'--cal-neg-bd',l:'Jour − bordure',page:'Calendrier',section:'Calendrier'},
+  // ══ Analyse IA ══
+  {v:'--ia-user-bg',l:'Bulle question - fond',page:'Analyse IA',section:'Conversation'},{v:'--ia-user-tx',l:'Bulle question - texte',page:'Analyse IA',section:'Conversation'},
+  {v:'--ia-bot-bg',l:'Bulle réponse - fond',page:'Analyse IA',section:'Conversation'},{v:'--ia-bot-bd',l:'Bulle réponse - bordure',page:'Analyse IA',section:'Conversation'},
+  {v:'--ia-bot-tx',l:'Bulle réponse - texte',page:'Analyse IA',section:'Conversation'},{v:'--ia-empty-tx',l:'Message avant la premiere question',page:'Analyse IA',section:'Conversation'},
+  // ══ Paramètres ══
+  {v:'--state-capital',l:'Capital actuel (modif.)',page:'Paramètres',section:'État actuel'},{v:'--state-winstreak',l:'Win streak (modif.)',page:'Paramètres',section:'État actuel'},
+  {v:'--state-tf',l:'Timeframes (journal)',page:'Paramètres',section:'État actuel'},{v:'--risk-euro-tx',l:'Risk €/trade couleur',page:'Paramètres',section:'État actuel'},
+  {v:'--rm-up-border',l:'Risk Mgmt - Bordure (monte)',page:'Paramètres',section:'Risk Management (réglages)'},{v:'--rm-up-text',l:'Risk Mgmt - Texte (monte)',page:'Paramètres',section:'Risk Management (réglages)'},
+  {v:'--rm-down-border',l:'Risk Mgmt - Bordure (descend)',page:'Paramètres',section:'Risk Management (réglages)'},{v:'--rm-down-text',l:'Risk Mgmt - Texte (descend)',page:'Paramètres',section:'Risk Management (réglages)'},
+  {v:'--tgl-off',l:'Toggle off',page:'Paramètres',section:'Interrupteurs'},{v:'--tgl-on',l:'Toggle on',page:'Paramètres',section:'Interrupteurs'},
+  {v:'--tgl-thumb',l:'Toggle rond',page:'Paramètres',section:'Interrupteurs'},{v:'--btn-pin-bg',l:'Changer PIN - fond',page:'Paramètres',section:'Sécurité'},
+  {v:'--btn-pin-bd',l:'Changer PIN - bordure',page:'Paramètres',section:'Sécurité'},{v:'--btn-pin-tx',l:'Changer PIN - texte',page:'Paramètres',section:'Sécurité'},
+  {v:'--btn-export-bg',l:'Export - fond',page:'Paramètres',section:'Sauvegarde locale'},{v:'--btn-export-bd',l:'Export - bordure',page:'Paramètres',section:'Sauvegarde locale'},
+  {v:'--btn-export-tx',l:'Export - texte',page:'Paramètres',section:'Sauvegarde locale'},{v:'--btn-import-bg',l:'Import - fond',page:'Paramètres',section:'Sauvegarde locale'},
+  {v:'--btn-import-bd',l:'Import - bordure',page:'Paramètres',section:'Sauvegarde locale'},{v:'--btn-import-tx',l:'Import - texte',page:'Paramètres',section:'Sauvegarde locale'},
+  {v:'--btn-delall-bg',l:'Supprimer tout - fond',page:'Paramètres',section:'Suppression des trades'},{v:'--btn-delall-bd',l:'Supprimer tout - bordure',page:'Paramètres',section:'Suppression des trades'},
+  {v:'--btn-delall-tx',l:'Supprimer tout - texte',page:'Paramètres',section:'Suppression des trades'},{v:'--btn-save-bg',l:'Sauvegarder - fond (PC)',page:'Paramètres',section:'Bouton Sauvegarder'},
+  {v:'--btn-save-bg-mobile',l:'Sauvegarder - fond (mobile)',page:'Paramètres',section:'Bouton Sauvegarder'},{v:'--btn-save-bd',l:'Sauvegarder - bordure',page:'Paramètres',section:'Bouton Sauvegarder'},
+  {v:'--btn-save-tx',l:'Sauvegarder - texte (PC)',page:'Paramètres',section:'Bouton Sauvegarder'},{v:'--btn-save-tx-mobile',l:'Sauvegarder - texte (mobile)',page:'Paramètres',section:'Bouton Sauvegarder'},
+  {v:'--mt-paires',l:'Titre Paires',page:'Paramètres',section:'Listes personnalisables'},{v:'--mt-sessions',l:'Titre Sessions',page:'Paramètres',section:'Listes personnalisables'},
+  {v:'--mt-confluences',l:'Titre Confluences',page:'Paramètres',section:'Listes personnalisables'},{v:'--mt-timeframes',l:'Titre TF',page:'Paramètres',section:'Listes personnalisables'},
+  {v:'--mt-mgmt',l:'Titre Mgmt',page:'Paramètres',section:'Listes personnalisables'},{v:'--mt-reprend',l:'Titre Reprend.',page:'Paramètres',section:'Listes personnalisables'},
+  // ══ Variables individuelles supplémentaires (séparation complète, aucune couleur partagée) ══
+  // Général > Fond & structure
+  {v:'--body-background',l:'body — fond',page:'Général',section:'Fond & structure'},{v:'--body-color',l:'body — texte',page:'Général',section:'Fond & structure'},
+  // Général > Menu comptes
+  {v:'--acc-item-borderbott',l:'.acc-item — bordure',page:'Général',section:'Menu comptes'},{v:'--acc-item-active-acc-background',l:'.acc-item.active-acc — fond',page:'Général',section:'Menu comptes'},
+  {v:'--acc-item-dots-color',l:'.acc-item-dots — texte',page:'Général',section:'Menu comptes'},{v:'--acc-item-dots-hover-background',l:'.acc-item-dots:hover — fond',page:'Général',section:'Menu comptes'},
+  {v:'--acc-item-dots-hover-color',l:'.acc-item-dots:hover — texte',page:'Général',section:'Menu comptes'},{v:'--acc-add-btn-color',l:'.acc-add-btn — texte',page:'Général',section:'Menu comptes'},
+  {v:'--acc-add-btn-hover-background',l:'.acc-add-btn:hover — fond',page:'Général',section:'Menu comptes'},
+  // Général > Navigation
+  {v:'--nav-tab-color',l:'.nav-tab — texte',page:'Général',section:'Navigation'},{v:'--nav-tab-hover-color',l:'.nav-tab:hover — texte',page:'Général',section:'Navigation'},
+  {v:'--nav-tab-active-color',l:'.nav-tab.active — texte',page:'Général',section:'Navigation'},{v:'--nav-tab-active-borderbott',l:'.nav-tab.active — bordure',page:'Général',section:'Navigation'},
+  {v:'--clock-city-color',l:'.clock-city — texte',page:'Général',section:'Navigation'},{v:'--clock-time-color',l:'.clock-time — texte',page:'Général',section:'Navigation'},
+  {v:'--hamburger-border',l:'.hamburger — bordure',page:'Général',section:'Navigation'},{v:'--hamburger-color',l:'.hamburger — texte',page:'Général',section:'Navigation'},
+  {v:'--mobile-menu-nav-tab-border',l:'.mobile-menu .nav-tab — bordure',page:'Général',section:'Navigation'},{v:'--mobile-menu-nav-tab-borderbott',l:'.mobile-menu .nav-tab — bordure',page:'Général',section:'Navigation'},
+  // Général > Mode stylo
+  {v:'--body-pencil-mode-data-editable-hove-outlinecol',l:'body.pencil-mode [data-editable]:hover — contour',page:'Général',section:'Mode stylo'},{v:'--penciltoolbar-background',l:'#pencilToolbar — fond',page:'Général',section:'Mode stylo'},
+  {v:'--penciltoolbar-border',l:'#pencilToolbar — bordure',page:'Général',section:'Mode stylo'},{v:'--pencilfontsize-background',l:'#pencilFontSize — fond',page:'Général',section:'Mode stylo'},
+  {v:'--pencilfontsize-border',l:'#pencilFontSize — bordure',page:'Général',section:'Mode stylo'},{v:'--pencilfontsize-color',l:'#pencilFontSize — texte',page:'Général',section:'Mode stylo'},
+  {v:'--pencilcolorswatch-border',l:'#pencilColorSwatch — bordure',page:'Général',section:'Mode stylo'},
+  // Général > Titres de page
+  {v:'--page-title-color',l:'.page-title — texte',page:'Général',section:'Titres de page'},{v:'--page-sub-color',l:'.page-sub — texte',page:'Général',section:'Titres de page'},
+  // Général > Cartes
+  {v:'--card-background',l:'.card — fond',page:'Général',section:'Cartes'},{v:'--card-border',l:'.card — bordure',page:'Général',section:'Cartes'},
+  {v:'--card-header-background',l:'.card-header — fond',page:'Général',section:'Cartes'},{v:'--card-header-borderbott',l:'.card-header — bordure',page:'Général',section:'Cartes'},
+  {v:'--card-title-color',l:'.card-title — texte',page:'Général',section:'Cartes'},
+  // Général > Champs de formulaire
+  {v:'--fg-label-color',l:'.fg label — texte',page:'Général',section:'Champs de formulaire'},{v:'--fg-input-fg-select-fg-textarea-background',l:'.fg input,.fg select,.fg textarea — fond',page:'Général',section:'Champs de formulaire'},
+  {v:'--fg-input-fg-select-fg-textarea-border',l:'.fg input,.fg select,.fg textarea — bordure',page:'Général',section:'Champs de formulaire'},{v:'--fg-input-fg-select-fg-textarea-color',l:'.fg input,.fg select,.fg textarea — texte',page:'Général',section:'Champs de formulaire'},
+  {v:'--fg-input-focus-fg-select-focus-fg-t-bordercolo',l:'.fg input:focus,.fg select:focus,.fg textarea:focus — bordure',page:'Général',section:'Champs de formulaire'},{v:'--fg-select-option-background',l:'.fg select option — fond',page:'Général',section:'Champs de formulaire'},
+  // Général > Chips (sélecteurs)
+  {v:'--chip-background',l:'.chip — fond',page:'Général',section:'Chips (sélecteurs)'},{v:'--chip-border',l:'.chip — bordure',page:'Général',section:'Chips (sélecteurs)'},
+  // Général > Boutons génériques
+  {v:'--btn-g-hover-bordercolo',l:'.btn-g:hover — bordure',page:'Général',section:'Boutons génériques'},{v:'--btn-g-hover-color',l:'.btn-g:hover — texte',page:'Général',section:'Boutons génériques'},
+  // Journal de trading > Historique des trades
+  {v:'--thead-th-color',l:'thead th — texte',page:'Journal de trading',section:'Historique des trades'},{v:'--thead-th-borderbott',l:'thead th — bordure',page:'Journal de trading',section:'Historique des trades'},
+  {v:'--thead-th-background',l:'thead th — fond',page:'Journal de trading',section:'Historique des trades'},{v:'--del-btn-color',l:'.del-btn — texte',page:'Journal de trading',section:'Historique des trades'},
+  {v:'--del-btn-hover-color',l:'.del-btn:hover — texte',page:'Journal de trading',section:'Historique des trades'},{v:'--empty-state-color',l:'.empty-state — texte',page:'Journal de trading',section:'Historique des trades'},
+  {v:'--undo-toast-background',l:'.undo-toast — fond',page:'Journal de trading',section:'Historique des trades'},{v:'--undo-toast-border',l:'.undo-toast — bordure',page:'Journal de trading',section:'Historique des trades'},
+  {v:'--undo-toast-color',l:'.undo-toast — texte',page:'Journal de trading',section:'Historique des trades'},{v:'--undo-toast-btn-border',l:'.undo-toast-btn — bordure',page:'Journal de trading',section:'Historique des trades'},
+  {v:'--undo-toast-btn-color',l:'.undo-toast-btn — texte',page:'Journal de trading',section:'Historique des trades'},
+  // Track Record > KPI
+  {v:'--kpi-strip-background',l:'.kpi-strip — fond',page:'Track Record',section:'KPI'},{v:'--kpi-card-background',l:'.kpi-card — fond',page:'Track Record',section:'KPI'},
+  {v:'--kpi-label-color',l:'.kpi-label — texte',page:'Track Record',section:'KPI'},
+  // Track Record > Cartes graphiques
+  {v:'--chart-card-border',l:'.chart-card — bordure',page:'Track Record',section:'Cartes graphiques'},{v:'--chart-header-background',l:'.chart-header — fond',page:'Track Record',section:'Cartes graphiques'},
+  {v:'--chart-header-borderbott',l:'.chart-header — bordure',page:'Track Record',section:'Cartes graphiques'},{v:'--chart-title-color',l:'.chart-title — texte',page:'Track Record',section:'Cartes graphiques'},
+  // Journal de trading > Formulaire nouveau trade
+  {v:'--bt-toggle-color',l:'.bt-toggle — texte',page:'Journal de trading',section:'Formulaire nouveau trade'},
+  // Général > Interrupteurs et filtres
+  {v:'--pbtn-border',l:'.pbtn — bordure',page:'Général',section:'Interrupteurs et filtres'},{v:'--pbtn-color',l:'.pbtn — texte',page:'Général',section:'Interrupteurs et filtres'},
+  {v:'--pbtn-hover-bordercolo',l:'.pbtn:hover — bordure',page:'Général',section:'Interrupteurs et filtres'},{v:'--pbtn-hover-color',l:'.pbtn:hover — texte',page:'Général',section:'Interrupteurs et filtres'},
+  {v:'--pbtn-active-background',l:'.pbtn.active — fond',page:'Général',section:'Interrupteurs et filtres'},{v:'--pbtn-active-bordercolo',l:'.pbtn.active — bordure',page:'Général',section:'Interrupteurs et filtres'},
+  {v:'--tgl-wrap-color',l:'.tgl-wrap — texte',page:'Général',section:'Interrupteurs et filtres'},
+  // Analyse IA > Conversation
+  {v:'--pc-msg-user-background',l:'.pc-msg-user — fond',page:'Analyse IA',section:'Conversation'},{v:'--pc-msg-bot-background',l:'.pc-msg-bot — fond',page:'Analyse IA',section:'Conversation'},
+  {v:'--pc-msg-bot-border',l:'.pc-msg-bot — bordure',page:'Analyse IA',section:'Conversation'},{v:'--pc-msg-bot-color',l:'.pc-msg-bot — texte',page:'Analyse IA',section:'Conversation'},
+  {v:'--pc-msg-empty-color',l:'.pc-msg-empty — texte',page:'Analyse IA',section:'Conversation'},{v:'--pc-icon-btn-background',l:'.pc-icon-btn — fond',page:'Analyse IA',section:'Conversation'},
+  {v:'--pc-icon-btn-border',l:'.pc-icon-btn — bordure',page:'Analyse IA',section:'Conversation'},{v:'--pc-icon-btn-color',l:'.pc-icon-btn — texte',page:'Analyse IA',section:'Conversation'},
+  {v:'--pc-icon-btn-hover-bordercolo',l:'.pc-icon-btn:hover — bordure',page:'Analyse IA',section:'Conversation'},{v:'--pc-icon-btn-hover-color',l:'.pc-icon-btn:hover — texte',page:'Analyse IA',section:'Conversation'},
+  {v:'--pc-chat-title-bar-color',l:'.pc-chat-title-bar — texte',page:'Analyse IA',section:'Conversation'},{v:'--pc-conv-panel-background',l:'.pc-conv-panel — fond',page:'Analyse IA',section:'Conversation'},
+  {v:'--pc-conv-panel-borderrigh',l:'.pc-conv-panel — border-right',page:'Analyse IA',section:'Conversation'},{v:'--pc-conv-header-borderbott',l:'.pc-conv-header — bordure',page:'Analyse IA',section:'Conversation'},
+  {v:'--pc-conv-header-title-color',l:'.pc-conv-header-title — texte',page:'Analyse IA',section:'Conversation'},{v:'--pc-conv-item-color',l:'.pc-conv-item — texte',page:'Analyse IA',section:'Conversation'},
+  {v:'--pc-conv-item-hover-background',l:'.pc-conv-item:hover — fond',page:'Analyse IA',section:'Conversation'},{v:'--pc-conv-item-active-background',l:'.pc-conv-item.active — fond',page:'Analyse IA',section:'Conversation'},
+  {v:'--pc-conv-item-active-border',l:'.pc-conv-item.active — bordure',page:'Analyse IA',section:'Conversation'},{v:'--pc-conv-item-del-hover-color',l:'.pc-conv-item-del:hover — texte',page:'Analyse IA',section:'Conversation'},
+  {v:'--pc-conv-empty-color',l:'.pc-conv-empty — texte',page:'Analyse IA',section:'Conversation'},
+  // Calendrier > Calendrier
+  {v:'--cal-nav-surface-background',l:'.cal-nav-surface — fond',page:'Calendrier',section:'Calendrier'},{v:'--cal-nav-surface-border',l:'.cal-nav-surface — bordure',page:'Calendrier',section:'Calendrier'},
+  {v:'--cal-arr-background',l:'.cal-arr — fond',page:'Calendrier',section:'Calendrier'},{v:'--cal-arr-border',l:'.cal-arr — bordure',page:'Calendrier',section:'Calendrier'},
+  {v:'--cal-arr-color',l:'.cal-arr — texte',page:'Calendrier',section:'Calendrier'},{v:'--cal-arr-hover-bordercolo',l:'.cal-arr:hover — bordure',page:'Calendrier',section:'Calendrier'},
+  {v:'--cal-arr-hover-color',l:'.cal-arr:hover — texte',page:'Calendrier',section:'Calendrier'},{v:'--cal-month-block-background',l:'.cal-month-block — fond',page:'Calendrier',section:'Calendrier'},
+  {v:'--cal-month-block-border',l:'.cal-month-block — bordure',page:'Calendrier',section:'Calendrier'},{v:'--cal-month-header-background',l:'.cal-month-header — fond',page:'Calendrier',section:'Calendrier'},
+  {v:'--cal-month-header-borderbott',l:'.cal-month-header — bordure',page:'Calendrier',section:'Calendrier'},{v:'--cal-month-header-color',l:'.cal-month-header — texte',page:'Calendrier',section:'Calendrier'},
+  {v:'--cal-month-header-cur-color',l:'.cal-month-header.cur — texte',page:'Calendrier',section:'Calendrier'},{v:'--cal-dow-color',l:'.cal-dow — texte',page:'Calendrier',section:'Calendrier'},
+  {v:'--cal-day-border',l:'.cal-day — bordure',page:'Calendrier',section:'Calendrier'},{v:'--cal-day-today-bordercolo',l:'.cal-day.today — bordure',page:'Calendrier',section:'Calendrier'},
+  {v:'--cal-day-today-boxshadow',l:'.cal-day.today — box-shadow',page:'Calendrier',section:'Calendrier'},{v:'--cal-day-num-color',l:'.cal-day-num — texte',page:'Calendrier',section:'Calendrier'},
+  {v:'--cal-day-pos-cal-day-num-color',l:'.cal-day.pos .cal-day-num — texte',page:'Calendrier',section:'Calendrier'},{v:'--cal-day-neg-cal-day-num-color',l:'.cal-day.neg .cal-day-num — texte',page:'Calendrier',section:'Calendrier'},
+  {v:'--cal-day-pos-cal-pnl-color',l:'.cal-day.pos .cal-pnl — texte',page:'Calendrier',section:'Calendrier'},{v:'--cal-day-neg-cal-pnl-color',l:'.cal-day.neg .cal-pnl — texte',page:'Calendrier',section:'Calendrier'},
+  {v:'--cal-rr-cal-tc-color',l:'.cal-rr,.cal-tc — texte',page:'Calendrier',section:'Calendrier'},
+  // Général > Sélecteur de couleur
+  {v:'--cp-modal-background',l:'.cp-modal — fond',page:'Général',section:'Sélecteur de couleur'},{v:'--cp-modal-border',l:'.cp-modal — bordure',page:'Général',section:'Sélecteur de couleur'},
+  {v:'--cp-title-color',l:'.cp-title — texte',page:'Général',section:'Sélecteur de couleur'},{v:'--cp-sw-border',l:'.cp-sw — bordure',page:'Général',section:'Sélecteur de couleur'},
+  {v:'--cp-hue-lbl-color',l:'.cp-hue-lbl — texte',page:'Général',section:'Sélecteur de couleur'},{v:'--cp-swatch-border',l:'.cp-swatch — bordure',page:'Général',section:'Sélecteur de couleur'},
+  {v:'--cp-hex-background',l:'.cp-hex — fond',page:'Général',section:'Sélecteur de couleur'},{v:'--cp-hex-border',l:'.cp-hex — bordure',page:'Général',section:'Sélecteur de couleur'},
+  {v:'--cp-hex-color',l:'.cp-hex — texte',page:'Général',section:'Sélecteur de couleur'},{v:'--cp-hex-focus-bordercolo',l:'.cp-hex:focus — bordure',page:'Général',section:'Sélecteur de couleur'},
+  {v:'--cp-mem-lbl-color',l:'.cp-mem-lbl — texte',page:'Général',section:'Sélecteur de couleur'},{v:'--cp-ms-border',l:'.cp-ms — bordure',page:'Général',section:'Sélecteur de couleur'},
+  {v:'--cp-ms-hover-bordercolo',l:'.cp-ms:hover — bordure',page:'Général',section:'Sélecteur de couleur'},{v:'--cp-collapse-btn-hover-bordercolo',l:'.cp-collapse-btn:hover — bordure',page:'Général',section:'Sélecteur de couleur'},
+  {v:'--cp-collapse-btn-hover-color',l:'.cp-collapse-btn:hover — texte',page:'Général',section:'Sélecteur de couleur'},
+  // Paramètres > Listes personnalisables
+  {v:'--mod-col-background',l:'.mod-col — fond',page:'Paramètres',section:'Listes personnalisables'},{v:'--mod-col-border',l:'.mod-col — bordure',page:'Paramètres',section:'Listes personnalisables'},
+  {v:'--mod-col-hdr-background',l:'.mod-col-hdr — fond',page:'Paramètres',section:'Listes personnalisables'},{v:'--mod-col-hdr-borderbott',l:'.mod-col-hdr — bordure',page:'Paramètres',section:'Listes personnalisables'},
+  {v:'--mod-item-background',l:'.mod-item — fond',page:'Paramètres',section:'Listes personnalisables'},{v:'--drag-h-color',l:'.drag-h — texte',page:'Paramètres',section:'Listes personnalisables'},
+  {v:'--del-item-color',l:'.del-item — texte',page:'Paramètres',section:'Listes personnalisables'},{v:'--del-item-hover-color',l:'.del-item:hover — texte',page:'Paramètres',section:'Listes personnalisables'},
+  {v:'--mod-add-bordertop',l:'.mod-add — border-top',page:'Paramètres',section:'Listes personnalisables'},{v:'--mod-add-input-background',l:'.mod-add input — fond',page:'Paramètres',section:'Listes personnalisables'},
+  {v:'--mod-add-input-border',l:'.mod-add input — bordure',page:'Paramètres',section:'Listes personnalisables'},{v:'--mod-add-input-color',l:'.mod-add input — texte',page:'Paramètres',section:'Listes personnalisables'},
+  {v:'--mod-add-input-focus-bordercolo',l:'.mod-add input:focus — bordure',page:'Paramètres',section:'Listes personnalisables'},{v:'--mod-add-button-background',l:'.mod-add button — fond',page:'Paramètres',section:'Listes personnalisables'},
+  // Général > Éditeur de thème
+  {v:'--te-search-background',l:'.te-search — fond',page:'Général',section:'Éditeur de thème'},{v:'--te-search-border',l:'.te-search — bordure',page:'Général',section:'Éditeur de thème'},
+  {v:'--te-search-color',l:'.te-search — texte',page:'Général',section:'Éditeur de thème'},{v:'--te-page-border',l:'.te-page — bordure',page:'Général',section:'Éditeur de thème'},
+  {v:'--te-page-background',l:'.te-page — fond',page:'Général',section:'Éditeur de thème'},{v:'--te-page-title-color',l:'.te-page-title — texte',page:'Général',section:'Éditeur de thème'},
+  {v:'--te-page-title-before-color',l:'.te-page-title::before — texte',page:'Général',section:'Éditeur de thème'},{v:'--te-sec-title-color',l:'.te-sec-title — texte',page:'Général',section:'Éditeur de thème'},
+  {v:'--te-sec-title-borderbott',l:'.te-sec-title — bordure',page:'Général',section:'Éditeur de thème'},{v:'--te-swatch-border',l:'.te-swatch — bordure',page:'Général',section:'Éditeur de thème'},
+  {v:'--te-swatch-hover-bordercolo',l:'.te-swatch:hover — bordure',page:'Général',section:'Éditeur de thème'},
+  // Général > Divers
+  {v:'--tgl-row-color',l:'.tgl-row — texte',page:'Général',section:'Divers'},
+  // Général > Boîtes de dialogue
+  {v:'--confirm-box-background',l:'.confirm-box — fond',page:'Général',section:'Boîtes de dialogue'},{v:'--confirm-box-border',l:'.confirm-box — bordure',page:'Général',section:'Boîtes de dialogue'},
+  {v:'--confirm-box-h3-color',l:'.confirm-box h3 — texte',page:'Général',section:'Boîtes de dialogue'},{v:'--confirm-box-p-color',l:'.confirm-box p — texte',page:'Général',section:'Boîtes de dialogue'},
+  {v:'--alert-color',l:'.alert — texte',page:'Général',section:'Boîtes de dialogue'},
+  // Général > Pied de page
+  {v:'--footer-color',l:'.footer — texte',page:'Général',section:'Pied de page'},
+  ...getAccounts().flatMap((acc,i)=>[{v:`--acc-item-bg-${i+1}`,l:`${acc.name} - fond`,page:'Général',section:'Menu comptes'},{v:`--acc-item-bd-${i+1}`,l:`${acc.name} - bordure`,page:'Général',section:'Menu comptes'}]),
 ];
 let teVals={},teHist=[];
 function toggleTE(){const ed=document.getElementById('themeEditor');const o=ed.style.display==='none';ed.style.display=o?'block':'none';if(o)renderTE();}
 function renderTE(){
   const s=getComputedStyle(document.documentElement);
-  TV.forEach(tv=>{if(!teVals[tv.v])teVals[tv.v]=s.getPropertyValue(tv.v).trim()||'#000000';});
-  const groups={};TV.forEach(tv=>{if(!groups[tv.g])groups[tv.g]=[];groups[tv.g].push(tv);});
-  document.getElementById('teGrid').innerHTML=Object.entries(groups).map(([g,items])=>`<div>
-    <div class="te-sec-title">${g}</div>
-    ${items.map(tv=>`<div class="te-row"><div class="te-label">${tv.l}</div><div class="te-swatch" style="background:${rgba2hex(teVals[tv.v])||teVals[tv.v]}" onclick="teOCP('${tv.v}','${tv.l}')"></div></div>`).join('')}
-  </div>`).join('');
+  TV.forEach(tv=>{if(teVals[tv.v]===undefined)teVals[tv.v]=s.getPropertyValue(tv.v).trim()||'#000000';});
+
+  const query=(document.getElementById('teSearch')?.value||'').trim().toLowerCase();
+
+  // page -> section -> [tv...], en conservant l'ordre d'apparition dans TV
+  const pages=new Map();
+  TV.forEach(tv=>{
+    if(!pages.has(tv.page))pages.set(tv.page,new Map());
+    const sections=pages.get(tv.page);
+    if(!sections.has(tv.section))sections.set(tv.section,[]);
+    sections.get(tv.section).push(tv);
+  });
+
+  const html=[...pages.entries()].map(([page,sections])=>{
+    const sectionEntries=[...sections.entries()].map(([section,items])=>{
+      const matched=query?items.filter(tv=>(tv.l+' '+section+' '+page).toLowerCase().includes(query)):items;
+      return [section,matched];
+    }).filter(([,items])=>items.length);
+    if(query && !sectionEntries.length) return '';
+    const openAttr=query?'open':'';
+    return `<details class="te-page" ${openAttr}>
+      <summary class="te-page-title">${page}</summary>
+      <div class="te-grid-inner">
+        ${sectionEntries.map(([section,items])=>`<div>
+          <div class="te-sec-title">${section}</div>
+          ${items.map(tv=>`<div class="te-row"><div class="te-label">${tv.l}</div><div class="te-swatch" style="background:${rgba2hex(teVals[tv.v])||teVals[tv.v]}" onclick="teOCP('${tv.v}','${tv.l}')"></div></div>`).join('')}
+        </div>`).join('')}
+      </div>
+    </details>`;
+  }).join('');
+
+  document.getElementById('teGrid').innerHTML = html || '<div style="padding:12px;color:var(--muted);font-size:12px;">Aucun réglage ne correspond à ta recherche.</div>';
 }
 // Extrait l'alpha d'une couleur rgba(), ou null si pas de canal alpha / hex
 function getAlpha(c){
