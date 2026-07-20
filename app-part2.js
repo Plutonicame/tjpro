@@ -58,6 +58,13 @@ function setupConfirmPin() {
       localStorage.setItem(pinKey(currentUser.id), val);
       localStorage.setItem(emailKey(currentUser.id), currentUser.email);
       localStorage.setItem(uidByEmailKey(currentUser.email), currentUser.id);
+      // Envoyer aussi au cloud : sans ça, un autre appareil (téléphone d'un ami,
+      // 2e ordinateur...) ne peut jamais retrouver ce compte via email+PIN, et
+      // reste bloqué sur un compte différent qui ne synchronise jamais avec celui-ci.
+      sb.from('user_profiles').upsert(
+        { user_id: currentUser.id, email: currentUser.email.toLowerCase(), pin: val, updated_at: new Date().toISOString() },
+        { onConflict: 'user_id' }
+      ).then(({error}) => { if(error) console.warn('Sync profil cloud échouée (PIN reste utilisable sur cet appareil) :', error); });
       afterPinValidated();
     } else {
       const err = document.getElementById('confirmErr');
@@ -220,7 +227,20 @@ async function submitReturnEmail() {
   const err = document.getElementById('returnEmailErr');
   err.style.display = 'none';
   if (!email || !email.includes('@')) { err.textContent = 'Email invalide.'; err.style.display = 'block'; return; }
-  const uid = localStorage.getItem(uidByEmailKey(email));
+  let uid = localStorage.getItem(uidByEmailKey(email));
+  if (!uid || !localStorage.getItem(pinKey(uid))) {
+    // Pas trouvé en local (appareil jamais utilisé pour ce compte) : on cherche
+    // dans le cloud, où le compte a été enregistré à la création de son PIN.
+    try {
+      const { data, error } = await sb.from('user_profiles').select('user_id,pin').eq('email', email).maybeSingle();
+      if (!error && data && data.user_id && data.pin) {
+        uid = data.user_id;
+        localStorage.setItem(uidByEmailKey(email), uid);
+        localStorage.setItem(pinKey(uid), data.pin);
+        localStorage.setItem(emailKey(uid), email);
+      }
+    } catch(e) { /* pas de réseau ou table absente : on retombe sur le message d'erreur normal */ }
+  }
   if (!uid || !localStorage.getItem(pinKey(uid))) {
     err.textContent = 'Compte introuvable. Connecte-toi avec Google.';
     err.style.display = 'block'; return;
