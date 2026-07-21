@@ -784,10 +784,12 @@ function drawRiskChart(period){
     labels.push(t.date);riskData.push(rp);
   });
   const ctx=document.getElementById('cRisk').getContext('2d');
+  const ftop=gc('--risk-fill-top')||'rgba(245,158,11,.25)',fbot=gc('--risk-fill-bot')||'rgba(245,158,11,0)';
+  const rg=ctx.createLinearGradient(0,0,0,210);rg.addColorStop(0,ftop);rg.addColorStop(1,fbot);
   CH['risk']=new Chart(ctx,{
     type:'line',
     data:{labels,datasets:[
-      {label:'Risk %',data:riskData,borderColor:lineC,backgroundColor:gc('--risk-fill-top')||'rgba(245,158,11,.15)',fill:true,tension:0,pointRadius:2,borderWidth:2,stepped:'before'},
+      {label:'Risk %',data:riskData,borderColor:lineC,backgroundColor:rg,fill:true,tension:0,pointRadius:2,borderWidth:2,stepped:'before'},
       {label:'Base',data:Array(labels.length).fill(base),borderColor:baseC,borderDash:[4,4],pointRadius:0,borderWidth:1,fill:false}
     ]},
     options:{responsive:true,maintainAspectRatio:false,
@@ -1025,7 +1027,7 @@ function renderTable(){
     <td style="font-family:var(--mono)">${t.date||'—'}</td>
     <td style="font-family:var(--mono)">${t.heure||'—'}</td>
     <td style="color:var(--muted)">${t.session||'—'}</td>
-    <td><strong>${t.paire||'—'}</strong>${t.backtest?'&nbsp;<span style="font-size:9px;padding:1px 4px;background:var(--bt-bg);color:var(--bt-tx);border-radius:3px;font-family:var(--mono);">BT</span>':''}</td>
+    <td><strong>${t.paire||'—'}</strong>${t.backtest?'&nbsp;<span style="font-size:11px;line-height:1;padding:1px 3px;background:var(--bt-bg);color:var(--bt-tx);border-radius:3px;font-family:var(--mono);display:inline-block;">BT</span>':''}</td>
     <td>${tagD(t.dir)}</td>
     <td style="font-family:var(--mono);color:var(--state-tf)">${t.tf||'—'}</td>
     <td style="color:var(--muted);max-width:120px;overflow:hidden;text-overflow:ellipsis" title="${t.conf||''}">${t.conf||'—'}</td>
@@ -1064,7 +1066,7 @@ function updateNavBadges(){
   const pnl=realTrades().reduce((s,t)=>s+(t.res||0),0);
   const tTxt=APP.trades.length+' trades';
   const pTxt='P&L '+(pnl>=0?'+':'')+pnl.toLocaleString('fr-FR')+'€';
-  const pCol=pnl>=0?'var(--green)':'var(--red)';
+  const pCol=pnl>=0?(gc('--badge-p-pos-tx')||'#00e5a0'):(gc('--badge-p-neg-tx')||'#ef4444');
   const rTxt='Risk '+getCurrentRiskEur().toLocaleString('fr-FR')+'€ ('+fmtRiskPct(getCurrentRiskPct())+')';
   // Desktop
   document.getElementById('navTrades').textContent=tTxt;
@@ -1528,7 +1530,7 @@ const TV=[
   {v:'--session-text',l:'Session texte',page:'Général',section:'Navigation'},{v:'--badge-t-bg',l:'Badge Trades fond',page:'Général',section:'Navigation'},
   {v:'--badge-t-bd',l:'Badge Trades bord',page:'Général',section:'Navigation'},{v:'--badge-t-tx',l:'Badge Trades texte',page:'Général',section:'Navigation'},
   {v:'--badge-p-bg',l:'Badge P&L fond',page:'Général',section:'Navigation'},{v:'--badge-p-bd',l:'Badge P&L bord',page:'Général',section:'Navigation'},
-  {v:'--badge-p-tx',l:'Badge P&L texte',page:'Général',section:'Navigation'},{v:'--badge-r-bg',l:'Badge Risk fond',page:'Général',section:'Navigation'},
+  {v:'--badge-p-pos-tx',l:'Badge P&L texte (positif)',page:'Général',section:'Navigation'},{v:'--badge-p-neg-tx',l:'Badge P&L texte (négatif)',page:'Général',section:'Navigation'},{v:'--badge-r-bg',l:'Badge Risk fond',page:'Général',section:'Navigation'},
   {v:'--badge-r-bd',l:'Badge Risk bord',page:'Général',section:'Navigation'},{v:'--badge-r-tx',l:'Badge Risk texte',page:'Général',section:'Navigation'},
   {v:'--btn-deco-bg',l:'Bouton déconnexion - fond',page:'Général',section:'Navigation'},{v:'--btn-deco-bd',l:'Bouton déconnexion - bordure',page:'Général',section:'Navigation'},
   {v:'--btn-deco-tx',l:'Bouton déconnexion - texte',page:'Général',section:'Navigation'},{v:'--text',l:'Texte principal',page:'Général',section:'Texte & accents'},
@@ -1558,8 +1560,8 @@ const TV=[
   {v:'--kpi3',l:'Win Rate',page:'Track Record',section:'KPI'},{v:'--kpi4',l:'RR Moyen',page:'Track Record',section:'KPI'},
   {v:'--kpi5',l:'Profit Factor',page:'Track Record',section:'KPI'},{v:'--kpi6',l:'Pay Out',page:'Track Record',section:'KPI'},
   {v:'--kpi7',l:'Trades',page:'Track Record',section:'KPI'},{v:'--kpi8',l:'Risk Actuel',page:'Track Record',section:'KPI'},
-  {v:'--kpi9',l:'Drawdown Max',page:'Track Record',section:'KPI'},{v:'--pc-positif',l:'Points positifs',page:'Track Record',section:'Points Clés'},
-  {v:'--pc-negatif',l:'Points négatifs',page:'Track Record',section:'Points Clés'},{v:'--eq-bg',l:'Fond',page:'Track Record',section:'Évolution du capital'},
+  {v:'--kpi9',l:'Drawdown Max',page:'Track Record',section:'KPI'},{v:'--pc-positif',l:'Points positifs',page:'Analyse IA',section:'Points Clés'},
+  {v:'--pc-negatif',l:'Points négatifs',page:'Analyse IA',section:'Points Clés'},{v:'--eq-bg',l:'Fond',page:'Track Record',section:'Évolution du capital'},
   {v:'--eq-line',l:'Courbe',page:'Track Record',section:'Évolution du capital'},{v:'--eq-fill-top',l:'Dégradé haut',page:'Track Record',section:'Évolution du capital'},
   {v:'--eq-fill-bot',l:'Dégradé bas',page:'Track Record',section:'Évolution du capital'},{v:'--eq-axis',l:'Axes',page:'Track Record',section:'Évolution du capital'},
   {v:'--eq-grid',l:'Grille',page:'Track Record',section:'Évolution du capital'},{v:'--pnl-bg',l:'Fond',page:'Track Record',section:'P&L'},
@@ -1623,7 +1625,7 @@ const TV=[
   {v:'--mt-mgmt',l:'Titre Mgmt',page:'Paramètres',section:'Listes personnalisables'},{v:'--mt-reprend',l:'Titre Reprend.',page:'Paramètres',section:'Listes personnalisables'},
   // ══ Variables individuelles supplémentaires (séparation complète, aucune couleur partagée) ══
   // Général > Fond & structure
-  {v:'--body-background',l:'body — fond',page:'Général',section:'Fond & structure'},{v:'--body-color',l:'body — texte',page:'Général',section:'Fond & structure'},
+  
   // Général > Menu comptes
   {v:'--acc-item-borderbott',l:'.acc-item — bordure',page:'Général',section:'Menu comptes'},{v:'--acc-item-active-acc-background',l:'.acc-item.active-acc — fond',page:'Général',section:'Menu comptes'},
   {v:'--acc-item-dots-color',l:'.acc-item-dots — texte',page:'Général',section:'Menu comptes'},{v:'--acc-item-dots-hover-background',l:'.acc-item-dots:hover — fond',page:'Général',section:'Menu comptes'},
@@ -1675,9 +1677,9 @@ const TV=[
   {v:'--pbtn-active-background',l:'.pbtn.active — fond',page:'Général',section:'Interrupteurs et filtres'},{v:'--pbtn-active-bordercolo',l:'.pbtn.active — bordure',page:'Général',section:'Interrupteurs et filtres'},
   {v:'--tgl-wrap-color',l:'.tgl-wrap — texte',page:'Général',section:'Interrupteurs et filtres'},
   // Analyse IA > Conversation
-  {v:'--pc-msg-user-background',l:'.pc-msg-user — fond',page:'Analyse IA',section:'Conversation'},{v:'--pc-msg-bot-background',l:'.pc-msg-bot — fond',page:'Analyse IA',section:'Conversation'},
-  {v:'--pc-msg-bot-border',l:'.pc-msg-bot — bordure',page:'Analyse IA',section:'Conversation'},{v:'--pc-msg-bot-color',l:'.pc-msg-bot — texte',page:'Analyse IA',section:'Conversation'},
-  {v:'--pc-msg-empty-color',l:'.pc-msg-empty — texte',page:'Analyse IA',section:'Conversation'},{v:'--pc-icon-btn-background',l:'.pc-icon-btn — fond',page:'Analyse IA',section:'Conversation'},
+  
+  
+  {v:'--pc-icon-btn-background',l:'.pc-icon-btn — fond',page:'Analyse IA',section:'Conversation'},
   {v:'--pc-icon-btn-border',l:'.pc-icon-btn — bordure',page:'Analyse IA',section:'Conversation'},{v:'--pc-icon-btn-color',l:'.pc-icon-btn — texte',page:'Analyse IA',section:'Conversation'},
   {v:'--pc-icon-btn-hover-bordercolo',l:'.pc-icon-btn:hover — bordure',page:'Analyse IA',section:'Conversation'},{v:'--pc-icon-btn-hover-color',l:'.pc-icon-btn:hover — texte',page:'Analyse IA',section:'Conversation'},
   {v:'--pc-chat-title-bar-color',l:'.pc-chat-title-bar — texte',page:'Analyse IA',section:'Conversation'},{v:'--pc-conv-panel-background',l:'.pc-conv-panel — fond',page:'Analyse IA',section:'Conversation'},
@@ -1732,6 +1734,14 @@ const TV=[
   // Général > Pied de page
   {v:'--footer-color',l:'.footer — texte',page:'Général',section:'Pied de page'},
   {v:'--winrate-slice-border',l:'Bordure des tranches',page:'Track Record',section:'Win Rate'},{v:'--loading-screen-bg',l:'Fond',page:'Général',section:'Écran de chargement'},
+  {v:'--winrate-body-bg',l:'Fond (zone autour du donut)',page:'Track Record',section:'Win Rate'},
+  {v:'--state-card-bg',l:'Fond',page:'Paramètres',section:'État actuel'},{v:'--state-card-border',l:'Bordure',page:'Paramètres',section:'État actuel'},
+  {v:'--top5-row-border',l:'Bordure entre les trades',page:'Track Record',section:'Top 5 trades'},{v:'--pc-resume-border',l:'Bordure (résumé & recommandations)',page:'Analyse IA',section:'Points Clés'},
+  // Ces 6 variables restent partagées par plusieurs endroits (texte statique HTML/JS non encore
+  // individualisé) — les modifier peut donc affecter plusieurs zones à la fois, contrairement au reste.
+  {v:'--surface',l:'Fond secondaire (usage partagé)',page:'Général',section:'Fond & structure'},{v:'--card',l:'Fond de carte (usage partagé)',page:'Général',section:'Fond & structure'},
+  {v:'--border',l:'Bordure (usage partagé)',page:'Général',section:'Fond & structure'},{v:'--muted',l:'Texte atténué (usage partagé)',page:'Général',section:'Texte & accents'},
+  {v:'--green',l:'Accent vert (usage partagé)',page:'Général',section:'Texte & accents'},{v:'--red',l:'Accent rouge (usage partagé)',page:'Général',section:'Texte & accents'},
   ...getAccounts().flatMap((acc,i)=>[{v:`--acc-item-bg-${i+1}`,l:`${acc.name} - fond`,page:'Général',section:'Menu comptes'},{v:`--acc-item-bd-${i+1}`,l:`${acc.name} - bordure`,page:'Général',section:'Menu comptes'}]),
 ];
 let teVals={},teHist=[];

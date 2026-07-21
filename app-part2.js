@@ -430,6 +430,22 @@ async function pushToCloud(opts) {
       })(),
       ia_config: localStorage.getItem('tjp_ia_config'),
       recap_history: localStorage.getItem('tjp_recap_history'), payouts: localStorage.getItem(accKey('tj_payouts')),
+      // Config Risk Management (Paramètres > "ça monte/ça descend") — manquait totalement
+      // à la synchro jusqu'ici, ne suivait donc jamais d'un appareil à l'autre.
+      rm_config: JSON.stringify({
+        up_trigger: localStorage.getItem(accKey('tj_rm_up_trigger')), up_trades: localStorage.getItem(accKey('tj_rm_up_trades')),
+        up_pct: localStorage.getItem(accKey('tj_rm_up_pct')), up_var_type: localStorage.getItem(accKey('tj_rm_up_var_type')),
+        up_var_val: localStorage.getItem(accKey('tj_rm_up_var_val')),
+        down_trigger: localStorage.getItem(accKey('tj_rm_down_trigger')), down_trades: localStorage.getItem(accKey('tj_rm_down_trades')),
+        down_pct: localStorage.getItem(accKey('tj_rm_down_pct')), down_var_type: localStorage.getItem(accKey('tj_rm_down_var_type')),
+        down_var_val: localStorage.getItem(accKey('tj_rm_down_var_val')),
+      }),
+      // Historique des conversations avec l'assistant IA — idem, jamais synchronisé jusqu'ici.
+      ia_chat_data: JSON.stringify({
+        conversations: localStorage.getItem('tjp_pc_conversations'),
+        active_conv: localStorage.getItem('tjp_pc_active_conv'),
+        history: localStorage.getItem('tjp_pc_history'),
+      }),
       updated_at: now
     };
     _lastPushTimestamp = now;
@@ -459,7 +475,10 @@ async function manualSyncSave() {
   clearTimeout(window._pushTimer);
   const btns = [document.getElementById('mobileSyncBtn')].filter(Boolean);
   btns.forEach(b => { b.dataset.orig = b.textContent; b.textContent = stripDecoEmoji('💾 Sauvegarde en cours...'); b.disabled = true; });
-  await pushToCloud();
+  // force:true — un clic explicite sur "Sauvegarder" doit TOUJOURS imposer la
+  // version locale actuelle telle quelle, jamais fusionner avec le cloud (sinon
+  // un import de sauvegarde se fait "rattraper" par d'anciens trades du cloud).
+  await pushToCloud({force:true});
   btns.forEach(b => { b.textContent = '✓ Sauvegardé !'; setTimeout(() => { b.textContent = b.dataset.orig; b.disabled = false; }, 1500); });
 }
 
@@ -736,6 +755,29 @@ function _applyCloudDataDirect(data, cloudTrades) {
   }
   if (data.ia_config) localStorage.setItem('tjp_ia_config', data.ia_config);
   if (data.recap_history) localStorage.setItem('tjp_recap_history', data.recap_history);
+  if (data.rm_config) {
+    try {
+      const rm = JSON.parse(data.rm_config);
+      if (rm.up_trigger != null) localStorage.setItem(accKey('tj_rm_up_trigger'), rm.up_trigger);
+      if (rm.up_trades != null) localStorage.setItem(accKey('tj_rm_up_trades'), rm.up_trades);
+      if (rm.up_pct != null) localStorage.setItem(accKey('tj_rm_up_pct'), rm.up_pct);
+      if (rm.up_var_type != null) localStorage.setItem(accKey('tj_rm_up_var_type'), rm.up_var_type);
+      if (rm.up_var_val != null) localStorage.setItem(accKey('tj_rm_up_var_val'), rm.up_var_val);
+      if (rm.down_trigger != null) localStorage.setItem(accKey('tj_rm_down_trigger'), rm.down_trigger);
+      if (rm.down_trades != null) localStorage.setItem(accKey('tj_rm_down_trades'), rm.down_trades);
+      if (rm.down_pct != null) localStorage.setItem(accKey('tj_rm_down_pct'), rm.down_pct);
+      if (rm.down_var_type != null) localStorage.setItem(accKey('tj_rm_down_var_type'), rm.down_var_type);
+      if (rm.down_var_val != null) localStorage.setItem(accKey('tj_rm_down_var_val'), rm.down_var_val);
+    } catch(e) { console.warn('Restauration rm_config échouée :', e); }
+  }
+  if (data.ia_chat_data) {
+    try {
+      const chat = JSON.parse(data.ia_chat_data);
+      if (chat.conversations != null) localStorage.setItem('tjp_pc_conversations', chat.conversations);
+      if (chat.active_conv != null) localStorage.setItem('tjp_pc_active_conv', chat.active_conv);
+      if (chat.history != null) localStorage.setItem('tjp_pc_history', chat.history);
+    } catch(e) { console.warn('Restauration ia_chat_data échouée :', e); }
+  }
   // Sauvegarder localement SANS déclencher un push (on reçoit du cloud)
   _isSyncing = true;
   lssAcc('tj_trades', APP.trades);
@@ -1084,7 +1126,7 @@ function renderTop5() {
   function tradeRow(t) {
     const pct = CAPITAL() > 0 ? ((t.res||0)/CAPITAL()*100).toFixed(2) : '0.00';
     const col = (t.res||0) >= 0 ? 'var(--green)' : 'var(--red)';
-    return `<div class="top5-row" style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid var(--border);cursor:pointer;transition:background .15s;" onclick="openEditTrade(${t.id})" onmouseover="this.style.background='var(--row-hover)'" onmouseout="this.style.background='transparent'">
+    return `<div class="top5-row" style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid var(--top5-row-border);cursor:pointer;transition:background .15s;" onclick="openEditTrade(${t.id})" onmouseover="this.style.background='var(--row-hover)'" onmouseout="this.style.background='transparent'">
       <div>
         <div style="font-family:var(--mono);font-size:11px;">${t.paire||'—'} <span style="color:var(--muted);font-size:10px;">${t.date||''}</span></div>
         <div style="font-size:10px;color:var(--muted);">${t.session||''} ${t.tf||''}</div>
@@ -1177,7 +1219,7 @@ function renderPcCards(data) {
 
   // Résumé pleine largeur
   if (data.resume) {
-    html2 += `<div class="card" style="grid-column:1/-1;margin:0;border:1px solid var(--border);">
+    html2 += `<div class="card" style="grid-column:1/-1;margin:0;border:1px solid var(--pc-resume-border);">
       <div class="card-header"><div class="card-title" data-editable><span class="deco-emoji">📋</span> RÉSUMÉ & RECOMMANDATIONS</div></div>
       <div class="card-body" style="font-size:13px;line-height:1.8;color:var(--text);">${data.resume}</div>
     </div>`;

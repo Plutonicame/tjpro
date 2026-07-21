@@ -176,7 +176,7 @@
       <div class="chart-header"><div class="chart-title" data-editable>WIN RATE</div>
         <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;"><label class="bt-toggle"><input type="checkbox" id="bt-pie" onchange="toggleBT('pie')"> BT</label><div class="period-btns"><button class="pbtn" data-chart="pie" data-p="jour">J</button><button class="pbtn" data-chart="pie" data-p="semaine">SEM</button><button class="pbtn" data-chart="pie" data-p="mois">MOIS</button><button class="pbtn" data-chart="pie" data-p="trimestre">TRIM</button><button class="pbtn" data-chart="pie" data-p="annee">AN</button><button class="pbtn active" data-chart="pie" data-p="tout">TOUT</button></div></div>
       </div>
-      <div class="chart-body" style="height:220px;display:flex;align-items:center;justify-content:center;"><canvas id="cPie" style="max-width:195px;max-height:195px;"></canvas></div>
+      <div class="chart-body" id="winrateBody" style="height:220px;display:flex;align-items:center;justify-content:center;background:var(--winrate-body-bg);"><canvas id="cPie" style="max-width:195px;max-height:195px;"></canvas></div>
     </div>
     <div class="chart-card" style="background:var(--mgmt-bg);margin-bottom:0">
       <div class="chart-header">
@@ -364,7 +364,7 @@
         <span data-editable><span data-editable>Décimales</span></span>
       </div>
       <!-- ÉTAT ACTUEL: compact sur mobile, normal sur desktop -->
-      <div style="background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:12px;margin-top:12px;">
+      <div style="background:var(--state-card-bg);border:1px solid var(--state-card-border);border-radius:6px;padding:12px;margin-top:12px;">
         <div style="font-family:var(--mono);font-size:8px;color:var(--muted);margin-bottom:9px;" data-editable>ÉTAT ACTUEL</div>
         <div style="display:flex;gap:10px;flex-wrap:wrap;">
           <div class="mod-state-item"><div class="mod-state-label" style="font-size:9px;color:var(--muted)" data-editable>Capital actuel</div><div class="mod-state-value" style="font-family:var(--mono);font-size:15px;color:var(--state-capital)" id="disp0">—</div></div>
