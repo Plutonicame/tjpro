@@ -1800,9 +1800,15 @@ function teOCP(v,l){
     teHist.push({...teVals});
     teVals[v]=alpha!==null?hexToRgbaWithAlpha(newHex,alpha):newHex;
     renderTE();
+    applyTheme(); // applique + sauvegarde + synchronise tout de suite, pas besoin d'un clic "Appliquer" séparé
   });
 }
-function applyTheme(){Object.entries(teVals).forEach(([v,c])=>document.documentElement.style.setProperty(v,c));lss('tj_theme_vars',teVals);refreshAllCharts();if(typeof currentUser!=="undefined"&&currentUser&&!_isSyncing){schedulePush(300);}}
+function applyTheme(){
+  Object.entries(teVals).forEach(([v,c])=>document.documentElement.style.setProperty(v,c));
+  lss('tj_theme_vars',teVals);
+  try { refreshAllCharts(); } catch(e) { console.warn('refreshAllCharts a échoué (sauvegarde/synchro non bloquées) :', e); }
+  if(typeof currentUser!=="undefined"&&currentUser&&!_isSyncing){schedulePush(300);}
+}
 function undoTheme(){if(!teHist.length)return;teVals=teHist.pop();renderTE();applyTheme();}
 function askResetTheme(){showConfirm('Réinitialiser','Supprimer toutes les personnalisations ?',()=>{teVals={};lss('tj_theme_vars',{});document.documentElement.removeAttribute('style');renderTE();refreshAllCharts();if(typeof currentUser!=="undefined"&&currentUser&&!_isSyncing){schedulePush(300);}});}
 function loadSavedTheme(){const s=ls('tj_theme_vars',null);if(s){Object.entries(s).forEach(([v,c])=>document.documentElement.style.setProperty(v,c));teVals=s;}}

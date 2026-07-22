@@ -460,7 +460,7 @@ async function pushToCloud(opts) {
       showSync('⚠ '+(error.message||'Erreur sauvegarde'), '#ef4444');
       pcShowSyncFailureWarning(error.message||'Erreur inconnue');
     } else {
-      showSync('✓ Sauvegardé', '#22c55e'); localStorage.setItem('tjp_last_updated_at', now); pcHideSyncFailureWarning(); window._blockPull=false;
+      showSync('✓ Sauvegardé', '#22c55e'); localStorage.setItem('tjp_last_updated_at', now); window._lastSeenCloudUpdatedAt = now; pcHideSyncFailureWarning(); window._blockPull=false;
       // Si des trades cloud inconnus ont été réintégrés, on les ajoute aussi à l'affichage local tout de suite.
       if (finalTrades !== APP.trades) { APP.trades = finalTrades; saveState(); renderTable(); updateNavBadges(); }
     }
@@ -676,18 +676,29 @@ function applyCloudData(data, skipSafetyCheck) {
   const cloudCount = cloudTrades.length;
 
   // Si le cloud propose MOINS de trades qu'en local (même -1), on n'applique
-  // JAMAIS ça silencieusement en écrasant le local — on impose automatiquement
-  // la version locale au cloud à la place, sans jamais rien demander.
+  // JAMAIS ça silencieusement en écrasant le local — SAUF si cette réduction
+  // vient d'un changement RÉCENT et VOLONTAIRE fait sur un autre appareil (ex:
+  // restauration d'une sauvegarde), auquel cas on doit l'accepter, pas la
+  // combattre. On tranche avec l'horodatage : si le cloud est plus récent que
+  // la dernière version qu'on connaît, quelqu'un d'autre vient d'agir
+  // délibérément — sinon, c'est probablement nous qui sommes restés figés sur
+  // une vieille donnée, et on impose notre version locale au cloud.
   // Exception : suppression volontaire via "Supprimer tous les trades" ou skipSafetyCheck explicite.
   if (!skipSafetyCheck && !window._intentionalBulkDelete) {
     if (cloudCount < localCount) {
-      // Bloquer tout pull pendant 15s pour laisser le push se terminer sans
-      // que le polling ou le realtime ne revienne écraser avec les données cloud.
-      window._blockPull = true;
-      clearTimeout(window._blockPullTimer);
-      window._blockPullTimer = setTimeout(()=>{ window._blockPull=false; }, 15000);
-      schedulePush(0, {force:true});
-      return;
+      const cloudTs = data.updated_at ? new Date(data.updated_at).getTime() : 0;
+      const knownTs = window._lastSeenCloudUpdatedAt ? new Date(window._lastSeenCloudUpdatedAt).getTime() : 0;
+      if (cloudTs > knownTs) {
+        // Changement récent et volontaire fait ailleurs : on l'accepte normalement,
+        // en laissant le code continuer plus bas (pas de retour anticipé ici).
+      } else {
+        // Rien de nouveau/récent à l'horizon : on protège en imposant le local.
+        window._blockPull = true;
+        clearTimeout(window._blockPullTimer);
+        window._blockPullTimer = setTimeout(()=>{ window._blockPull=false; }, 15000);
+        schedulePush(0, {force:true});
+        return;
+      }
     }
   }
   window._intentionalBulkDelete = false;
@@ -695,6 +706,7 @@ function applyCloudData(data, skipSafetyCheck) {
 }
 
 function _applyCloudDataDirect(data, cloudTrades) {
+  if (data.updated_at) window._lastSeenCloudUpdatedAt = data.updated_at;
   const incomingTrades = cloudTrades || data.trades || [];
   // Même garde-fou que saveState() : on ne remplace jamais silencieusement des
   // trades existants par un tableau vide, sauf confirmation explicite (PIN,
