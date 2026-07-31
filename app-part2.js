@@ -10,11 +10,38 @@ function showOverlay(id) {
 
 // ══ GOOGLE LOGIN ══
 
-// ══ PIN ══
+// ══ PIN — sécurisé ══
+// Le PIN n'est plus jamais stocké ni comparé en clair :
+//  • En local, on ne garde qu'un hash (SHA-256), utilisé pour un déverrouillage
+//    RAPIDE quand cet appareil a déjà une vraie session Supabase valide (comme
+//    un code de verrouillage d'écran : l'identité est déjà prouvée, le PIN ne
+//    fait que reverrouiller l'accès physique à l'app sur CET appareil).
+//  • Sur un appareil qui n'a PAS de session valide (nouveau téléphone, etc.),
+//    le PIN est vérifié côté serveur (Edge Function pin-auth) qui renvoie un
+//    jeton permettant d'obtenir une VRAIE session Supabase — jamais un compte
+//    fabriqué localement comme avant.
 function pinKey(uid) { return 'tjp_pin_' + uid; }
 function emailKey(uid) { return 'tjp_email_' + uid; }
-// Stocker le userId connu par email pour les reconnexions
 function uidByEmailKey(email) { return 'tjp_uid_' + email.toLowerCase().replace(/[^a-z0-9]/g,'_'); }
+
+const PIN_AUTH_ENDPOINT = 'https://ghjashqgwlaofjubzrcp.supabase.co/functions/v1/pin-auth';
+
+async function localPinHash(pin, uid) {
+  const enc = new TextEncoder().encode('tjp_pin_v1:' + uid + ':' + pin);
+  const digest = await crypto.subtle.digest('SHA-256', enc);
+  return Array.from(new Uint8Array(digest)).map(b => b.toString(16).padStart(2,'0')).join('');
+}
+
+async function callPinAuth(payload, accessToken) {
+  const res = await fetch(PIN_AUTH_ENDPOINT, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + (accessToken || PC_SUPABASE_ANON_KEY) },
+    body: JSON.stringify(payload)
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok || data.error) throw new Error(data.error || ('Erreur serveur (' + res.status + ')'));
+  return data;
+}
 
 function buildPad(padId, dotsId, onComplete, errId) {
   const pad = document.getElementById(padId); pad.innerHTML = '';
@@ -53,21 +80,25 @@ function setupCreatePin() {
 }
 
 function setupConfirmPin() {
-  buildPad('confirmPad','confirmDots',(val,reset) => {
+  buildPad('confirmPad','confirmDots',async (val,reset) => {
     if (val === pinFirstEntry) {
-      localStorage.setItem(pinKey(currentUser.id), val);
-      localStorage.setItem(emailKey(currentUser.id), currentUser.email);
-      localStorage.setItem(uidByEmailKey(currentUser.email), currentUser.id);
-      // Envoyer aussi au cloud : sans ça, un autre appareil (téléphone d'un ami,
-      // 2e ordinateur...) ne peut jamais retrouver ce compte via email+PIN, et
-      // reste bloqué sur un compte différent qui ne synchronise jamais avec celui-ci.
-      sb.from('user_profiles').upsert(
-        { user_id: currentUser.id, email: currentUser.email.toLowerCase(), pin: val, updated_at: new Date().toISOString() },
-        { onConflict: 'user_id' }
-      ).then(({error}) => { if(error) console.warn('Sync profil cloud échouée (PIN reste utilisable sur cet appareil) :', error); });
-      afterPinValidated();
-    } else {
       const err = document.getElementById('confirmErr');
+      try {
+        const localHash = await localPinHash(val, currentUser.id);
+        localStorage.setItem(pinKey(currentUser.id), localHash);
+        localStorage.setItem(emailKey(currentUser.id), currentUser.email);
+        localStorage.setItem(uidByEmailKey(currentUser.email), currentUser.id);
+        // Enregistrer aussi côté serveur (hash + sel, jamais le PIN en clair) —
+        // sans ça, aucun autre appareil ne pourrait jamais se reconnecter avec ce PIN.
+        const { data: sessionData } = await sb.auth.getSession();
+        const accessToken = sessionData?.session?.access_token;
+        if (accessToken) await callPinAuth({ action:'set', pin: val }, accessToken);
+        afterPinValidated();
+      } catch(e) {
+        console.warn('Enregistrement PIN cloud échoué (reste utilisable sur cet appareil) :', e);
+        afterPinValidated(); // ne bloque pas l'utilisateur pour un souci réseau ponctuel
+      }
+    } else {
       err.textContent = 'PIN non identique. Recommence.'; err.style.display = 'block';
       reset(true); pinFirstEntry = '';
       setTimeout(() => { showOverlay('overlayCreatePin'); setupCreatePin(); }, 800);
@@ -75,13 +106,29 @@ function setupConfirmPin() {
   },'confirmErr');
 }
 
+// Déverrouillage RAPIDE (session déjà valide sur cet appareil) : vérif locale seulement.
 let pinAttempts = 0;
 function setupEnterPin() {
   pinAttempts = 0;
-  buildPad('enterPad','enterDots',(val,reset) => {
+  buildPad('enterPad','enterDots',async (val,reset) => {
     const stored = localStorage.getItem(pinKey(currentUser.id));
-    if (val === stored) { pinAttempts = 0; afterPinValidated(); }
-    else {
+    const attempt = await localPinHash(val, currentUser.id);
+    // Migration silencieuse : si l'ancien PIN était encore stocké en clair (avant
+    // ce correctif de sécurité) et correspond, on le fait passer au nouveau format
+    // — en local ET côté serveur — sans rien demander de plus à l'utilisateur.
+    const isLegacyMatch = stored === val;
+    if (attempt === stored || isLegacyMatch) {
+      pinAttempts = 0;
+      if (isLegacyMatch) {
+        try {
+          localStorage.setItem(pinKey(currentUser.id), attempt);
+          const { data: sessionData } = await sb.auth.getSession();
+          const accessToken = sessionData?.session?.access_token;
+          if (accessToken) await callPinAuth({ action:'set', pin: val }, accessToken);
+        } catch(e) { console.warn('Migration PIN vers le nouveau format échouée (réessaiera plus tard) :', e); }
+      }
+      afterPinValidated();
+    } else {
       pinAttempts++;
       const err = document.getElementById('enterErr');
       if (pinAttempts >= 5) {
@@ -89,6 +136,37 @@ function setupEnterPin() {
         setTimeout(() => resetPin(), 2000);
       } else {
         err.textContent = `PIN incorrect (${5-pinAttempts} essai${5-pinAttempts>1?'s':''} restant${5-pinAttempts>1?'s':''})`;
+        err.style.display = 'block'; reset(true);
+      }
+    }
+  },'enterErr');
+}
+
+// Reconnexion sur un appareil SANS session valide : vérification sécurisée côté
+// serveur, qui renvoie un jeton échangé contre une vraie session Supabase.
+function setupEnterPinRemote() {
+  pinAttempts = 0;
+  buildPad('enterPad','enterDots',async (val,reset) => {
+    const email = window._returnEmail;
+    const err = document.getElementById('enterErr');
+    try {
+      const result = await callPinAuth({ action:'verify', email, pin: val });
+      const { data: verified, error: verifyErr } = await sb.auth.verifyOtp({ token_hash: result.token_hash, type: 'email' });
+      if (verifyErr || !verified?.session?.user) throw new Error('Connexion impossible. Réessaie.');
+      currentUser = verified.session.user;
+      localStorage.setItem(emailKey(currentUser.id), currentUser.email);
+      localStorage.setItem(uidByEmailKey(email), currentUser.id);
+      localStorage.setItem('tjp_last_uid', currentUser.id);
+      localStorage.setItem(pinKey(currentUser.id), await localPinHash(val, currentUser.id));
+      pinAttempts = 0;
+      afterPinValidated();
+    } catch(e) {
+      pinAttempts++;
+      if (pinAttempts >= 5) {
+        err.textContent = 'Trop de tentatives. Réessaie plus tard.'; err.style.display = 'block';
+        setTimeout(() => showOverlay('overlayGoogle'), 2000);
+      } else {
+        err.textContent = e.message || 'Code PIN incorrect.';
         err.style.display = 'block'; reset(true);
       }
     }
@@ -108,28 +186,14 @@ async function afterPinValidated() {
   loadEl.innerHTML = '<div style="font-family:var(--mono,monospace);font-size:14px;color:var(--muted,#6b7a99);">Chargement...</div>';
   document.body.appendChild(loadEl);
 
-  // Refresh session + pull forcé
+  // Refresh session
   try {
     const { data } = await sb.auth.refreshSession();
     if (data?.session?.user) currentUser = data.session.user;
   } catch(e) {}
 
-  // Pull avec retry
-  let pulled = false;
-  for (let attempt = 0; attempt < 3; attempt++) {
-    try {
-      const { data, error } = await sb.from('journal_data')
-        .select('*').eq('user_id', currentUser.id)
-        .order('updated_at', { ascending: false }).limit(1);
-      if (!error && data && data.length) {
-        _isSyncing = true;
-        applyCloudData(data[0]);
-        pulled = true;
-        break;
-      }
-    } catch(e) {}
-    await new Promise(r => setTimeout(r, 1000));
-  }
+  // Pull initial (avec tentatives), puis démarrage du temps réel + sondage périodique
+  const pulled = await initialPullWithRetry();
 
   // Supprimer écran de chargement
   const le = document.getElementById('loadingScreen');
@@ -144,29 +208,8 @@ async function afterPinValidated() {
     migrateImagesToStorage();
   }
 
-  // Realtime + poll 30s
   setTimeout(startRealtime, 500);
-  if (!window._pollInterval) {
-    window._pollInterval = setInterval(async () => {
-      if (!currentUser || _isSyncing || _isPushing) return;
-      try {
-        const { data: rd } = await sb.auth.refreshSession();
-        if (rd?.session?.user) currentUser = rd.session.user;
-        const { data, error } = await sb.from('journal_data')
-          .select('*').eq('user_id', currentUser.id)
-          .order('updated_at', { ascending: false }).limit(1);
-        if (!error && data && data.length) {
-          // Comparer updated_at avec ce qu'on a localement
-          const localTs = localStorage.getItem('tjp_last_updated_at');
-          if (!localTs || data[0].updated_at > localTs) {
-            _isSyncing = true;
-            applyCloudData(data[0]);
-            showSync('✓ Mis à jour', '#22c55e');
-          }
-        }
-      } catch(e) {}
-    }, 15000); // toutes les 15s
-  }
+  startPolling();
 }
 
 // Empreinte simple (non cryptographique, juste pour détecter un changement) du
@@ -206,7 +249,7 @@ async function resetPin() {
 
 async function _doResetPin() {
   stopRealtime();
-  if (window._pollInterval) { clearInterval(window._pollInterval); window._pollInterval = null; }
+  stopPolling();
   currentUser = null;
   localStorage.removeItem('tjp_last_uid');
   await sb.auth.signOut();
@@ -227,34 +270,13 @@ async function submitReturnEmail() {
   const err = document.getElementById('returnEmailErr');
   err.style.display = 'none';
   if (!email || !email.includes('@')) { err.textContent = 'Email invalide.'; err.style.display = 'block'; return; }
-  let uid = localStorage.getItem(uidByEmailKey(email));
-  if (!uid || !localStorage.getItem(pinKey(uid))) {
-    // Pas trouvé en local (appareil jamais utilisé pour ce compte) : on cherche
-    // dans le cloud, où le compte a été enregistré à la création de son PIN.
-    try {
-      const { data, error } = await sb.from('user_profiles').select('user_id,pin').eq('email', email).maybeSingle();
-      if (!error && data && data.user_id && data.pin) {
-        uid = data.user_id;
-        localStorage.setItem(uidByEmailKey(email), uid);
-        localStorage.setItem(pinKey(uid), data.pin);
-        localStorage.setItem(emailKey(uid), email);
-      }
-    } catch(e) { /* pas de réseau ou table absente : on retombe sur le message d'erreur normal */ }
-  }
-  if (!uid || !localStorage.getItem(pinKey(uid))) {
-    err.textContent = 'Compte introuvable. Connecte-toi avec Google.';
-    err.style.display = 'block'; return;
-  }
-  // Tenter de restaurer la session Supabase
-  const { data: refreshData } = await sb.auth.refreshSession();
-  if (refreshData?.user && refreshData.user.id === uid) {
-    currentUser = refreshData.user;
-  } else {
-    currentUser = { id: uid, email: email };
-  }
+  // Plus de recherche directe ici : avec la sécurité (RLS) activée, la table des
+  // comptes n'est plus interrogeable depuis le navigateur. La vérification email+PIN
+  // se fait entièrement côté serveur dans setupEnterPinRemote, en une seule étape.
+  window._returnEmail = email;
   document.getElementById('enterPinSub').textContent = email;
   showOverlay('overlayEnterPin');
-  setupEnterPin();
+  setupEnterPinRemote();
 }
 
 // ══ AUTH INIT ══
@@ -322,29 +344,63 @@ async function initAuth() {
     return;
   }
 
-  // Pas de session — compte connu localement ?
+  // Pas de session — tenter un rafraîchissement silencieux, sinon proposer la
+  // reconnexion par email+PIN (vérification sécurisée côté serveur — plus de
+  // session fabriquée localement comme avant).
+  try {
+    const { data } = await sb.auth.refreshSession();
+    if (data?.session?.user) { applyUser(data.session.user); return; }
+  } catch(e) {}
+
   const lastUid = localStorage.getItem('tjp_last_uid');
-  if (lastUid && localStorage.getItem(pinKey(lastUid))) {
-    try {
-      const { data } = await sb.auth.refreshSession();
-      if (data?.session?.user) {
-        applyUser(data.session.user);
-        return;
-      }
-    } catch(e) {}
-    currentUser = { id: lastUid, email: localStorage.getItem(emailKey(lastUid)) };
-    showOverlay('overlayEmailPin');
-    const inp = document.getElementById('returnEmail');
-    if (inp) inp.addEventListener('keydown', e => { if(e.key==='Enter') submitReturnEmail(); });
-  } else {
-    showOverlay('overlayGoogle');
+  const lastEmail = lastUid ? localStorage.getItem(emailKey(lastUid)) : null;
+  showOverlay('overlayEmailPin');
+  const inp = document.getElementById('returnEmail');
+  if (inp) {
+    if (lastEmail) inp.value = lastEmail;
+    inp.addEventListener('keydown', e => { if(e.key==='Enter') submitReturnEmail(); });
   }
 }
 
 // ══ SYNC ══
-let _isSyncing = false;
+// ═══════════════════════════════════════════════════════════════════════
+// ══ MODULE DE SYNCHRONISATION CLOUD — reconstruit entièrement ══
+// ═══════════════════════════════════════════════════════════════════════
+//
+// Principes (comportement validé au fil de nombreuses corrections, mais
+// code entièrement réécrit et réorganisé ici) :
+//
+//  1. Une sauvegarde AUTOMATIQUE (déclenchée par une modification locale)
+//     FUSIONNE avec le cloud : elle garde tous les trades locaux et
+//     réintègre ceux du cloud inconnus localement. Ça protège contre la
+//     perte de données si un autre appareil a ajouté des trades entre-temps.
+//
+//  2. Une sauvegarde MANUELLE (bouton "Sauvegarder", suppression totale,
+//     restauration d'une sauvegarde) FORCE : la version locale actuelle
+//     remplace intégralement le cloud, sans fusion. C'est une décision
+//     explicite de l'utilisateur, elle doit toujours l'emporter.
+//
+//  3. Une RÉCEPTION depuis le cloud qui proposerait MOINS de trades qu'en
+//     local n'est jamais appliquée silencieusement. On compare l'horodatage :
+//     si le cloud est plus récent que la dernière version connue, c'est un
+//     changement volontaire fait ailleurs → on l'accepte. Sinon, on protège
+//     en renvoyant la version locale vers le cloud.
+//
+//  4. Aucun code n'écrit jamais un tableau de trades vide par-dessus des
+//     trades existants sans confirmation explicite (garde-fou générique).
+//
+// ═══════════════════════════════════════════════════════════════════════
 
-function showSync(msg, color='#6b7a99') {
+// ── État interne ──
+let _isSyncing = false;       // vrai pendant qu'on applique des données reçues du cloud
+let _isPushing = false;       // vrai pendant qu'un envoi vers le cloud est en cours
+let _pushGeneration = 0;      // identifie chaque envoi pour ignorer les réponses obsolètes
+let _lastPushTimestamp = null;      // horodatage de notre dernier envoi réussi
+let _lastSeenCloudUpdatedAt = null; // horodatage le plus récent qu'on ait vu venir du cloud
+let _realtimeChannel = null;
+
+// ── Retour visuel ──
+function showSync(msg, color = '#6b7a99') {
   const el = document.getElementById('syncStatus');
   if (!el) return;
   el.textContent = msg; el.style.color = color; el.style.display = 'block';
@@ -352,52 +408,83 @@ function showSync(msg, color='#6b7a99') {
   syncTimeout = setTimeout(() => el.style.display = 'none', 2000);
 }
 
-// Bandeau persistant visible tant que la dernière sauvegarde a échoué (ne disparaît pas tout seul)
-function pcShowSyncFailureWarning(msg){
+// Bandeau persistant (ne disparaît pas tout seul) affiché tant que le dernier
+// envoi vers le cloud a échoué.
+function pcShowSyncFailureWarning(msg) {
   let bar = document.getElementById('syncFailBar');
   if (!bar) {
     bar = document.createElement('div');
     bar.id = 'syncFailBar';
-    bar.style.cssText = 'position:relative;width:100%;background:#ef4444;color:#fff;font-family:var(--mono);font-size:12px;padding:8px 14px;text-align:center;z-index:900;cursor:pointer;box-sizing:border-box;';
+    bar.style.cssText = 'position:relative;width:100%;background:var(--msg-banner-bg,#ef4444);color:var(--msg-banner-tx,#fff);font-family:var(--mono);font-size:12px;padding:8px 14px;text-align:center;z-index:900;cursor:pointer;box-sizing:border-box;';
     document.body.prepend(bar);
   }
   bar.onclick = () => manualSyncSave();
   bar.textContent = '⚠ Sauvegarde échouée (' + msg + ') — tes derniers trades ne sont peut-être pas synchronisés. Touche ici pour réessayer.';
   bar.style.display = 'block';
 }
-function pcHideSyncFailureWarning(){
+function pcHideSyncFailureWarning() {
   const bar = document.getElementById('syncFailBar');
   if (bar) bar.style.display = 'none';
 }
 
-function pcShowSyncFailureWarning(msg){
-  let bar = document.getElementById('syncFailBar');
-  if (!bar) {
-    bar = document.createElement('div');
-    bar.id = 'syncFailBar';
-    bar.style.cssText = 'position:relative;width:100%;background:#ef4444;color:#fff;font-family:var(--mono);font-size:12px;padding:8px 14px;text-align:center;z-index:900;cursor:pointer;box-sizing:border-box;';
-    document.body.prepend(bar);
-  }
-  bar.onclick = () => manualSyncSave();
-  bar.textContent = '⚠ Sauvegarde échouée (' + msg + ') — touche ici pour réessayer.';
-  bar.style.display = 'block';
-}
-function pcHideSyncFailureWarning(){
-  const bar = document.getElementById('syncFailBar');
-  if (bar) bar.style.display = 'none';
+// ── Construction du contenu à synchroniser ──
+// Un seul endroit qui décrit tout ce qui doit partir vers le cloud, pour ne
+// jamais avoir un bout de donnée personnelle qui reste "orphelin" en local
+// uniquement sans qu'on s'en rende compte.
+function buildSyncPayload(trades) {
+  const now = new Date().toISOString();
+  return {
+    user_id: currentUser.id,
+    trades,
+    lists: APP.lists,
+    next_id: APP.nextId,
+    capital: localStorage.getItem(accKey('tj_capital')),
+    risk: localStorage.getItem(accKey('tj_risk')),
+    smart_risk: localStorage.getItem(accKey('tj_smart_risk')),
+    risk_max: localStorage.getItem(accKey('tj_risk_max')),
+    risk_decimal: localStorage.getItem(accKey('tj_risk_decimal')),
+    theme: localStorage.getItem('tj_theme_vars'), // thème global, partagé entre tous les comptes
+    pencil_edits: (() => {
+      try {
+        const edits = JSON.parse(localStorage.getItem(accKey('tj_pencil_edits')) || '{}');
+        const toSync = {};
+        Object.entries(edits).forEach(([k, v]) => { toSync[k] = { html: v.html || '', col: v.col || '' }; });
+        return JSON.stringify(toSync);
+      } catch (e) { return localStorage.getItem(accKey('tj_pencil_edits')); }
+    })(),
+    ia_config: localStorage.getItem('tjp_ia_config'),
+    recap_history: localStorage.getItem('tjp_recap_history'),
+    payouts: localStorage.getItem(accKey('tj_payouts')),
+    rm_config: JSON.stringify({
+      up_trigger: localStorage.getItem(accKey('tj_rm_up_trigger')), up_trades: localStorage.getItem(accKey('tj_rm_up_trades')),
+      up_pct: localStorage.getItem(accKey('tj_rm_up_pct')), up_var_type: localStorage.getItem(accKey('tj_rm_up_var_type')),
+      up_var_val: localStorage.getItem(accKey('tj_rm_up_var_val')),
+      down_trigger: localStorage.getItem(accKey('tj_rm_down_trigger')), down_trades: localStorage.getItem(accKey('tj_rm_down_trades')),
+      down_pct: localStorage.getItem(accKey('tj_rm_down_pct')), down_var_type: localStorage.getItem(accKey('tj_rm_down_var_type')),
+      down_var_val: localStorage.getItem(accKey('tj_rm_down_var_val')),
+    }),
+    ia_chat_data: JSON.stringify({
+      conversations: localStorage.getItem('tjp_pc_conversations'),
+      active_conv: localStorage.getItem('tjp_pc_active_conv'),
+      history: localStorage.getItem('tjp_pc_history'),
+    }),
+    updated_at: now,
+  };
 }
 
-let _pushGeneration = 0;
+// ── Envoi vers le cloud ──
 async function pushToCloud(opts) {
   opts = opts || {};
   if (!currentUser || !currentUser.id) return;
   _isPushing = true;
   const myGen = ++_pushGeneration; // identifie ce push précis parmi d'éventuels chevauchements
-  try { await sb.auth.refreshSession(); } catch(e) {}
+  try { await sb.auth.refreshSession(); } catch (e) {}
+
   try {
-    // Fusion faite ici, côté application (rapide, aucun risque d'expiration serveur) :
-    // on récupère juste les trades actuellement dans le cloud, et on réintègre ceux que
-    // cet appareil ne connaît pas encore — sans jamais supprimer un trade local.
+    // Fusion côté application (rapide, aucun risque d'expiration serveur) :
+    // on récupère les trades actuellement dans le cloud et on réintègre ceux
+    // que cet appareil ne connaît pas encore — sans jamais en supprimer un local.
+    // Ignorée si opts.force (sauvegarde manuelle, suppression totale, restauration).
     let finalTrades = APP.trades;
     if (!opts.force) {
       try {
@@ -405,368 +492,207 @@ async function pushToCloud(opts) {
           .select('trades').eq('user_id', currentUser.id).maybeSingle();
         if (!fetchErr && cloudRow && Array.isArray(cloudRow.trades) && cloudRow.trades.length) {
           const localIds = new Set(APP.trades.map(t => t.id));
-          // Trades explicitement supprimés localement récemment : à exclure de la fusion
-          // même s'ils traînent encore dans le cloud (sinon la fusion les ressusciterait).
+          // Trades explicitement supprimés localement récemment : à exclure de la
+          // fusion même s'ils traînent encore dans le cloud.
           const deletedIds = new Set((window._deletedTradesStack || []).map(d => d.trade && d.trade.id).filter(id => id != null));
           const recovered = cloudRow.trades.filter(t => !localIds.has(t.id) && !deletedIds.has(t.id));
           if (recovered.length) finalTrades = APP.trades.concat(recovered);
         }
-      } catch(e) { console.warn('Fusion cloud impossible, envoi de la version locale seule:', e); }
+      } catch (e) { console.warn('Fusion cloud impossible, envoi de la version locale seule :', e); }
     }
-    if (myGen !== _pushGeneration) return;
-    const now = new Date().toISOString();
-    const data = {
-      user_id: currentUser.id, trades: finalTrades, lists: APP.lists, next_id: APP.nextId,
-      capital: localStorage.getItem(accKey('tj_capital')), risk: localStorage.getItem(accKey('tj_risk')),
-      smart_risk: localStorage.getItem(accKey('tj_smart_risk')), risk_max: localStorage.getItem(accKey('tj_risk_max')),
-      risk_decimal: localStorage.getItem(accKey('tj_risk_decimal')), theme: localStorage.getItem('tj_theme_vars'), // thème global, pas par compte
-      pencil_edits: (() => {
-        try {
-          const edits = JSON.parse(localStorage.getItem(accKey('tj_pencil_edits')) || '{}');
-          const toSync = {};
-          Object.entries(edits).forEach(([k,v]) => { toSync[k] = { html: v.html || '', col: v.col || '' }; });
-          return JSON.stringify(toSync);
-        } catch(e) { return localStorage.getItem(accKey('tj_pencil_edits')); }
-      })(),
-      ia_config: localStorage.getItem('tjp_ia_config'),
-      recap_history: localStorage.getItem('tjp_recap_history'), payouts: localStorage.getItem(accKey('tj_payouts')),
-      // Config Risk Management (Paramètres > "ça monte/ça descend") — manquait totalement
-      // à la synchro jusqu'ici, ne suivait donc jamais d'un appareil à l'autre.
-      rm_config: JSON.stringify({
-        up_trigger: localStorage.getItem(accKey('tj_rm_up_trigger')), up_trades: localStorage.getItem(accKey('tj_rm_up_trades')),
-        up_pct: localStorage.getItem(accKey('tj_rm_up_pct')), up_var_type: localStorage.getItem(accKey('tj_rm_up_var_type')),
-        up_var_val: localStorage.getItem(accKey('tj_rm_up_var_val')),
-        down_trigger: localStorage.getItem(accKey('tj_rm_down_trigger')), down_trades: localStorage.getItem(accKey('tj_rm_down_trades')),
-        down_pct: localStorage.getItem(accKey('tj_rm_down_pct')), down_var_type: localStorage.getItem(accKey('tj_rm_down_var_type')),
-        down_var_val: localStorage.getItem(accKey('tj_rm_down_var_val')),
-      }),
-      // Historique des conversations avec l'assistant IA — idem, jamais synchronisé jusqu'ici.
-      ia_chat_data: JSON.stringify({
-        conversations: localStorage.getItem('tjp_pc_conversations'),
-        active_conv: localStorage.getItem('tjp_pc_active_conv'),
-        history: localStorage.getItem('tjp_pc_history'),
-      }),
-      updated_at: now
-    };
-    _lastPushTimestamp = now;
-    // Enregistrement simple : la fusion a déjà été faite juste au-dessus, donc plus besoin
-    // de logique complexe côté serveur (c'est justement ça qui provoquait le timeout).
+    if (myGen !== _pushGeneration) return; // un envoi plus récent a pris le relais entre-temps
+
+    const data = buildSyncPayload(finalTrades);
+    _lastPushTimestamp = data.updated_at;
+
     const { error } = await sb.from('journal_data').upsert(data, { onConflict: 'user_id' });
-    // Si un push plus récent a démarré pendant que celui-ci était en vol, on ignore
-    // son résultat pour ne pas remettre _isPushing à false trop tôt ni écraser l'état.
     if (myGen !== _pushGeneration) return;
+
     if (error) {
-      console.error('Erreur sauvegarde journal_data:', error);
-      showSync('⚠ '+(error.message||'Erreur sauvegarde'), '#ef4444');
-      pcShowSyncFailureWarning(error.message||'Erreur inconnue');
+      console.error('Erreur sauvegarde journal_data :', error);
+      showSync('⚠ ' + (error.message || 'Erreur sauvegarde'), '#ef4444');
+      pcShowSyncFailureWarning(error.message || 'Erreur inconnue');
     } else {
-      showSync('✓ Sauvegardé', '#22c55e'); localStorage.setItem('tjp_last_updated_at', now); window._lastSeenCloudUpdatedAt = now; pcHideSyncFailureWarning(); window._blockPull=false;
-      // Si des trades cloud inconnus ont été réintégrés, on les ajoute aussi à l'affichage local tout de suite.
-      if (finalTrades !== APP.trades) { APP.trades = finalTrades; saveState(); renderTable(); updateNavBadges(); }
+      showSync('✓ Sauvegardé', '#22c55e');
+      localStorage.setItem('tjp_last_updated_at', data.updated_at);
+      _lastSeenCloudUpdatedAt = data.updated_at;
+      pcHideSyncFailureWarning();
+      window._blockPull = false;
+      // Si des trades cloud inconnus ont été réintégrés par la fusion, on les
+      // reflète aussi tout de suite dans l'affichage local.
+      if (finalTrades !== APP.trades) {
+        APP.trades = finalTrades; saveState(); renderTable(); updateNavBadges();
+      }
     }
-  } catch(e) { if (myGen === _pushGeneration) showSync('⚠ Réseau', '#f59e0b'); }
+  } catch (e) {
+    if (myGen === _pushGeneration) showSync('⚠ Réseau', '#f59e0b');
+  }
   if (myGen === _pushGeneration) setTimeout(() => { _isPushing = false; }, 500);
 }
-let _lastPushTimestamp = null;
 
-// Sauvegarde manuelle immédiate, déclenchée par le bouton "Sauvegarder et synchroniser"
+// Sauvegarde manuelle, déclenchée par le bouton "Sauvegarder et synchroniser" :
+// force TOUJOURS la version locale actuelle vers le cloud, sans fusion.
 async function manualSyncSave() {
   if (!currentUser || !currentUser.id) { showSync('⚠ Non connecté', '#ef4444'); return; }
   clearTimeout(window._pushTimer);
   const btns = [document.getElementById('mobileSyncBtn')].filter(Boolean);
   btns.forEach(b => { b.dataset.orig = b.textContent; b.textContent = stripDecoEmoji('💾 Sauvegarde en cours...'); b.disabled = true; });
-  // force:true — un clic explicite sur "Sauvegarder" doit TOUJOURS imposer la
-  // version locale actuelle telle quelle, jamais fusionner avec le cloud (sinon
-  // un import de sauvegarde se fait "rattraper" par d'anciens trades du cloud).
-  await pushToCloud({force:true});
+  await pushToCloud({ force: true });
   btns.forEach(b => { b.textContent = '✓ Sauvegardé !'; setTimeout(() => { b.textContent = b.dataset.orig; b.disabled = false; }, 1500); });
 }
 
-// ── Sauvegarde locale (fichier .json téléchargé sur l'appareil) ──
-// Indépendante du cloud : un vrai filet de sécurité contre toute perte de données,
-// même en cas de bug de synchronisation, de panne Supabase, ou de mauvaise manipulation.
-function exportLocalBackup(){
-  const accs = getAccounts();
-  const allAccountsData = accs.map(acc => {
-    const k = key => `${key}__${acc.id}`;
-    return {
-      id: acc.id, name: acc.name, pinHash: acc.pinHash, createdAt: acc.createdAt,
-      trades: JSON.parse(localStorage.getItem(k('tj_trades'))||'[]'),
-      lists: JSON.parse(localStorage.getItem(k('tj_lists'))||'null'),
-      nextId: JSON.parse(localStorage.getItem(k('tj_nextId'))||'9000'),
-      capital: localStorage.getItem(k('tj_capital')),
-      risk: localStorage.getItem(k('tj_risk')),
-      smartRisk: localStorage.getItem(k('tj_smart_risk')),
-      riskMax: localStorage.getItem(k('tj_risk_max')),
-      riskDecimal: localStorage.getItem(k('tj_risk_decimal')),
-      theme: localStorage.getItem('tj_theme_vars'), // thème global, pas par compte
-      pencilEdits: localStorage.getItem(k('tj_pencil_edits')),
-      payouts: localStorage.getItem(k('tj_payouts')),
-      rmConfig: {
-        upTrigger: localStorage.getItem(k('tj_rm_up_trigger')),
-        upTrades: localStorage.getItem(k('tj_rm_up_trades')),
-        upPct: localStorage.getItem(k('tj_rm_up_pct')),
-        upVarType: localStorage.getItem(k('tj_rm_up_var_type')),
-        upVarVal: localStorage.getItem(k('tj_rm_up_var_val')),
-        downTrigger: localStorage.getItem(k('tj_rm_down_trigger')),
-        downTrades: localStorage.getItem(k('tj_rm_down_trades')),
-        downPct: localStorage.getItem(k('tj_rm_down_pct')),
-        downVarType: localStorage.getItem(k('tj_rm_down_var_type')),
-        downVarVal: localStorage.getItem(k('tj_rm_down_var_val')),
-      },
-    };
-  });
-  const backup = {
-    type: 'tjp_backup_multi',
-    version: 2,
-    exportedAt: new Date().toISOString(),
-    activeAccId: _currentAccId,
-    accounts: allAccountsData,
-    iaConfig: localStorage.getItem('tjp_ia_config'),
-    recapHistory: localStorage.getItem('tjp_recap_history'),
-    // Rétrocompatibilité : données du compte actif au niveau racine
-    trades: APP.trades,
-    lists: APP.lists,
-    nextId: APP.nextId,
-    capital: localStorage.getItem(accKey('tj_capital')),
-    risk: localStorage.getItem(accKey('tj_risk')),
-    theme: localStorage.getItem('tj_theme_vars'), // thème global, pas par compte
-  };
-  const blob = new Blob([JSON.stringify(backup, null, 2)], {type: 'application/json'});
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  const dateStr = new Date().toISOString().slice(0,10);
-  a.href = url;
-  a.download = `tjp-sauvegarde-${dateStr}-${APP.trades.length}trades.json`;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(url);
-  localStorage.setItem(accKey('tj_last_backup_hash'), _tradesFingerprint(APP.trades));
-  showSync('✓ Sauvegarde téléchargée', '#22c55e');
+// Programme un envoi vers le cloud après un court délai (regroupe les
+// modifications rapprochées). Pose le verrou _isPushing IMMÉDIATEMENT, avant
+// même le délai, pour empêcher le sondage périodique ou le temps réel de
+// s'intercaler avec une version périmée pendant qu'on s'apprête à sauvegarder.
+function schedulePush(delay, opts) {
+  _isPushing = true;
+  window._pushOpts = Object.assign({}, window._pushOpts, opts || {});
+  clearTimeout(window._pushTimer);
+  window._pushTimer = setTimeout(() => {
+    const o = window._pushOpts || {};
+    window._pushOpts = {};
+    pushToCloud(o);
+  }, delay);
 }
 
-function importLocalBackup(event){
-  const file = event.target.files[0];
-  if (!file) return;
-  const reader = new FileReader();
-  reader.onload = (e) => {
-    let backup;
-    try { backup = JSON.parse(e.target.result); }
-    catch(err) { alert('Fichier invalide : ce n\'est pas un fichier de sauvegarde TJP valide.'); return; }
-    if ((!['tjp_backup','tjp_backup_multi'].includes(backup.type)) || (!Array.isArray(backup.trades) && !Array.isArray(backup.accounts))) {
-      alert('Fichier invalide : ce n\'est pas un fichier de sauvegarde TJP valide.');
-      return;
-    }
-    // Import multi-comptes (version 2)
-    if (backup.type === 'tjp_backup_multi' && Array.isArray(backup.accounts)) {
-      const n = backup.accounts.reduce((s,a)=>s+a.trades.length,0);
-      showConfirm('Restaurer une sauvegarde complète',
-        `Cette sauvegarde contient ${backup.accounts.length} compte(s) et ${n} trade(s) au total. Restaurer remplacera TOUS tes comptes actuels. Continuer ?`,
-        () => {
-          saveAccounts(backup.accounts.map(a=>({id:a.id,name:a.name,pinHash:a.pinHash||null,createdAt:a.createdAt||Date.now()})));
-          backup.accounts.forEach(acc => {
-            const k = key => `${key}__${acc.id}`;
-            if(acc.trades) localStorage.setItem(k('tj_trades'), JSON.stringify(acc.trades));
-            if(acc.lists) localStorage.setItem(k('tj_lists'), JSON.stringify(acc.lists));
-            if(acc.nextId) localStorage.setItem(k('tj_nextId'), JSON.stringify(acc.nextId));
-            if(acc.capital) localStorage.setItem(k('tj_capital'), acc.capital);
-            if(acc.risk) localStorage.setItem(k('tj_risk'), acc.risk);
-            if(acc.smartRisk) localStorage.setItem(k('tj_smart_risk'), acc.smartRisk);
-            if(acc.riskMax) localStorage.setItem(k('tj_risk_max'), acc.riskMax);
-            if(acc.riskDecimal) localStorage.setItem(k('tj_risk_decimal'), acc.riskDecimal);
-            // thème global : ignoré ici (déjà partagé par tous les comptes)
-            if(acc.pencilEdits) localStorage.setItem(k('tj_pencil_edits'), acc.pencilEdits);
-            if(acc.payouts) localStorage.setItem(k('tj_payouts'), acc.payouts);
-            if(acc.rmConfig){const rm=acc.rmConfig,kk=key=>k('tj_'+key);
-              if(rm.upTrigger)localStorage.setItem(kk('rm_up_trigger'),rm.upTrigger);
-              if(rm.upTrades)localStorage.setItem(kk('rm_up_trades'),rm.upTrades);
-              if(rm.upPct)localStorage.setItem(kk('rm_up_pct'),rm.upPct);
-              if(rm.upVarType)localStorage.setItem(kk('rm_up_var_type'),rm.upVarType);
-              if(rm.upVarVal)localStorage.setItem(kk('rm_up_var_val'),rm.upVarVal);
-              if(rm.downTrigger)localStorage.setItem(kk('rm_down_trigger'),rm.downTrigger);
-              if(rm.downTrades)localStorage.setItem(kk('rm_down_trades'),rm.downTrades);
-              if(rm.downPct)localStorage.setItem(kk('rm_down_pct'),rm.downPct);
-              if(rm.downVarType)localStorage.setItem(kk('rm_down_var_type'),rm.downVarType);
-              if(rm.downVarVal)localStorage.setItem(kk('rm_down_var_val'),rm.downVarVal);
-            }
-          });
-          if(backup.iaConfig) localStorage.setItem('tjp_ia_config', backup.iaConfig);
-          if(backup.recapHistory) localStorage.setItem('tjp_recap_history', backup.recapHistory);
-          const targetAcc = backup.activeAccId || backup.accounts[0]?.id;
-          if(targetAcc){ setActiveAccId(targetAcc); _currentAccId=targetAcc; }
-          _doSwitchAccount(_currentAccId);
-          showSync('✓ Sauvegarde multi-comptes restaurée', '#22c55e');
-        });
-      return;
-    }
-    const currentCount = APP.trades.length;
-    const backupCount = backup.trades.length;
-    const dateStr = backup.exportedAt ? new Date(backup.exportedAt).toLocaleString('fr-FR') : 'date inconnue';
-    showConfirm(
-      'Restaurer une sauvegarde',
-      `Cette sauvegarde du ${dateStr} contient ${backupCount} trade(s). Ton journal actuel en a ${currentCount}. Restaurer remplacera TOUS tes trades actuels par ceux de la sauvegarde. Continuer ?`,
-      () => {
-        markUserAction();
-        window._intentionalBulkDelete = true; // on assume ce remplacement volontaire, pas de garde-fou à déclencher
-        APP.trades = backup.trades;
-        if (backup.lists) APP.lists = backup.lists;
-        if (backup.nextId) APP.nextId = backup.nextId;
-        if (backup.capital) localStorage.setItem(accKey('tj_capital'), backup.capital);
-        if (backup.risk) localStorage.setItem(accKey('tj_risk'), backup.risk);
-        if (backup.smartRisk) localStorage.setItem(accKey('tj_smart_risk'), backup.smartRisk);
-        if (backup.riskMax) localStorage.setItem(accKey('tj_risk_max'), backup.riskMax);
-        if (backup.riskDecimal) localStorage.setItem(accKey('tj_risk_decimal'), backup.riskDecimal);
-        if (backup.theme) localStorage.setItem('tj_theme_vars', backup.theme);
-        if (backup.pencilEdits) localStorage.setItem(accKey('tj_pencil_edits'), backup.pencilEdits);
-        if (backup.payouts) localStorage.setItem(accKey('tj_payouts'), backup.payouts);
-        if (backup.iaConfig) localStorage.setItem('tjp_ia_config', backup.iaConfig);
-        if (backup.recapHistory) localStorage.setItem('tjp_recap_history', backup.recapHistory);
-        if (backup.rmConfig) {
-          const rm = backup.rmConfig;
-          if (rm.upTrigger) localStorage.setItem(accKey('tj_rm_up_trigger'), rm.upTrigger);
-          if (rm.upTrades) localStorage.setItem(accKey('tj_rm_up_trades'), rm.upTrades);
-          if (rm.upPct) localStorage.setItem(accKey('tj_rm_up_pct'), rm.upPct);
-          if (rm.upVarType) localStorage.setItem(accKey('tj_rm_up_var_type'), rm.upVarType);
-          if (rm.upVarVal) localStorage.setItem(accKey('tj_rm_up_var_val'), rm.upVarVal);
-          if (rm.downTrigger) localStorage.setItem(accKey('tj_rm_down_trigger'), rm.downTrigger);
-          if (rm.downTrades) localStorage.setItem(accKey('tj_rm_down_trades'), rm.downTrades);
-          if (rm.downPct) localStorage.setItem(accKey('tj_rm_down_pct'), rm.downPct);
-          if (rm.downVarType) localStorage.setItem(accKey('tj_rm_down_var_type'), rm.downVarType);
-          if (rm.downVarVal) localStorage.setItem(accKey('tj_rm_down_var_val'), rm.downVarVal);
-        }
-        // Réappliquer le thème visuellement si restauré
-        if (backup.theme) {
-          try { const v = JSON.parse(backup.theme); Object.entries(v).forEach(([k,c]) => document.documentElement.style.setProperty(k,c)); } catch(e) {}
-        }
-        saveState(); renderTable(); updateNavBadges(); populateSelects();
-        applyPencilEdits();
-        if (document.getElementById('page-trackrecord')?.classList.contains('active')) refreshAllCharts();
-        if (document.getElementById('page-modifs')?.classList.contains('active')) renderModifs();
-        schedulePush(0, {force:true});
-        showSync('✓ Sauvegarde restaurée (' + backupCount + ' trades)', '#22c55e');
-      }
-    );
-  };
-  reader.readAsText(file);
-  event.target.value = ''; // reset pour pouvoir réimporter le même fichier si besoin
-}
-
+// ── Réception depuis le cloud ──
 async function pullFromCloud() {
   if (!currentUser || !currentUser.id) return;
-  try { await sb.auth.refreshSession(); } catch(e) {}
+  try { await sb.auth.refreshSession(); } catch (e) {}
   try {
     const { data, error } = await sb.from('journal_data')
       .select('*').eq('user_id', currentUser.id)
       .order('updated_at', { ascending: false }).limit(1);
-    if (error) { showSync('⚠ '+error.message,'#ef4444'); return; }
-    if (!data || !data.length) { await pushToCloud(); return; }
+    if (error) { showSync('⚠ ' + error.message, '#ef4444'); return; }
+    if (!data || !data.length) { await pushToCloud(); return; } // premier envoi jamais fait
     _isSyncing = true;
     applyCloudData(data[0]);
     setTimeout(() => _isSyncing = false, 1000);
-  } catch(e) { showSync('⚠ Réseau', '#f59e0b'); }
+  } catch (e) { showSync('⚠ Réseau', '#f59e0b'); }
 }
 
+// Tentative de pull initial au démarrage, avec plusieurs essais (réseau lent
+// possible juste après la connexion). Renvoie true si des données ont bien
+// été reçues et appliquées.
+async function initialPullWithRetry() {
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      const { data, error } = await sb.from('journal_data')
+        .select('*').eq('user_id', currentUser.id)
+        .order('updated_at', { ascending: false }).limit(1);
+      if (!error && data && data.length) {
+        _isSyncing = true;
+        applyCloudData(data[0]);
+        return true;
+      }
+    } catch (e) {}
+    await new Promise(r => setTimeout(r, 1000));
+  }
+  return false;
+}
+
+// Décide si des données reçues du cloud doivent être appliquées, et gère le
+// cas où le cloud propose MOINS de trades qu'en local (voir principe 3 en
+// haut du fichier).
 function applyCloudData(data, skipSafetyCheck) {
   // Si on vient de choisir "imposer le local", bloquer tout pull entrant
-  if(window._blockPull && !skipSafetyCheck) return;
+  // pendant la fenêtre de protection.
+  if (window._blockPull && !skipSafetyCheck) return;
 
   const cloudTrades = data.trades || [];
   const localCount = APP.trades.length;
   const cloudCount = cloudTrades.length;
 
-  // Si le cloud propose MOINS de trades qu'en local (même -1), on n'applique
-  // JAMAIS ça silencieusement en écrasant le local — SAUF si cette réduction
-  // vient d'un changement RÉCENT et VOLONTAIRE fait sur un autre appareil (ex:
-  // restauration d'une sauvegarde), auquel cas on doit l'accepter, pas la
-  // combattre. On tranche avec l'horodatage : si le cloud est plus récent que
-  // la dernière version qu'on connaît, quelqu'un d'autre vient d'agir
-  // délibérément — sinon, c'est probablement nous qui sommes restés figés sur
-  // une vieille donnée, et on impose notre version locale au cloud.
-  // Exception : suppression volontaire via "Supprimer tous les trades" ou skipSafetyCheck explicite.
-  if (!skipSafetyCheck && !window._intentionalBulkDelete) {
-    if (cloudCount < localCount) {
-      const cloudTs = data.updated_at ? new Date(data.updated_at).getTime() : 0;
-      const knownTs = window._lastSeenCloudUpdatedAt ? new Date(window._lastSeenCloudUpdatedAt).getTime() : 0;
-      if (cloudTs > knownTs) {
-        // Changement récent et volontaire fait ailleurs : on l'accepte normalement,
-        // en laissant le code continuer plus bas (pas de retour anticipé ici).
-      } else {
-        // Rien de nouveau/récent à l'horizon : on protège en imposant le local.
-        window._blockPull = true;
-        clearTimeout(window._blockPullTimer);
-        window._blockPullTimer = setTimeout(()=>{ window._blockPull=false; }, 15000);
-        schedulePush(0, {force:true});
-        return;
-      }
+  if (!skipSafetyCheck && !window._intentionalBulkDelete && cloudCount < localCount) {
+    const cloudTs = data.updated_at ? new Date(data.updated_at).getTime() : 0;
+    const knownTs = _lastSeenCloudUpdatedAt ? new Date(_lastSeenCloudUpdatedAt).getTime() : 0;
+    if (cloudTs > knownTs) {
+      // Changement récent et volontaire fait sur un autre appareil : on l'accepte,
+      // le code continue plus bas normalement (pas de retour anticipé ici).
+    } else {
+      // Rien de nouveau/récent à l'horizon : probablement cet appareil resté figé
+      // sur une vieille donnée. On protège en imposant la version locale.
+      window._blockPull = true;
+      clearTimeout(window._blockPullTimer);
+      window._blockPullTimer = setTimeout(() => { window._blockPull = false; }, 15000);
+      schedulePush(0, { force: true });
+      return;
     }
   }
   window._intentionalBulkDelete = false;
   _applyCloudDataDirect(data, cloudTrades);
 }
 
+// Applique réellement des données cloud à l'état local (localStorage + DOM).
+// N'est appelé qu'après que applyCloudData ait validé que c'est sûr de le faire.
 function _applyCloudDataDirect(data, cloudTrades) {
-  if (data.updated_at) window._lastSeenCloudUpdatedAt = data.updated_at;
+  if (data.updated_at) _lastSeenCloudUpdatedAt = data.updated_at;
   const incomingTrades = cloudTrades || data.trades || [];
-  // Même garde-fou que saveState() : on ne remplace jamais silencieusement des
-  // trades existants par un tableau vide, sauf confirmation explicite (PIN,
-  // suppression volontaire). C'est ici que la donnée était perdue jusqu'ici,
-  // car ce chemin écrit dans le localStorage SANS passer par saveState().
+
+  // Garde-fou générique : on ne remplace jamais silencieusement des trades
+  // existants par un tableau vide, sauf confirmation explicite (suppression
+  // volontaire, restauration avec force).
   const prevCount = Array.isArray(APP.trades) ? APP.trades.length : 0;
   const nextCount = Array.isArray(incomingTrades) ? incomingTrades.length : 0;
   if (prevCount > 0 && nextCount === 0 && !window._intentionalBulkDelete && !window._allowEmptySave) {
-    console.error('🛑 _applyCloudDataDirect() BLOQUÉ : le cloud proposait 0 trade alors qu\'il y en avait '+prevCount+' en local. Pile d\'appel :');
+    console.error('🛑 _applyCloudDataDirect() BLOQUÉ : le cloud proposait 0 trade alors qu\'il y en avait ' + prevCount + ' en local. Pile d\'appel :');
     console.trace();
     showSync('⚠ Synchronisation bloquée (anti-perte) — ouvre la console (F12) et envoie la trace', '#ef4444');
     return;
   }
+
   APP.trades = incomingTrades;
   window._intentionalBulkDelete = false;
-  if(data.lists) {
-    const merged = {...APP.lists};
-    Object.entries(data.lists).forEach(([k,v])=>{ if(v&&v.length>0) merged[k]=v; });
+
+  if (data.lists) {
+    const merged = { ...APP.lists };
+    Object.entries(data.lists).forEach(([k, v]) => { if (v && v.length > 0) merged[k] = v; });
     APP.lists = merged;
   }
   APP.nextId = data.next_id || APP.nextId;
+
   if (data.capital) localStorage.setItem(accKey('tj_capital'), data.capital);
   if (data.risk) localStorage.setItem(accKey('tj_risk'), data.risk);
   if (data.smart_risk != null) localStorage.setItem(accKey('tj_smart_risk'), data.smart_risk);
   if (data.risk_max) localStorage.setItem(accKey('tj_risk_max'), data.risk_max);
   if (data.risk_decimal != null) localStorage.setItem(accKey('tj_risk_decimal'), data.risk_decimal);
   if (data.payouts) localStorage.setItem(accKey('tj_payouts'), data.payouts);
+
   if (data.theme) {
     localStorage.setItem('tj_theme_vars', data.theme);
     try {
-      const v=JSON.parse(data.theme);
-      Object.entries(v).forEach(([k,c])=>document.documentElement.style.setProperty(k,c));
-      // Met aussi à jour le state en mémoire du theme editor, sinon le panneau
+      const v = JSON.parse(data.theme);
+      Object.entries(v).forEach(([k, c]) => document.documentElement.style.setProperty(k, c));
+      // Met aussi à jour l'état en mémoire de l'éditeur de thème, sinon le panneau
       // Modifications continue d'afficher l'ancienne couleur même si le CSS a changé.
       if (typeof teVals !== 'undefined') {
-        teVals = {...teVals, ...v};
-        if (document.getElementById('page-modifs')?.classList.contains('active') && typeof renderTE === 'function') {
-          renderTE();
-        }
+        teVals = { ...teVals, ...v };
+        if (document.getElementById('page-modifs')?.classList.contains('active') && typeof renderTE === 'function') renderTE();
       }
-    } catch(e){}
+    } catch (e) {}
   }
+
   if (data.pencil_edits) {
     try {
       const remoteEdits = JSON.parse(data.pencil_edits);
       const localEdits = JSON.parse(localStorage.getItem(accKey('tj_pencil_edits')) || '{}');
-      // Fusionner : textes et couleurs viennent du cloud, font-sizes restent locaux par appareil
+      // Fusion : texte et couleur viennent du cloud, la taille de police reste locale par appareil.
       const merged = {};
-      Object.keys({...remoteEdits, ...localEdits}).forEach(k => {
+      Object.keys({ ...remoteEdits, ...localEdits }).forEach(k => {
         merged[k] = {
           html: remoteEdits[k]?.html ?? localEdits[k]?.html ?? '',
-          fs: localEdits[k]?.fs || '', // taille locale uniquement
-          col: remoteEdits[k]?.col ?? localEdits[k]?.col ?? ''
+          fs: localEdits[k]?.fs || '',
+          col: remoteEdits[k]?.col ?? localEdits[k]?.col ?? '',
         };
       });
       localStorage.setItem(accKey('tj_pencil_edits'), JSON.stringify(merged));
-    } catch(e) { localStorage.setItem(accKey('tj_pencil_edits'), data.pencil_edits); }
+    } catch (e) { localStorage.setItem(accKey('tj_pencil_edits'), data.pencil_edits); }
   }
+
   if (data.ia_config) localStorage.setItem('tjp_ia_config', data.ia_config);
   if (data.recap_history) localStorage.setItem('tjp_recap_history', data.recap_history);
+
   if (data.rm_config) {
     try {
       const rm = JSON.parse(data.rm_config);
@@ -780,62 +706,45 @@ function _applyCloudDataDirect(data, cloudTrades) {
       if (rm.down_pct != null) localStorage.setItem(accKey('tj_rm_down_pct'), rm.down_pct);
       if (rm.down_var_type != null) localStorage.setItem(accKey('tj_rm_down_var_type'), rm.down_var_type);
       if (rm.down_var_val != null) localStorage.setItem(accKey('tj_rm_down_var_val'), rm.down_var_val);
-    } catch(e) { console.warn('Restauration rm_config échouée :', e); }
+    } catch (e) { console.warn('Restauration rm_config échouée :', e); }
   }
+
   if (data.ia_chat_data) {
     try {
       const chat = JSON.parse(data.ia_chat_data);
       if (chat.conversations != null) localStorage.setItem('tjp_pc_conversations', chat.conversations);
       if (chat.active_conv != null) localStorage.setItem('tjp_pc_active_conv', chat.active_conv);
       if (chat.history != null) localStorage.setItem('tjp_pc_history', chat.history);
-    } catch(e) { console.warn('Restauration ia_chat_data échouée :', e); }
+    } catch (e) { console.warn('Restauration ia_chat_data échouée :', e); }
   }
-  // Sauvegarder localement SANS déclencher un push (on reçoit du cloud)
+
+  // Sauvegarder localement SANS déclencher un nouvel envoi (on reçoit du cloud)
   _isSyncing = true;
   lssAcc('tj_trades', APP.trades);
   lssAcc('tj_lists', APP.lists);
   lssAcc('tj_nextId', APP.nextId);
-  renderTable(); 
+  renderTable();
   updateNavBadges();
-  // Toujours tout rafraîchir après un pull cloud
-  setTimeout(()=>{
+  setTimeout(() => {
     refreshAllCharts();
     renderTop5();
-    if(document.getElementById('page-modifs')?.classList.contains('active')) renderModifs();
+    if (document.getElementById('page-modifs')?.classList.contains('active')) renderModifs();
     applyPencilEdits();
   }, 200);
   localStorage.setItem('tjp_last_uid', currentUser.id);
+  if (data.updated_at) localStorage.setItem('tjp_last_updated_at', data.updated_at);
   setTimeout(() => { _isSyncing = false; }, 1000);
-  if(data.updated_at) localStorage.setItem('tjp_last_updated_at', data.updated_at);
 }
 
-// Realtime — reçoit les changements de l'AUTRE appareil seulement
-let _realtimeChannel = null;
-let _isPushing = false; // on est en train de pusher — ignorer le realtime entrant
-
-// Planifie un push vers le cloud, en posant le verrou _isPushing IMMÉDIATEMENT
-// (avant même le délai de debounce) pour empêcher le polling ou le realtime de
-// s'intercaler avec une version périmée pendant qu'on s'apprête à sauvegarder.
-function schedulePush(delay, opts){
-  _isPushing = true;
-  window._pushOpts = Object.assign({}, window._pushOpts, opts||{});
-  clearTimeout(window._pushTimer);
-  window._pushTimer = setTimeout(() => {
-    const o = window._pushOpts || {};
-    window._pushOpts = {};
-    if (typeof pushToCloud === 'function') pushToCloud(o);
-  }, delay);
-}
-
+// ── Temps réel ──
 function startRealtime() {
   if (!currentUser || _realtimeChannel) return;
-  _realtimeChannel = sb.channel('tjp_changes_'+currentUser.id)
+  _realtimeChannel = sb.channel('tjp_changes_' + currentUser.id)
     .on('postgres_changes', {
-      event: '*', schema: 'public', table: 'journal_data'
+      event: '*', schema: 'public', table: 'journal_data', filter: 'user_id=eq.' + currentUser.id
     }, payload => {
       if (!payload.new || payload.new.user_id !== currentUser.id) return;
-      // Vérifier que ce n'est pas nos propres données (même timestamp)
-      if (_lastPushTimestamp && payload.new.updated_at === _lastPushTimestamp) return;
+      if (_lastPushTimestamp && payload.new.updated_at === _lastPushTimestamp) return; // écho de notre propre envoi
       _isSyncing = true;
       applyCloudData(payload.new);
       setTimeout(() => _isSyncing = false, 500);
@@ -848,11 +757,39 @@ function stopRealtime() {
   if (_realtimeChannel) { sb.removeChannel(_realtimeChannel); _realtimeChannel = null; }
 }
 
+// ── Sondage périodique (filet de sécurité si le temps réel a un souci) ──
+function startPolling() {
+  if (window._pollInterval) return;
+  window._pollInterval = setInterval(async () => {
+    if (!currentUser || _isSyncing || _isPushing) return;
+    try {
+      const { data: rd } = await sb.auth.refreshSession();
+      if (rd?.session?.user) currentUser = rd.session.user;
+      const { data, error } = await sb.from('journal_data')
+        .select('*').eq('user_id', currentUser.id)
+        .order('updated_at', { ascending: false }).limit(1);
+      if (!error && data && data.length) {
+        const localTs = localStorage.getItem('tjp_last_updated_at');
+        if (!localTs || data[0].updated_at > localTs) {
+          _isSyncing = true;
+          applyCloudData(data[0]);
+          showSync('✓ Mis à jour', '#22c55e');
+        }
+      }
+    } catch (e) {}
+  }, 15000); // toutes les 15s
+}
+function stopPolling() {
+  if (window._pollInterval) { clearInterval(window._pollInterval); window._pollInterval = null; }
+}
+
+// ── Sauvegarde à la fermeture/mise en arrière-plan ──
 window.addEventListener('beforeunload', () => {
   if (currentUser && !_isSyncing && !_isPushing) pushToCloud();
 });
-// Sur mobile, 'beforeunload' ne se déclenche pas toujours (changement d'app, verrouillage d'écran).
-// 'visibilitychange' est plus fiable pour détecter qu'on quitte l'app sur mobile.
+// Sur mobile, 'beforeunload' ne se déclenche pas toujours (changement d'app,
+// verrouillage d'écran). 'visibilitychange' est plus fiable pour détecter
+// qu'on quitte l'app sur mobile.
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'hidden' && currentUser && !_isSyncing && !_isPushing) {
     pushToCloud();

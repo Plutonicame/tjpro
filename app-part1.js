@@ -405,9 +405,10 @@ function startDeleteAccount(accId){
   // Demander PIN comme pour "Supprimer tous les trades"
   document.getElementById('deleteAllCount').textContent = `le compte "${acc.name}"`;
   document.getElementById('deleteAllModal').classList.add('open');
-  buildPad('deleteAllPad','deleteAllDots',(val,reset)=>{
+  buildPad('deleteAllPad','deleteAllDots',async (val,reset)=>{
     const stored = currentUser ? localStorage.getItem(pinKey(currentUser.id)) : null;
-    if(!stored||val!==stored){
+    const attempt = currentUser ? await localPinHash(val, currentUser.id) : null;
+    if(!stored||(attempt!==stored && val!==stored)){
       const err=document.getElementById('deleteAllErr');
       err.textContent='Code PIN incorrect.';err.style.display='block';
       reset(true);return;
@@ -903,9 +904,10 @@ function askDeleteAllTrades(){
   document.getElementById('deleteAllCount').textContent = APP.trades.length;
   document.getElementById('deleteAllErr').style.display = 'none';
   document.getElementById('deleteAllModal').classList.add('open');
-  buildPad('deleteAllPad','deleteAllDots',(val,reset) => {
+  buildPad('deleteAllPad','deleteAllDots',async (val,reset) => {
     const stored = currentUser ? localStorage.getItem(pinKey(currentUser.id)) : null;
-    if (!stored || val !== stored) {
+    const attempt = currentUser ? await localPinHash(val, currentUser.id) : null;
+    if (!stored || (attempt !== stored && val !== stored)) {
       const err = document.getElementById('deleteAllErr');
       err.textContent = 'Code PIN incorrect.'; err.style.display = 'block';
       reset(true);
