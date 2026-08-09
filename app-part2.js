@@ -223,6 +223,127 @@ function _tradesFingerprint(trades) {
   return String(trades.length) + '_' + h.toString(36);
 }
 
+// ══ SAUVEGARDE LOCALE (export / import) — tous les comptes locaux ══
+function exportLocalBackup() {
+  try {
+    const accs = getAccounts();
+    const list = accs.length ? accs : [{ id: _currentAccId || 'acc_1', name: 'Compte 1' }];
+    const exportAccounts = list.map(acc => {
+      const k = key => `${key}__${acc.id}`;
+      return {
+        id: acc.id, name: acc.name,
+        trades: JSON.parse(localStorage.getItem(k('tj_trades')) || '[]'),
+        lists: JSON.parse(localStorage.getItem(k('tj_lists')) || '{}'),
+        nextId: JSON.parse(localStorage.getItem(k('tj_nextId')) || '9000'),
+        capital: localStorage.getItem(k('tj_capital')),
+        risk: localStorage.getItem(k('tj_risk')),
+        smartRisk: localStorage.getItem(k('tj_smart_risk')),
+        riskMax: localStorage.getItem(k('tj_risk_max')),
+        riskDecimal: localStorage.getItem(k('tj_risk_decimal')),
+        payouts: localStorage.getItem(k('tj_payouts')),
+        pencilEdits: localStorage.getItem(k('tj_pencil_edits')),
+        rmConfig: {
+          upTrigger: localStorage.getItem(k('tj_rm_up_trigger')), upTrades: localStorage.getItem(k('tj_rm_up_trades')),
+          upPct: localStorage.getItem(k('tj_rm_up_pct')), upVarType: localStorage.getItem(k('tj_rm_up_var_type')),
+          upVarVal: localStorage.getItem(k('tj_rm_up_var_val')),
+          downTrigger: localStorage.getItem(k('tj_rm_down_trigger')), downTrades: localStorage.getItem(k('tj_rm_down_trades')),
+          downPct: localStorage.getItem(k('tj_rm_down_pct')), downVarType: localStorage.getItem(k('tj_rm_down_var_type')),
+          downVarVal: localStorage.getItem(k('tj_rm_down_var_val')),
+        },
+      };
+    });
+    const backup = {
+      version: 2,
+      exportedAt: new Date().toISOString(),
+      activeAccId: _currentAccId,
+      accounts: exportAccounts,
+      theme: localStorage.getItem('tj_theme_vars'),
+      iaConfig: localStorage.getItem('tjp_ia_config'),
+      recapHistory: localStorage.getItem('tjp_recap_history'),
+      iaChatData: {
+        conversations: localStorage.getItem('tjp_pc_conversations'),
+        activeConv: localStorage.getItem('tjp_pc_active_conv'),
+        history: localStorage.getItem('tjp_pc_history'),
+      },
+    };
+    const blob = new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = `tjp-sauvegarde-${new Date().toISOString().slice(0, 10)}.json`;
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    localStorage.setItem(accKey('tj_last_backup_hash'), _tradesFingerprint(APP.trades));
+    showSync('✓ Sauvegarde téléchargée', '#22c55e');
+  } catch (e) {
+    console.error('Export de sauvegarde échoué :', e);
+    showSync('⚠ Export échoué', '#ef4444');
+  }
+}
+
+async function importLocalBackup(event) {
+  const file = event.target.files && event.target.files[0];
+  event.target.value = '';
+  if (!file) return;
+  try {
+    const backup = JSON.parse(await file.text());
+    if (!backup || !Array.isArray(backup.accounts) || !backup.accounts.length) {
+      showSync('⚠ Fichier de sauvegarde invalide', '#ef4444'); return;
+    }
+    let backupCount = 0;
+    backup.accounts.forEach(acc => {
+      if (!acc.id) return;
+      const k = key => `${key}__${acc.id}`;
+      localStorage.setItem(k('tj_trades'), JSON.stringify(acc.trades || []));
+      backupCount += (acc.trades || []).length;
+      if (acc.lists) localStorage.setItem(k('tj_lists'), JSON.stringify(acc.lists));
+      localStorage.setItem(k('tj_nextId'), JSON.stringify(acc.nextId || 9000));
+      if (acc.capital) localStorage.setItem(k('tj_capital'), acc.capital);
+      if (acc.risk) localStorage.setItem(k('tj_risk'), acc.risk);
+      if (acc.smartRisk) localStorage.setItem(k('tj_smart_risk'), acc.smartRisk);
+      if (acc.riskMax) localStorage.setItem(k('tj_risk_max'), acc.riskMax);
+      if (acc.riskDecimal) localStorage.setItem(k('tj_risk_decimal'), acc.riskDecimal);
+      if (acc.payouts) localStorage.setItem(k('tj_payouts'), acc.payouts);
+      if (acc.pencilEdits) localStorage.setItem(k('tj_pencil_edits'), acc.pencilEdits);
+      if (acc.rmConfig) {
+        const rm = acc.rmConfig, kk = key => k('tj_' + key);
+        if (rm.upTrigger) localStorage.setItem(kk('rm_up_trigger'), rm.upTrigger);
+        if (rm.upTrades) localStorage.setItem(kk('rm_up_trades'), rm.upTrades);
+        if (rm.upPct) localStorage.setItem(kk('rm_up_pct'), rm.upPct);
+        if (rm.upVarType) localStorage.setItem(kk('rm_up_var_type'), rm.upVarType);
+        if (rm.upVarVal) localStorage.setItem(kk('rm_up_var_val'), rm.upVarVal);
+        if (rm.downTrigger) localStorage.setItem(kk('rm_down_trigger'), rm.downTrigger);
+        if (rm.downTrades) localStorage.setItem(kk('rm_down_trades'), rm.downTrades);
+        if (rm.downPct) localStorage.setItem(kk('rm_down_pct'), rm.downPct);
+        if (rm.downVarType) localStorage.setItem(kk('rm_down_var_type'), rm.downVarType);
+        if (rm.downVarVal) localStorage.setItem(kk('rm_down_var_val'), rm.downVarVal);
+      }
+      const accs = getAccounts();
+      if (!accs.find(a => a.id === acc.id)) {
+        accs.push({ id: acc.id, name: acc.name || ('Compte ' + (accs.length + 1)), pinHash: null, createdAt: Date.now() });
+        saveAccounts(accs);
+      }
+    });
+    if (backup.theme) localStorage.setItem('tj_theme_vars', backup.theme);
+    if (backup.iaConfig) localStorage.setItem('tjp_ia_config', backup.iaConfig);
+    if (backup.recapHistory) localStorage.setItem('tjp_recap_history', backup.recapHistory);
+    if (backup.iaChatData) {
+      if (backup.iaChatData.conversations) localStorage.setItem('tjp_pc_conversations', backup.iaChatData.conversations);
+      if (backup.iaChatData.activeConv) localStorage.setItem('tjp_pc_active_conv', backup.iaChatData.activeConv);
+      if (backup.iaChatData.history) localStorage.setItem('tjp_pc_history', backup.iaChatData.history);
+    }
+    const targetAcc = backup.activeAccId || backup.accounts[0]?.id;
+    if (targetAcc) { setActiveAccId(targetAcc); _currentAccId = targetAcc; }
+    _doSwitchAccount(_currentAccId);
+    loadSavedTheme();
+    window._intentionalBulkDelete = true; // remplacement volontaire, pas de garde-fou à déclencher
+    schedulePush(0, { force: true });
+    showSync('✓ Sauvegarde restaurée (' + backupCount + ' trades)', '#22c55e');
+  } catch (e) {
+    console.error('Import de sauvegarde échoué :', e);
+    showSync('⚠ Fichier de sauvegarde invalide', '#ef4444');
+  }
+}
+
 async function resetPin() {
   // Ne proposer d'exporter que si le contenu a changé depuis la dernière
   // sauvegarde locale exportée (nombre de trades différent, ou un trade modifié).
@@ -677,14 +798,17 @@ function _applyCloudDataDirect(data, cloudTrades) {
     try {
       const remoteEdits = JSON.parse(data.pencil_edits);
       const localEdits = JSON.parse(localStorage.getItem(accKey('tj_pencil_edits')) || '{}');
-      // Fusion : texte et couleur viennent du cloud, la taille de police reste locale par appareil.
-      const merged = {};
-      Object.keys({ ...remoteEdits, ...localEdits }).forEach(k => {
-        merged[k] = {
-          html: remoteEdits[k]?.html ?? localEdits[k]?.html ?? '',
-          fs: localEdits[k]?.fs || '',
-          col: remoteEdits[k]?.col ?? localEdits[k]?.col ?? '',
-        };
+      // Comme pour les trades : un texte déjà édité SUR CET APPAREIL est le plus
+      // frais qui soit pour lui, donc la version locale l'emporte toujours sur
+      // celle du cloud pour un même texte. Seuls les textes édités UNIQUEMENT
+      // ailleurs (absents en local) sont récupérés depuis le cloud.
+      const merged = { ...remoteEdits, ...localEdits };
+      Object.keys(merged).forEach(k => {
+        if (!localEdits[k] && remoteEdits[k]) {
+          // Texte connu seulement du cloud : on le récupère, sans sa taille de
+          // police (qui reste un réglage propre à chaque appareil).
+          merged[k] = { html: remoteEdits[k].html || '', fs: '', col: remoteEdits[k].col || '' };
+        }
       });
       localStorage.setItem(accKey('tj_pencil_edits'), JSON.stringify(merged));
     } catch (e) { localStorage.setItem(accKey('tj_pencil_edits'), data.pencil_edits); }
