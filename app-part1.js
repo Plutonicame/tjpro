@@ -952,6 +952,38 @@ function pcShowUndoToast(){
 function resetForm(){['f-date','f-heure','f-paire','f-session','f-dir','f-rrcible','f-res','f-mgmt','f-reprend','f-notes','f-rrpris'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});const fbt=document.getElementById('f-backtest');if(fbt)fbt.checked=false;document.querySelectorAll('#tf-wrap .chip,#conf-wrap .chip').forEach(c=>c.classList.remove('sel'));document.getElementById('f-date').value=new Date().toISOString().split('T')[0];initStarPicker('f-stars-picker','f-stars',0);window._formImages=[];renderFormImages();const fTgl=document.getElementById('f-tglRrAuto');if(fTgl){fTgl.classList.add('on');document.getElementById('f-rrpris-group').style.display='none';}}
 function tagD(v){return v==='LONG'?'<span class="tag tag-long">LONG</span>':v==='SHORT'?'<span class="tag tag-short">SHORT</span>':v||'—';}
 function tagO(v){const m={Oui:'oui',Non:'non','Peut-être':'peut','N/A':'na'};return v?`<span class="tag tag-${m[v]||'na'}">${v}</span>`:'—';}
+const MGMT_PALETTE=[
+  {bg:'rgba(0,229,160,.12)',tx:'#00e5a0',bd:'#00e5a0'},
+  {bg:'rgba(239,68,68,.12)',tx:'#ef4444',bd:'#ef4444'},
+  {bg:'rgba(245,158,11,.12)',tx:'#f59e0b',bd:'#f59e0b'},
+  {bg:'rgba(59,130,246,.12)',tx:'#3b82f6',bd:'#3b82f6'},
+  {bg:'rgba(168,85,247,.12)',tx:'#a855f7',bd:'#a855f7'},
+  {bg:'rgba(236,72,153,.12)',tx:'#ec4899',bd:'#ec4899'},
+  {bg:'rgba(20,184,166,.12)',tx:'#14b8a6',bd:'#14b8a6'},
+  {bg:'rgba(249,115,22,.12)',tx:'#f97316',bd:'#f97316'}
+];
+function mgmtPal(i,ch){return MGMT_PALETTE[i%MGMT_PALETTE.length][ch];}
+function tagMgmt(v){
+  if(!v)return '—';
+  const idx=(APP.lists.mgmt_opts||[]).indexOf(v);
+  if(idx<0)return `<span class="tag" style="background:var(--tag-na-bg);color:var(--tag-na-tx);border-color:var(--tag-na-bd)">${v}</span>`;
+  const bg=`var(--tag-mgmt-${idx}-bg,${mgmtPal(idx,'bg')})`,tx=`var(--tag-mgmt-${idx}-tx,${mgmtPal(idx,'tx')})`,bd=`var(--tag-mgmt-${idx}-bd,${mgmtPal(idx,'bd')})`;
+  return `<span class="tag" style="background:${bg};color:${tx};border-color:${bd}">${v}</span>`;
+}
+function ensureMgmtThemeDefaults(){
+  (APP.lists.mgmt_opts||[]).forEach((m,i)=>{
+    [[`--tag-mgmt-${i}-bg`,'bg'],[`--tag-mgmt-${i}-tx`,'tx'],[`--tag-mgmt-${i}-bd`,'bd']].forEach(([vn,ch])=>{
+      if((typeof teVals!=='undefined'?teVals[vn]:undefined)===undefined && !document.documentElement.style.getPropertyValue(vn)){
+        document.documentElement.style.setProperty(vn,mgmtPal(i,ch));
+      }
+    });
+    [[`--mgmt-type-${i}`,'tx',false],[`--mgmt-type-${i}-alpha`,'tx',true],[`--mgmt-type-${i}-bd`,'tx',false]].forEach(([vn,ch,alpha])=>{
+      if((typeof teVals!=='undefined'?teVals[vn]:undefined)===undefined && !document.documentElement.style.getPropertyValue(vn)){
+        document.documentElement.style.setProperty(vn,alpha?hexA(mgmtPal(i,ch),.45):mgmtPal(i,ch));
+      }
+    });
+  });
+}
 function fmtR(v){if(v===''||v==null)return'—';return`<span class="${v>=0?'rp':'rn'}">${v>=0?'+':''}${Number(v).toLocaleString('fr-FR')}€</span>`;}
 function fmtPct(tid){const p=computePctBefore(tid);return`<span class="${p>=0?'rp':'rn'}">${p>=0?'+':''}${p.toFixed(2)}%</span>`;}
 function starsHtml(val){
@@ -1036,7 +1068,7 @@ function renderTable(){
     <td style="font-family:var(--mono);color:var(--muted)">${t.rrCible?t.rrCible+'R':'—'}</td>
     <td style="font-family:var(--mono)">${computeRR(t)}R</td>
     <td>${fmtR(t.res)}</td><td>${pctHtml}</td>
-    <td>${tagO(t.mgmt)}</td><td>${tagO(t.reprend)}</td>
+    <td>${tagMgmt(t.mgmt)}</td><td>${tagO(t.reprend)}</td>
     <td style="white-space:nowrap">${starsHtml(t.stars)}</td>
     <td style="text-align:center">${imgEyeHtml(t)}</td>
     <td style="white-space:nowrap">
@@ -1378,25 +1410,29 @@ function drawPie(period){
 function drawMgmt(period){
   destroy('mgmt');
   const tr=btFilter('mgmt',period);
-  const mOui=tr.filter(t=>t.mgmt==='Oui'),mNon=tr.filter(t=>t.mgmt==='Non');
-  const posC=gc('--mgmt-yes')||'#00e5a0',negC=gc('--mgmt-no')||'#ef4444';
+  const allTypes=APP.lists.mgmt_opts||[];
+  const types=allTypes.filter(m=>tr.some(t=>t.mgmt===m));
   const axC=gc('--mgmt-axis')||'#64748b',grC=gc('--mgmt-grid')||'rgba(100,116,139,.1)';
   const ctx=document.getElementById('cMgmt').getContext('2d');
-  
-  const pnlOui=mOui.reduce((s,t)=>s+(t.res||0),0);
-  const pnlNon=mNon.reduce((s,t)=>s+(t.res||0),0);
-  const wrOui=mOui.length?Math.round(mOui.filter(t=>t.res>0).length/mOui.length*100):0;
-  const wrNon=mNon.length?Math.round(mNon.filter(t=>t.res>0).length/mNon.length*100):0;
+  if(!types.length)return;
 
-  // Normalisation P&L pour affichage côte-à-côte avec Win%
-  // On affiche 4 barres avec 2 axes Y (P&L gauche, Win% droite) ou on normalise
-  // Choix : 2 datasets, axe gauche = P&L (€), axe droit = Win%
+  const stats=types.map(m=>{
+    const g=tr.filter(t=>t.mgmt===m);
+    const pnl=g.reduce((s,t)=>s+(t.res||0),0);
+    const wr=g.length?Math.round(g.filter(t=>t.res>0).length/g.length*100):0;
+    return {m,n:g.length,pnl,wr,idx:allTypes.indexOf(m)};
+  });
+  const fillC=stats.map(s=>gc(`--mgmt-type-${s.idx}`)||mgmtPal(s.idx,'tx'));
+  const alphaC=stats.map(s=>gc(`--mgmt-type-${s.idx}-alpha`)||hexA(mgmtPal(s.idx,'tx'),.45));
+  const bdC=stats.map(s=>gc(`--mgmt-type-${s.idx}-bd`)||mgmtPal(s.idx,'tx'));
+
+  // 2 datasets (P&L / Win%) avec autant de barres que de types de management présents
   CH['mgmt']=new Chart(ctx,{type:'bar',
     data:{
-      labels:[`Mgmt OUI\n(${mOui.length} T)`,`Mgmt NON\n(${mNon.length} T)`],
+      labels:stats.map(s=>`${s.m}\n(${s.n} T)`),
       datasets:[
-        {label:'P&L (€)',data:[pnlOui,pnlNon],backgroundColor:[pnlOui>=0?posC:negC,pnlNon>=0?posC:negC],borderRadius:6,borderWidth:0,yAxisID:'yPnl'},
-        {label:'Win Rate %',data:[wrOui,wrNon],backgroundColor:[gc('--mgmt-yes-alpha')||hexA(posC,.45),gc('--mgmt-no-alpha')||hexA(negC,.45)],borderRadius:6,borderWidth:2,borderColor:[gc('--mgmt-yes-bd')||posC,gc('--mgmt-no-bd')||negC],type:'bar',yAxisID:'yWr'}
+        {label:'P&L (€)',data:stats.map(s=>s.pnl),backgroundColor:fillC,borderRadius:6,borderWidth:0,yAxisID:'yPnl'},
+        {label:'Win Rate %',data:stats.map(s=>s.wr),backgroundColor:alphaC,borderRadius:6,borderWidth:2,borderColor:bdC,type:'bar',yAxisID:'yWr'}
       ]
     },
     options:{responsive:true,maintainAspectRatio:false,
@@ -1522,7 +1558,7 @@ function cpCancel(){document.getElementById('cpOverlay').classList.remove('open'
 function cpConfirm(){const hex=document.getElementById('cpHex').value;if(!cpMem.includes(hex)){cpMem.push(hex);if(cpMem.length>22)cpMem.shift();lss('cp_mem',cpMem);}if(cpCB)cpCB(hex);document.getElementById('cpOverlay').classList.remove('open');}
 
 // ══ THEME ══
-const TV=[
+function buildTV(){return [
   // ══ Général ══
   {v:'--bg',l:'Fond principal',page:'Général',section:'Fond & structure'},
   
@@ -1574,11 +1610,15 @@ const TV=[
   {v:'--risk-base',l:'Ligne de base',page:'Track Record',section:'Risk Management (graphique)'},{v:'--risk-axis',l:'Axes',page:'Track Record',section:'Risk Management (graphique)'},
   {v:'--risk-grid',l:'Grille',page:'Track Record',section:'Risk Management (graphique)'},{v:'--pie-win',l:'Gagnants',page:'Track Record',section:'Win Rate'},
   {v:'--pie-lose',l:'Perdants',page:'Track Record',section:'Win Rate'},{v:'--pie-neutral',l:'Nuls',page:'Track Record',section:'Win Rate'},
-  {v:'--mgmt-bg',l:'Fond',page:'Track Record',section:'Comparaison du Management'},{v:'--mgmt-yes',l:'Oui — P&L fond',page:'Track Record',section:'Comparaison du Management'},
-  {v:'--mgmt-no',l:'Non — P&L fond',page:'Track Record',section:'Comparaison du Management'},{v:'--mgmt-yes-alpha',l:'Oui — Win% fond',page:'Track Record',section:'Comparaison du Management'},
-  {v:'--mgmt-no-alpha',l:'Non — Win% fond',page:'Track Record',section:'Comparaison du Management'},{v:'--mgmt-yes-bd',l:'Oui — Win% bordure',page:'Track Record',section:'Comparaison du Management'},
-  {v:'--mgmt-no-bd',l:'Non — Win% bordure',page:'Track Record',section:'Comparaison du Management'},{v:'--mgmt-axis',l:'Axes',page:'Track Record',section:'Comparaison du Management'},
-  {v:'--mgmt-grid',l:'Grille',page:'Track Record',section:'Comparaison du Management'},{v:'--comp-bg',l:'Fond',page:'Track Record',section:'Comparaisons'},
+  {v:'--mgmt-bg',l:'Fond',page:'Track Record',section:'Comparaison du Management'},
+  {v:'--mgmt-axis',l:'Axes',page:'Track Record',section:'Comparaison du Management'},
+  {v:'--mgmt-grid',l:'Grille',page:'Track Record',section:'Comparaison du Management'},
+  ...(APP.lists.mgmt_opts||[]).flatMap((m,i)=>[
+    {v:`--mgmt-type-${i}`,l:`${m} — P&L fond`,page:'Track Record',section:'Comparaison du Management'},
+    {v:`--mgmt-type-${i}-alpha`,l:`${m} — Win% fond`,page:'Track Record',section:'Comparaison du Management'},
+    {v:`--mgmt-type-${i}-bd`,l:`${m} — Win% bordure`,page:'Track Record',section:'Comparaison du Management'}
+  ]),
+  {v:'--comp-bg',l:'Fond',page:'Track Record',section:'Comparaisons'},
   {v:'--comp-pos',l:'Positif',page:'Track Record',section:'Comparaisons'},{v:'--comp-neg',l:'Négatif',page:'Track Record',section:'Comparaisons'},
   {v:'--comp-axis',l:'Axes',page:'Track Record',section:'Comparaisons'},{v:'--comp-grid',l:'Grille',page:'Track Record',section:'Comparaisons'},
   {v:'--conf-pos',l:'Conf. positif',page:'Track Record',section:'Comparaisons'},{v:'--conf-neg',l:'Conf. négatif',page:'Track Record',section:'Comparaisons'},
@@ -1592,6 +1632,11 @@ const TV=[
   {v:'--tag-peut-bg',l:'PEUT-ÊTRE fond',page:'Journal de trading',section:'Historique des trades'},{v:'--tag-peut-tx',l:'PEUT-ÊTRE texte',page:'Journal de trading',section:'Historique des trades'},
   {v:'--tag-peut-bd',l:'PEUT-ÊTRE bordure',page:'Journal de trading',section:'Historique des trades'},{v:'--tag-na-bg',l:'N/A fond',page:'Journal de trading',section:'Historique des trades'},
   {v:'--tag-na-tx',l:'N/A texte',page:'Journal de trading',section:'Historique des trades'},{v:'--tag-na-bd',l:'N/A bordure',page:'Journal de trading',section:'Historique des trades'},
+  ...(APP.lists.mgmt_opts||[]).flatMap((m,i)=>[
+    {v:`--tag-mgmt-${i}-bg`,l:`${m} — fond`,page:'Journal de trading',section:'Management'},
+    {v:`--tag-mgmt-${i}-tx`,l:`${m} — texte`,page:'Journal de trading',section:'Management'},
+    {v:`--tag-mgmt-${i}-bd`,l:`${m} — bordure`,page:'Journal de trading',section:'Management'}
+  ]),
   {v:'--result-pos',l:'Résultats positifs (journal)',page:'Journal de trading',section:'Historique des trades'},{v:'--result-neg',l:'Résultats négatifs (journal)',page:'Journal de trading',section:'Historique des trades'},
   {v:'--bt-bg',l:'Badge Backtest - fond',page:'Journal de trading',section:'Historique des trades'},{v:'--bt-tx',l:'Badge Backtest - texte',page:'Journal de trading',section:'Historique des trades'},
   {v:'--chip-h-bg',l:'Chip survol fond',page:'Journal de trading',section:'Formulaire nouveau trade'},{v:'--chip-h-bd',l:'Chip survol bord',page:'Journal de trading',section:'Formulaire nouveau trade'},
@@ -1745,10 +1790,12 @@ const TV=[
   {v:'--border',l:'Bordure (usage partagé)',page:'Général',section:'Fond & structure'},{v:'--muted',l:'Texte atténué (usage partagé)',page:'Général',section:'Texte & accents'},
   {v:'--green',l:'Accent vert (usage partagé)',page:'Général',section:'Texte & accents'},{v:'--red',l:'Accent rouge (usage partagé)',page:'Général',section:'Texte & accents'},
   ...getAccounts().flatMap((acc,i)=>[{v:`--acc-item-bg-${i+1}`,l:`${acc.name} - fond`,page:'Général',section:'Menu comptes'},{v:`--acc-item-bd-${i+1}`,l:`${acc.name} - bordure`,page:'Général',section:'Menu comptes'}]),
-];
+];}
 let teVals={},teHist=[];
 function toggleTE(){const ed=document.getElementById('themeEditor');const o=ed.style.display==='none';ed.style.display=o?'block':'none';if(o)renderTE();}
 function renderTE(){
+  ensureMgmtThemeDefaults();
+  const TV=buildTV();
   const s=getComputedStyle(document.documentElement);
   TV.forEach(tv=>{if(teVals[tv.v]===undefined)teVals[tv.v]=s.getPropertyValue(tv.v).trim()||'#000000';});
 
@@ -1813,7 +1860,7 @@ function applyTheme(){
 }
 function undoTheme(){if(!teHist.length)return;teVals=teHist.pop();renderTE();applyTheme();}
 function askResetTheme(){showConfirm('Réinitialiser','Supprimer toutes les personnalisations ?',()=>{teVals={};lss('tj_theme_vars',{});document.documentElement.removeAttribute('style');renderTE();refreshAllCharts();if(typeof currentUser!=="undefined"&&currentUser&&!_isSyncing){schedulePush(300);}});}
-function loadSavedTheme(){const s=ls('tj_theme_vars',null);if(s){Object.entries(s).forEach(([v,c])=>document.documentElement.style.setProperty(v,c));teVals=s;}}
+function loadSavedTheme(){const s=ls('tj_theme_vars',null);if(s){Object.entries(s).forEach(([v,c])=>document.documentElement.style.setProperty(v,c));teVals=s;}ensureMgmtThemeDefaults();}
 
 // ══ INIT ══
 // ── INIT inside DOMContentLoaded ──
