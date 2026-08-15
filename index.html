@@ -129,6 +129,7 @@
 <div class="page active" id="page-trackrecord">
   <div class="page-title" data-editable data-tvar="--pt-trackrecord" style="color:var(--pt-trackrecord,#00e5a0)">Track Record</div>
   <div class="page-sub" data-editable data-tvar="--ps-trackrecord" style="color:var(--ps-trackrecord,#64748b)">Risk −0.5% si DD≥5% depuis sommet · Récup ou 3 gains = +0.5%</div>
+  <div style="display:flex;align-items:center;margin-bottom:4px;"><label class="bt-toggle"><input type="checkbox" id="bt-kpi" onchange="toggleBT('kpi')"> BT</label></div>
   <div class="kpi-strip">
     <div class="kpi-card"><div class="kpi-bar" id="kb1"></div><div class="kpi-icon" data-editable>💰</div><div class="kpi-label" data-editable data-tvar="--kl-capital" style="color:var(--kl-capital,#64748b)">Capital</div><div class="kpi-value" id="k0">—</div></div>
     <div class="kpi-card"><div class="kpi-bar" id="kb2"></div><div class="kpi-icon" data-editable>📈</div><div class="kpi-label" data-editable data-tvar="--kl-pnltotal" style="color:var(--kl-pnltotal,#64748b)">P&L Total</div><div class="kpi-value" id="k1">—</div></div>
@@ -298,6 +299,7 @@
   <div class="card">
     <div class="card-header"><div class="card-title" data-editable data-tvar="--crt-historique" style="color:var(--crt-historique,#00e5a0)">HISTORIQUE DES TRADES</div>
       <div style="display:flex;gap:6px;align-items:center;">
+        <label class="bt-toggle"><input type="checkbox" id="bt-hist" onchange="toggleBT('hist')"> BT</label>
         <button class="btn btn-g undo-hist-btn" id="undoHistBtn" onclick="undoDeleteTrade()" title="Annuler la dernière suppression" style="font-size:11px;padding:5px 10px;align-items:center;gap:5px;">↺ Annuler suppression</button>
         <button class="btn" onclick="askDeleteAllTrades()" title="Supprimer tous les trades" style="font-size:11px;padding:5px 10px;background:var(--btn-delall-bg);color:var(--btn-delall-tx);border:1px solid var(--btn-delall-bd);border-radius:6px;cursor:pointer;"><span class="deco-emoji">🗑</span> Supprimer tous les trades</button>
       </div>
