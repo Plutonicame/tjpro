@@ -670,6 +670,7 @@ function computeRiskHistory(){
 
   sorted.forEach(t=>{
     const res=t.res||0;
+    const rpUsed=rp,capUsed=runCap; // risque % et capital RÉELLEMENT actifs quand ce trade a été pris (avant son propre résultat et un éventuel palier déclenché par lui)
     runCap+=res;
     // Vraie série de trades consécutifs gagnants/perdants, sur le résultat réel uniquement
     if(res>0){realWS++;realLS=0;maxRealWS=Math.max(maxRealWS,realWS);}
@@ -736,11 +737,29 @@ function computeRiskHistory(){
         }
       }
     }
-    hist.push({date:t.date,heure:t.heure||'',rp,ws,ls:ls2,realWs:realWS,realLs:realLS});
+    hist.push({date:t.date,heure:t.heure||'',id:t.id,rp,rpUsed,capUsed,ws,ls:ls2,realWs:realWS,realLs:realLS});
   });
   return{hist,finalRp:rp,finalWs:ws,finalLs:ls2,finalRealWs:realWS,finalRealLs:realLS,maxRealWs:maxRealWS,maxRealLs:maxRealLS};
 }
-function computeRR(t){if(t&&t.rrAuto===false&&typeof t.rrPris==='number'&&t.rrPris!==0){return t.rrPris;}const re=Math.max(1,Math.round(CAPITAL()*RBASE()/100));return parseFloat((t.res/re).toFixed(2));}
+let _rrHistCache=null,_rrHistSig=null;
+function getRiskHistMap(){
+  const sig=[APP.trades.length,CAPITAL(),RBASE(),SMART(),RM_UP_TRIGGER(),RM_UP_TRADES(),RM_UP_PCT(),RM_UP_VAR_TYPE(),RM_UP_VAR_VAL(),RM_DOWN_TRIGGER(),RM_DOWN_TRADES(),RM_DOWN_PCT(),RM_DOWN_VAR_TYPE(),RM_DOWN_VAR_VAL(),RMAX()].join('|');
+  if(_rrHistCache && _rrHistSig===sig) return _rrHistCache;
+  const map=new Map();
+  computeRiskHistory().hist.forEach(h=>{if(h.id!==undefined)map.set(h.id,{rpUsed:h.rpUsed,capUsed:h.capUsed});});
+  _rrHistCache=map;_rrHistSig=sig;
+  return map;
+}
+function computeRR(t){
+  if(t&&t.rrAuto===false&&typeof t.rrPris==='number'&&t.rrPris!==0){return t.rrPris;}
+  let capBase=CAPITAL(),rpBase=RBASE();
+  if(t&&!t.backtest&&t.id!==undefined){
+    const hInfo=getRiskHistMap().get(t.id);
+    if(hInfo){capBase=hInfo.capUsed;rpBase=hInfo.rpUsed;}
+  }
+  const re=Math.max(1,Math.round(capBase*rpBase/100));
+  return parseFloat((t.res/re).toFixed(2));
+}
 function getCurrentCap(){const totalPayouts=lsAcc('tj_payouts',[]).reduce((s,p)=>s+(p.amount||0),0);return realTrades().reduce((s,t)=>s+(t.res||0),CAPITAL())-totalPayouts;}
 function getCurrentRiskPct(){return computeRiskHistory().finalRp;}
 function getCurrentRiskEur(){return Math.round(getCurrentCap()*getCurrentRiskPct()/100*100)/100;}
@@ -1340,7 +1359,7 @@ function updateKPIs(){
   const t=realTrades();if(!t.length)return;
   const gains=t.filter(x=>x.res>0),pertes=t.filter(x=>x.res<0);
   const pnl=t.reduce((s,x)=>s+(x.res||0),0),wr=gains.length/t.length*100;
-  const rrArr=t.filter(x=>x.rrCible>0).map(x=>computeRR(x));
+  const rrArr=t.map(x=>computeRR(x));
   const rrMoy=rrArr.length?rrArr.reduce((a,b)=>a+b)/rrArr.length:0;
   const sumG=gains.reduce((s,x)=>s+x.res,0),sumP=Math.abs(pertes.reduce((s,x)=>s+x.res,0));
   const pf=sumP>0?sumG/sumP:(sumG>0?99:0);
