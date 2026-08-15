@@ -270,7 +270,7 @@
         <div class="fg"><label data-editable>Reprendrais-tu ?</label><select id="f-reprend"></select></div>
         <div class="fg span2"><label data-editable>Timeframes</label><div class="chip-wrap" id="tf-wrap"></div></div>
         <div class="fg spanall"><label data-editable>Confluences</label><div class="chip-wrap" id="conf-wrap"></div></div>
-        <div class="fg spanall"><label data-editable>Notes</label><textarea id="f-notes" placeholder="Setup, émotions..."></textarea></div>
+        <div class="fg spanall"><label data-editable>Notes</label><textarea id="f-notes" placeholder="Setup, émotions..." oninput="autoGrow(this)"></textarea></div>
         <div class="fg spanall"><label data-editable>Note ⭐</label>
           <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
             <div class="star-picker" id="f-stars-picker" data-val="0">
@@ -299,7 +299,7 @@
   <div class="card">
     <div class="card-header"><div class="card-title" data-editable data-tvar="--crt-historique" style="color:var(--crt-historique,#00e5a0)">HISTORIQUE DES TRADES</div>
       <div style="display:flex;gap:6px;align-items:center;">
-        <label class="bt-toggle"><input type="checkbox" id="bt-hist" onchange="toggleBT('hist')"> BT</label>
+        <label class="bt-toggle"><input type="checkbox" id="bt-hist" checked onchange="toggleBT('hist')"> BT</label>
         <button class="btn btn-g undo-hist-btn" id="undoHistBtn" onclick="undoDeleteTrade()" title="Annuler la dernière suppression" style="font-size:11px;padding:5px 10px;align-items:center;gap:5px;">↺ Annuler suppression</button>
         <button class="btn" onclick="askDeleteAllTrades()" title="Supprimer tous les trades" style="font-size:11px;padding:5px 10px;background:var(--btn-delall-bg);color:var(--btn-delall-tx);border:1px solid var(--btn-delall-bd);border-radius:6px;cursor:pointer;"><span class="deco-emoji">🗑</span> Supprimer tous les trades</button>
       </div>
@@ -554,7 +554,7 @@
       </div>
       <div class="fg span2"><label>Timeframes</label><div class="chip-wrap" id="e-tf-wrap"></div></div>
       <div class="fg spanall"><label>Confluences</label><div class="chip-wrap" id="e-conf-wrap"></div></div>
-      <div class="fg spanall"><label>Notes</label><textarea id="e-notes" placeholder="Setup, émotions..."></textarea></div>
+      <div class="fg spanall"><label>Notes</label><textarea id="e-notes" placeholder="Setup, émotions..." oninput="autoGrow(this)"></textarea></div>
       <div class="fg spanall"><label>Images du trade</label>
         <div id="e-images-wrap" style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:8px;"></div>
         <input type="file" id="e-img-input" accept="image/*" multiple style="display:none" onchange="addEditImage()">

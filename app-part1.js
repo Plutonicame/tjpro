@@ -860,6 +860,7 @@ function showPage(id,btn){
   if(btn)btn.classList.add('active');
   if(id==='trackrecord'){setTimeout(()=>{refreshAllCharts();renderTop5();},150);}
   if(id==='calendrier')renderCalendar();
+  if(id==='journal'){BT_STATE.hist=true;const bh=document.getElementById('bt-hist');if(bh)bh.checked=true;renderTable();}
   if(id==='modifs'){setTimeout(()=>{renderModifs();setupPencil();},50);}
   if(id==='pointscles')renderPcChat();
 }
@@ -967,7 +968,9 @@ function pcShowUndoToast(){
   clearTimeout(window._undoToastTimer);
   window._undoToastTimer = setTimeout(()=>toast.classList.remove('show'), 6000);
 }
-function resetForm(){['f-date','f-heure','f-paire','f-session','f-dir','f-rrcible','f-res','f-mgmt','f-reprend','f-notes','f-rrpris'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});const fbt=document.getElementById('f-backtest');if(fbt)fbt.checked=false;document.querySelectorAll('#tf-wrap .chip,#conf-wrap .chip').forEach(c=>c.classList.remove('sel'));document.getElementById('f-date').value=new Date().toISOString().split('T')[0];initStarPicker('f-stars-picker','f-stars',0);window._formImages=[];renderFormImages();const fTgl=document.getElementById('f-tglRrAuto');if(fTgl){fTgl.classList.add('on');document.getElementById('f-rrpris-group').style.display='none';}}
+// Ajuste la hauteur d'un textarea à son contenu (1 ligne mini, autant que nécessaire au-delà, jamais de scroll interne)
+function autoGrow(el){if(!el)return;el.style.height='auto';el.style.height=el.scrollHeight+'px';}
+function resetForm(){['f-date','f-heure','f-paire','f-session','f-dir','f-rrcible','f-res','f-mgmt','f-reprend','f-notes','f-rrpris'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});const fbt=document.getElementById('f-backtest');if(fbt)fbt.checked=false;document.querySelectorAll('#tf-wrap .chip,#conf-wrap .chip').forEach(c=>c.classList.remove('sel'));document.getElementById('f-date').value=new Date().toISOString().split('T')[0];initStarPicker('f-stars-picker','f-stars',0);window._formImages=[];renderFormImages();const fTgl=document.getElementById('f-tglRrAuto');if(fTgl){fTgl.classList.add('on');document.getElementById('f-rrpris-group').style.display='none';}autoGrow(document.getElementById('f-notes'));}
 function tagD(v){return v==='LONG'?'<span class="tag tag-long">LONG</span>':v==='SHORT'?'<span class="tag tag-short">SHORT</span>':v||'—';}
 function tagO(v){const m={Oui:'oui',Non:'non','Peut-être':'peut','N/A':'na'};return v?`<span class="tag tag-${m[v]||'na'}">${v}</span>`:'—';}
 const MGMT_PALETTE=[
@@ -1323,7 +1326,7 @@ function filterT(period){
 // Sans backtests (comportement par défaut)
 function filterRealT(period){return filterT(period).filter(t=>!t.backtest);}
 // État BT par graphique — true = inclure les backtests dans ce graphique
-const BT_STATE={eq:false,pnl:false,pie:false,risk:false,mgmt:false,conf:false,pairs:false,sessions:false,jours:false,tf:false,top5:false,cal:false,pc:false,hist:false,kpi:false};
+const BT_STATE={eq:false,pnl:false,pie:false,risk:false,mgmt:false,conf:false,pairs:false,sessions:false,jours:false,tf:false,top5:false,cal:false,pc:false,hist:true,kpi:false};
 function btFilter(key,period){return BT_STATE[key]?filterT(period):filterRealT(period);}
 function toggleBT(key){BT_STATE[key]=!BT_STATE[key];const el=document.getElementById('bt-'+key);if(el)el.checked=BT_STATE[key];redrawForKey(key);}
 function redrawForKey(k){
@@ -1979,6 +1982,7 @@ function openEditTrade(id){
   if(eTgl){eTgl.classList.toggle('on',eIsAuto);}
   if(eGroup){eGroup.style.display=eIsAuto?'none':'';}
   sv('e-notes', t.notes);
+  autoGrow(document.getElementById('e-notes'));
   sv('e-stars', t.stars);
   [['e-paire',APP.lists.paires],['e-session',APP.lists.sessions],
    ['e-mgmt',APP.lists.mgmt_opts],['e-reprend',APP.lists.reprend_opts]].forEach(([elId,items])=>{
