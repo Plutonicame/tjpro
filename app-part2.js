@@ -1074,7 +1074,7 @@ function addFormImage() {
 function renderFormImages() {
   const wrap = document.getElementById('f-images-wrap'); if (!wrap) return;
   wrap.innerHTML = (window._formImages||[]).map((src,i) => `<div style="position:relative;display:inline-block;margin:2px;">
-    <img src="${src}" style="width:72px;height:54px;object-fit:cover;border-radius:6px;border:1px solid #4f8ef7;">
+    <img src="${src}" style="width:72px;height:54px;object-fit:cover;border-radius:6px;border:1px solid #4f8ef7;cursor:zoom-in;" onclick="openFullscreen(this.src)">
     <button onclick="removeFormImg(${i})" style="position:absolute;top:2px;right:2px;background:#ef4444;color:#fff;border:none;border-radius:3px;padding:1px 4px;cursor:pointer;font-size:9px;">×</button>
   </div>`).join('');
 }
