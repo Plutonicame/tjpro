@@ -2006,9 +2006,8 @@ function openEditTrade(id){
   document.getElementById('e-conf-wrap').innerHTML =
     confList.map(c=>`<div class="chip${selConf.includes(c)?' sel':''}" data-v="${c}" onclick="this.classList.toggle('sel')">${c}</div>`).join('');
   document.getElementById('editModal').classList.add('open');
-  autoGrow(document.getElementById('e-notes'));
-  // Init étoiles après ouverture du modal
-  setTimeout(()=>initStarPicker('e-stars-picker','e-stars',t.stars||0),60);
+  // Init étoiles + ajustement du champ Notes après ouverture réelle du modal (mise en page pas garantie stable avant)
+  setTimeout(()=>{initStarPicker('e-stars-picker','e-stars',t.stars||0);autoGrow(document.getElementById('e-notes'));},60);
 }
 function renderEditImages(existing){
   const wrap=document.getElementById('e-images-wrap');
