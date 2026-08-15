@@ -1293,7 +1293,7 @@ function renderPcCards(data) {
   // Résumé pleine largeur
   if (data.resume) {
     html2 += `<div class="card" style="grid-column:1/-1;margin:0;border:1px solid var(--pc-resume-border);">
-      <div class="card-header"><div class="card-title" data-editable><span class="deco-emoji">📋</span> RÉSUMÉ & RECOMMANDATIONS</div></div>
+      <div class="card-header"><div class="card-title" data-editable data-tvar="--crt-resume" style="color:var(--crt-resume,#00e5a0)"><span class="deco-emoji">📋</span> RÉSUMÉ & RECOMMANDATIONS</div></div>
       <div class="card-body" style="font-size:13px;line-height:1.8;color:var(--text);">${data.resume}</div>
     </div>`;
   }

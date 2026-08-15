@@ -486,20 +486,20 @@ function closeMobileMenu(){document.getElementById('mobileMenu').classList.remov
 
 // ══ PENCIL ══
 let pencilActive=false,pencilColor='#e2e8f0',currentEditEl=null;
-// Certains textes modifiables en mode stylo sont aussi pilotés par une variable de
-// thème partagée (visible dans l'éditeur de thème). Si un tel lien existe, changer
-// la couleur ici modifie directement cette variable — donc les deux réglages restent
-// strictement synchronisés au lieu d'être deux systèmes indépendants.
+// Chaque texte modifiable en mode stylo a désormais SA PROPRE variable de thème
+// individuelle (attribut data-tvar posé directement sur l'élément), donc changer
+// la couleur d'un titre ne touche plus que lui — que ce soit via le stylo ou via
+// l'éditeur de thème complet, les deux lisent/écrivent exactement la même variable.
+// Seul le logo TJP (identique en version desktop et mobile) garde une variable
+// partagée entre ses deux instances : ce n'est pas un "titre" séparé, c'est le
+// même élément affiché deux fois selon la taille d'écran.
 const PENCIL_COLOR_VAR_MAP = {
-  'card-title':'--card-title-color',
-  'kpi-label':'--kpi-label-color',
-  'chart-title':'--chart-title-color',
-  'page-title':'--page-title-color',
-  'page-sub':'--page-sub-color',
   'nav-logo':'--nav-logo',
 };
 function pencilVarForEl(el){
-  if(!el||!el.classList)return null;
+  if(!el)return null;
+  if(el.dataset && el.dataset.tvar) return el.dataset.tvar;
+  if(!el.classList)return null;
   for(const cls of el.classList){ if(PENCIL_COLOR_VAR_MAP[cls]) return PENCIL_COLOR_VAR_MAP[cls]; }
   return null;
 }
@@ -508,16 +508,14 @@ function pencilVarForEl(el){
 function pencilSyncPanelToEl(el){
   if(!el)return;
   const cs = getComputedStyle(el);
-  // Priorité à ce qui est VRAIMENT affiché à l'écran : si ce texte a encore une
-  // couleur fixée localement (réglage d'avant la synchro avec le thème), c'est
-  // elle qui est réellement visible — on ne doit jamais afficher autre chose.
-  // Sinon, s'il est piloté par une variable de thème partagée, on lit celle-ci.
   const themeVar = pencilVarForEl(el);
-  if(el.style.color){
+  if(themeVar){
+    // Piloté par sa propre variable : on lit toujours la couleur RÉELLEMENT
+    // calculée par le navigateur, jamais le texte brut de l'attribut style
+    // (qui contient "var(--x,...)" et non une couleur directement exploitable).
+    pencilColor = rgba2hex(cs.color) || cs.color || '#e2e8f0';
+  } else if(el.style.color){
     pencilColor = rgba2hex(el.style.color) || el.style.color;
-  } else if(themeVar){
-    const v = getComputedStyle(document.documentElement).getPropertyValue(themeVar).trim();
-    pencilColor = rgba2hex(v) || v || '#e2e8f0';
   } else {
     pencilColor = rgba2hex(cs.color) || cs.color || '#e2e8f0';
   }
@@ -601,13 +599,14 @@ function applyPencilStyle(){
   }
   const themeVar = pencilVarForEl(currentEditEl);
   if(themeVar){
-    // Ce texte est piloté par une variable de thème partagée : on modifie CETTE
-    // variable directement, donc l'éditeur de thème et le mode stylo restent
-    // strictement synchronisés (même réglage, pas deux systèmes séparés).
+    // Ce texte est piloté par sa propre variable de thème individuelle : on modifie
+    // CETTE variable, donc l'éditeur de thème et le mode stylo restent strictement
+    // synchronisés. On NE touche PAS au style inline de l'élément : il contient la
+    // référence var(--xxx,...) qui le lie à sa variable et doit rester intacte —
+    // le changement de la variable sur :root se répercute automatiquement dessus.
     document.documentElement.style.setProperty(themeVar, pencilColor);
     teVals[themeVar] = pencilColor;
     lss('tj_theme_vars', teVals);
-    currentEditEl.style.removeProperty('color'); // pas de fixation locale qui masquerait la variable
     if(typeof currentUser!=="undefined"&&currentUser&&!_isSyncing){schedulePush(300);}
   } else {
     currentEditEl.style.setProperty('color', pencilColor, 'important');
@@ -984,6 +983,24 @@ function ensureMgmtThemeDefaults(){
     });
   });
 }
+// Couleur par défaut de chaque titre individualisé (mode stylo + éditeur de thème),
+// tant que l'utilisateur ne l'a pas personnalisée lui-même.
+const TITLE_DEFAULTS={
+  '--pt-trackrecord':'#00e5a0','--pt-pointscles':'#00e5a0','--pt-journal':'#00e5a0','--pt-calendrier':'#00e5a0','--pt-modifs':'#00e5a0',
+  '--ps-trackrecord':'#64748b',
+  '--kl-capital':'#64748b','--kl-pnltotal':'#64748b','--kl-winrate':'#64748b','--kl-rrmoyen':'#64748b','--kl-profitfactor':'#64748b','--kl-payout':'#64748b','--kl-trades':'#64748b','--kl-riskactuel':'#64748b','--kl-drawdown':'#64748b',
+  '--ct-evolution':'#00e5a0','--ct-pnl':'#00e5a0','--ct-riskmgmt':'#00e5a0','--ct-winrate':'#00e5a0','--ct-mgmtimpact':'#00e5a0',
+  '--ct-comp-conf':'#00e5a0','--ct-comp-pairs':'#00e5a0','--ct-comp-sessions':'#00e5a0','--ct-comp-jours':'#00e5a0','--ct-comp-tf':'#00e5a0',
+  '--crt-top5':'#00e5a0','--crt-pires5':'#ef4444','--crt-assistant':'#00e5a0','--crt-nouveautrade':'#00e5a0','--crt-historique':'#00e5a0',
+  '--crt-capitalrisk':'#00e5a0','--crt-riskreglages':'#00e5a0','--crt-securite':'#00e5a0','--crt-sauvegarde':'#00e5a0','--crt-themestylo':'#00e5a0','--crt-resume':'#00e5a0'
+};
+function ensureTitleThemeDefaults(){
+  Object.entries(TITLE_DEFAULTS).forEach(([vn,def])=>{
+    if((typeof teVals!=='undefined'?teVals[vn]:undefined)===undefined && !document.documentElement.style.getPropertyValue(vn)){
+      document.documentElement.style.setProperty(vn,def);
+    }
+  });
+}
 function fmtR(v){if(v===''||v==null)return'—';return`<span class="${v>=0?'rp':'rn'}">${v>=0?'+':''}${Number(v).toLocaleString('fr-FR')}€</span>`;}
 function fmtPct(tid){const p=computePctBefore(tid);return`<span class="${p>=0?'rp':'rn'}">${p>=0?'+':''}${p.toFixed(2)}%</span>`;}
 function starsHtml(val){
@@ -1215,7 +1232,7 @@ function renderModifs(){
   document.getElementById('modGrid').innerHTML=MK.map(({key,label,cv})=>`
     <div class="mod-col">
       <div class="mod-col-hdr"><span class="mod-col-title" data-editable style="color:var(${cv})">${label}</span><span style="font-size:9px;color:var(--muted)">${(APP.lists[key]||[]).length}</span></div>
-      <div class="mod-list" id="ml-${key}">${(APP.lists[key]||[]).map((item,i)=>`<div class="mod-item"><span class="drag-h">⣿</span><span class="item-tx" data-editable>${item}</span><button class="del-item" onclick="removeListItem('${key}',${i})">×</button></div>`).join('')}</div>
+      <div class="mod-list" id="ml-${key}">${(APP.lists[key]||[]).map((item,i)=>`<div class="mod-item"><span class="drag-h">⣿</span><span class="item-tx">${item}</span><button class="del-item" onclick="removeListItem('${key}',${i})">×</button></div>`).join('')}</div>
       <div class="mod-add"><input type="text" id="ma-${key}" placeholder="Ajouter..." onkeydown="if(event.key==='Enter')addListItem('${key}')"><button onclick="addListItem('${key}')">+</button></div>
     </div>`).join('');
   MK.forEach(({key})=>{const el=document.getElementById('ml-'+key);if(el&&window.Sortable){new Sortable(el,{animation:120,handle:'.drag-h',onEnd:evt=>{const list=APP.lists[key];const[m]=list.splice(evt.oldIndex,1);list.splice(evt.newIndex,0,m);saveState();populateSelects();if(currentUser&&!_isSyncing){schedulePush(300);}}});}});
@@ -1273,11 +1290,13 @@ const MODE={conf:false,pairs:false,sessions:false,jours:false,tf:false};
 
 function filterT(period){
   const now=new Date(),y=now.getFullYear(),m=now.getMonth(),q=Math.floor(m/3);
+  const nowStr=y+'-'+String(m+1).padStart(2,'0')+'-'+String(now.getDate()).padStart(2,'0');
+  const curWeek=wk(nowStr); // semaine calendaire ISO actuelle (lundi→dimanche), pas une fenêtre glissante
   return APP.trades.filter(t=>{if(!t.date)return false;const td=new Date(t.date+'T12:00:00');
     if(period==='tout')return true;if(period==='annee')return td.getFullYear()===y;
     if(period==='trimestre')return td.getFullYear()===y&&Math.floor(td.getMonth()/3)===q;
     if(period==='mois')return td.getFullYear()===y&&td.getMonth()===m;
-    if(period==='semaine')return(now-td)<=7*864e5;
+    if(period==='semaine')return wk(t.date)===curWeek;
     if(period==='jour')return td.toDateString()===now.toDateString();return true;
   }).sort((a,b)=>a.date.localeCompare(b.date)||(a.heure||'').localeCompare(b.heure||''));
 }
@@ -1348,7 +1367,7 @@ function updateKPIs(){
 
 // EQUITY
 function drawEquity(period){
-  let tr=btFilter('eq',period);if(!tr.length)tr=btFilter('eq','tout');destroy('eq');if(!tr.length)return;
+  const tr=btFilter('eq',period);destroy('eq');if(!tr.length)return;
   let cap=CAPITAL();const data=tr.map(t=>{cap+=(t.res||0);return cap;});
   const labels=buildLabels(tr,period);const ctx=document.getElementById('cEq').getContext('2d');
   const lc=gc('--eq-line')||'#00e5a0',axC=gc('--eq-axis')||'#64748b',grC=gc('--eq-grid')||'rgba(100,116,139,.1)';
@@ -1478,11 +1497,11 @@ function toggleMode(k){MODE[k]=!MODE[k];document.getElementById('tgl-'+k).classL
   else if(k==='tf')drawComp('cTF','tf','tf',ST.tf,MODE.tf,true);}
 
 function buildCompCharts(){
-  const COMP=[{id:'cConf',key:'conf',title:'PAR CONFLUENCE',multi:true,h:260},{id:'cPairs',key:'pairs',title:'PAR PAIRE / ACTIF',h:220},{id:'cSessions',key:'sessions',title:'PAR SESSION',h:200},{id:'cJours',key:'jours',title:'PAR JOUR DE SEMAINE',h:180},{id:'cTF',key:'tf',title:'PAR TIMEFRAME',multi:true,h:200}];
+  const COMP=[{id:'cConf',key:'conf',title:'PAR CONFLUENCE',tvar:'--ct-comp-conf',multi:true,h:260},{id:'cPairs',key:'pairs',title:'PAR PAIRE / ACTIF',tvar:'--ct-comp-pairs',h:220},{id:'cSessions',key:'sessions',title:'PAR SESSION',tvar:'--ct-comp-sessions',h:200},{id:'cJours',key:'jours',title:'PAR JOUR DE SEMAINE',tvar:'--ct-comp-jours',h:180},{id:'cTF',key:'tf',title:'PAR TIMEFRAME',tvar:'--ct-comp-tf',multi:true,h:200}];
   document.getElementById('compCharts').innerHTML=COMP.map(c=>`
     <div class="chart-card" style="background:var(--comp-bg)">
       <div class="chart-header">
-        <div class="chart-title" data-editable>${c.title}</div>
+        <div class="chart-title" data-editable data-tvar="${c.tvar}" style="color:var(${c.tvar},#00e5a0)">${c.title}</div>
         <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
           <label class="bt-toggle"><input type="checkbox" id="bt-${c.key}" onchange="toggleBT('${c.key}')"> BT</label>
           <div class="tgl-wrap"><span>€</span><div class="tgl-track" id="tgl-${c.key}" onclick="toggleMode('${c.key}')"><div class="tgl-thumb"></div></div><span>%</span></div>
@@ -1602,17 +1621,22 @@ function buildTV(){return [
   {v:'--pc-negatif',l:'Points négatifs',page:'Analyse IA',section:'Points Clés'},{v:'--eq-bg',l:'Fond',page:'Track Record',section:'Évolution du capital'},
   {v:'--eq-line',l:'Courbe',page:'Track Record',section:'Évolution du capital'},{v:'--eq-fill-top',l:'Dégradé haut',page:'Track Record',section:'Évolution du capital'},
   {v:'--eq-fill-bot',l:'Dégradé bas',page:'Track Record',section:'Évolution du capital'},{v:'--eq-axis',l:'Axes',page:'Track Record',section:'Évolution du capital'},
-  {v:'--eq-grid',l:'Grille',page:'Track Record',section:'Évolution du capital'},{v:'--pnl-bg',l:'Fond',page:'Track Record',section:'P&L'},
+  {v:'--eq-grid',l:'Grille',page:'Track Record',section:'Évolution du capital'},{v:'--ct-evolution',l:'Titre',page:'Track Record',section:'Évolution du capital'},
+  {v:'--pnl-bg',l:'Fond',page:'Track Record',section:'P&L'},
   {v:'--pnl-bar-pos',l:'Positif',page:'Track Record',section:'P&L'},{v:'--pnl-bar-neg',l:'Négatif',page:'Track Record',section:'P&L'},
   {v:'--pnl-axis',l:'Axes',page:'Track Record',section:'P&L'},{v:'--pnl-grid',l:'Grille',page:'Track Record',section:'P&L'},
+  {v:'--ct-pnl',l:'Titre',page:'Track Record',section:'P&L'},
   {v:'--risk-bg',l:'Fond',page:'Track Record',section:'Risk Management (graphique)'},{v:'--risk-line',l:'Courbe',page:'Track Record',section:'Risk Management (graphique)'},
   {v:'--risk-fill-top',l:'Dégradé haut',page:'Track Record',section:'Risk Management (graphique)'},{v:'--risk-fill-bot',l:'Dégradé bas',page:'Track Record',section:'Risk Management (graphique)'},
   {v:'--risk-base',l:'Ligne de base',page:'Track Record',section:'Risk Management (graphique)'},{v:'--risk-axis',l:'Axes',page:'Track Record',section:'Risk Management (graphique)'},
-  {v:'--risk-grid',l:'Grille',page:'Track Record',section:'Risk Management (graphique)'},{v:'--pie-win',l:'Gagnants',page:'Track Record',section:'Win Rate'},
+  {v:'--risk-grid',l:'Grille',page:'Track Record',section:'Risk Management (graphique)'},{v:'--ct-riskmgmt',l:'Titre',page:'Track Record',section:'Risk Management (graphique)'},
+  {v:'--pie-win',l:'Gagnants',page:'Track Record',section:'Win Rate'},
   {v:'--pie-lose',l:'Perdants',page:'Track Record',section:'Win Rate'},{v:'--pie-neutral',l:'Nuls',page:'Track Record',section:'Win Rate'},
+  {v:'--ct-winrate',l:'Titre',page:'Track Record',section:'Win Rate'},
   {v:'--mgmt-bg',l:'Fond',page:'Track Record',section:'Comparaison du Management'},
   {v:'--mgmt-axis',l:'Axes',page:'Track Record',section:'Comparaison du Management'},
   {v:'--mgmt-grid',l:'Grille',page:'Track Record',section:'Comparaison du Management'},
+  {v:'--ct-mgmtimpact',l:'Titre',page:'Track Record',section:'Comparaison du Management'},
   ...(APP.lists.mgmt_opts||[]).flatMap((m,i)=>[
     {v:`--mgmt-type-${i}`,l:`${m} — P&L fond`,page:'Track Record',section:'Comparaison du Management'},
     {v:`--mgmt-type-${i}-alpha`,l:`${m} — Win% fond`,page:'Track Record',section:'Comparaison du Management'},
@@ -1622,6 +1646,9 @@ function buildTV(){return [
   {v:'--comp-pos',l:'Positif',page:'Track Record',section:'Comparaisons'},{v:'--comp-neg',l:'Négatif',page:'Track Record',section:'Comparaisons'},
   {v:'--comp-axis',l:'Axes',page:'Track Record',section:'Comparaisons'},{v:'--comp-grid',l:'Grille',page:'Track Record',section:'Comparaisons'},
   {v:'--conf-pos',l:'Conf. positif',page:'Track Record',section:'Comparaisons'},{v:'--conf-neg',l:'Conf. négatif',page:'Track Record',section:'Comparaisons'},
+  {v:'--ct-comp-conf',l:'Titre — Par confluence',page:'Track Record',section:'Comparaisons'},{v:'--ct-comp-pairs',l:'Titre — Par paire / actif',page:'Track Record',section:'Comparaisons'},
+  {v:'--ct-comp-sessions',l:'Titre — Par session',page:'Track Record',section:'Comparaisons'},{v:'--ct-comp-jours',l:'Titre — Par jour de semaine',page:'Track Record',section:'Comparaisons'},
+  {v:'--ct-comp-tf',l:'Titre — Par timeframe',page:'Track Record',section:'Comparaisons'},
   // ══ Journal de trading ══
   {v:'--tag-long-bg',l:'LONG fond',page:'Journal de trading',section:'Historique des trades'},{v:'--tag-long-tx',l:'LONG texte',page:'Journal de trading',section:'Historique des trades'},
   {v:'--tag-long-bd',l:'LONG bordure',page:'Journal de trading',section:'Historique des trades'},{v:'--tag-short-bg',l:'SHORT fond',page:'Journal de trading',section:'Historique des trades'},
@@ -1690,11 +1717,11 @@ function buildTV(){return [
   {v:'--pencilfontsize-border',l:'#pencilFontSize — bordure',page:'Général',section:'Mode stylo'},{v:'--pencilfontsize-color',l:'#pencilFontSize — texte',page:'Général',section:'Mode stylo'},
   {v:'--pencilcolorswatch-border',l:'#pencilColorSwatch — bordure',page:'Général',section:'Mode stylo'},
   // Général > Titres de page
-  {v:'--page-title-color',l:'.page-title — texte',page:'Général',section:'Titres de page'},{v:'--page-sub-color',l:'.page-sub — texte',page:'Général',section:'Titres de page'},
+  // Général > Titres de page — supprimé : chaque page a maintenant son propre titre (voir sections "Titre de page" par page)
   // Général > Cartes
   {v:'--card-background',l:'.card — fond',page:'Général',section:'Cartes'},{v:'--card-border',l:'.card — bordure',page:'Général',section:'Cartes'},
   {v:'--card-header-background',l:'.card-header — fond',page:'Général',section:'Cartes'},{v:'--card-header-borderbott',l:'.card-header — bordure',page:'Général',section:'Cartes'},
-  {v:'--card-title-color',l:'.card-title — texte',page:'Général',section:'Cartes'},
+  // (.card-title — supprimé : chaque carte a maintenant son propre titre individuel)
   // Général > Champs de formulaire
   {v:'--fg-label-color',l:'.fg label — texte',page:'Général',section:'Champs de formulaire'},{v:'--fg-input-fg-select-fg-textarea-background',l:'.fg input,.fg select,.fg textarea — fond',page:'Général',section:'Champs de formulaire'},
   {v:'--fg-input-fg-select-fg-textarea-border',l:'.fg input,.fg select,.fg textarea — bordure',page:'Général',section:'Champs de formulaire'},{v:'--fg-input-fg-select-fg-textarea-color',l:'.fg input,.fg select,.fg textarea — texte',page:'Général',section:'Champs de formulaire'},
@@ -1712,10 +1739,16 @@ function buildTV(){return [
   {v:'--undo-toast-btn-color',l:'.undo-toast-btn — texte',page:'Journal de trading',section:'Historique des trades'},
   // Track Record > KPI
   {v:'--kpi-strip-background',l:'.kpi-strip — fond',page:'Track Record',section:'KPI'},{v:'--kpi-card-background',l:'.kpi-card — fond',page:'Track Record',section:'KPI'},
-  {v:'--kpi-label-color',l:'.kpi-label — texte',page:'Track Record',section:'KPI'},
+  {v:'--kl-capital',l:'Libellé — Capital',page:'Track Record',section:'KPI'},{v:'--kl-pnltotal',l:'Libellé — P&L Total',page:'Track Record',section:'KPI'},
+  {v:'--kl-winrate',l:'Libellé — Win Rate',page:'Track Record',section:'KPI'},{v:'--kl-rrmoyen',l:'Libellé — RR Moyen',page:'Track Record',section:'KPI'},
+  {v:'--kl-profitfactor',l:'Libellé — Profit Factor',page:'Track Record',section:'KPI'},{v:'--kl-payout',l:'Libellé — Pay Out',page:'Track Record',section:'KPI'},
+  {v:'--kl-trades',l:'Libellé — Trades',page:'Track Record',section:'KPI'},{v:'--kl-riskactuel',l:'Libellé — Risk Actuel',page:'Track Record',section:'KPI'},
+  {v:'--kl-drawdown',l:'Libellé — Drawdown Max',page:'Track Record',section:'KPI'},
   // Track Record > Cartes graphiques
   {v:'--chart-card-border',l:'.chart-card — bordure',page:'Track Record',section:'Cartes graphiques'},{v:'--chart-header-background',l:'.chart-header — fond',page:'Track Record',section:'Cartes graphiques'},
-  {v:'--chart-header-borderbott',l:'.chart-header — bordure',page:'Track Record',section:'Cartes graphiques'},{v:'--chart-title-color',l:'.chart-title — texte',page:'Track Record',section:'Cartes graphiques'},
+  {v:'--chart-header-borderbott',l:'.chart-header — bordure',page:'Track Record',section:'Cartes graphiques'},
+  // Track Record > Titre de page
+  {v:'--pt-trackrecord',l:'Titre de la page',page:'Track Record',section:'Titre de page'},{v:'--ps-trackrecord',l:'Sous-titre de la page',page:'Track Record',section:'Titre de page'},
   // Journal de trading > Formulaire nouveau trade
   {v:'--bt-toggle-color',l:'.bt-toggle — texte',page:'Journal de trading',section:'Formulaire nouveau trade'},
   // Général > Interrupteurs et filtres
@@ -1789,12 +1822,22 @@ function buildTV(){return [
   {v:'--surface',l:'Fond secondaire (usage partagé)',page:'Général',section:'Fond & structure'},{v:'--card',l:'Fond de carte (usage partagé)',page:'Général',section:'Fond & structure'},
   {v:'--border',l:'Bordure (usage partagé)',page:'Général',section:'Fond & structure'},{v:'--muted',l:'Texte atténué (usage partagé)',page:'Général',section:'Texte & accents'},
   {v:'--green',l:'Accent vert (usage partagé)',page:'Général',section:'Texte & accents'},{v:'--red',l:'Accent rouge (usage partagé)',page:'Général',section:'Texte & accents'},
+  // Titres individuels restants (pages + cartes)
+  {v:'--crt-top5',l:'Titre — Top 5 trades',page:'Track Record',section:'Top 5 trades'},{v:'--crt-pires5',l:'Titre — Pires 5 trades',page:'Track Record',section:'Top 5 trades'},
+  {v:'--pt-journal',l:'Titre de la page',page:'Journal de trading',section:'Titre de page'},{v:'--crt-assistant',l:'Titre — Assistant Journal',page:'Journal de trading',section:'Assistant Journal'},
+  {v:'--crt-nouveautrade',l:'Titre — Nouveau Trade',page:'Journal de trading',section:'Formulaire nouveau trade'},{v:'--crt-historique',l:'Titre — Historique des trades',page:'Journal de trading',section:'Historique des trades'},
+  {v:'--pt-calendrier',l:'Titre de la page',page:'Calendrier',section:'Titre de page'},
+  {v:'--pt-modifs',l:'Titre de la page',page:'Paramètres',section:'Titre de page'},{v:'--crt-capitalrisk',l:'Titre — Capital & Risk',page:'Paramètres',section:'État actuel'},
+  {v:'--crt-riskreglages',l:'Titre — Risk Management Réglages',page:'Paramètres',section:'Risk Management (réglages)'},{v:'--crt-securite',l:'Titre — Sécurité',page:'Paramètres',section:'Sécurité'},
+  {v:'--crt-sauvegarde',l:'Titre — Sauvegarde locale',page:'Paramètres',section:'Sauvegarde locale'},{v:'--crt-themestylo',l:'Titre — Thème & Mode Stylo',page:'Paramètres',section:'Thème & Mode Stylo'},
+  {v:'--pt-pointscles',l:'Titre de la page',page:'Analyse IA',section:'Titre de page'},{v:'--crt-resume',l:'Titre — Résumé & Recommandations',page:'Analyse IA',section:'Points Clés'},
   ...getAccounts().flatMap((acc,i)=>[{v:`--acc-item-bg-${i+1}`,l:`${acc.name} - fond`,page:'Général',section:'Menu comptes'},{v:`--acc-item-bd-${i+1}`,l:`${acc.name} - bordure`,page:'Général',section:'Menu comptes'}]),
 ];}
 let teVals={},teHist=[];
 function toggleTE(){const ed=document.getElementById('themeEditor');const o=ed.style.display==='none';ed.style.display=o?'block':'none';if(o)renderTE();}
 function renderTE(){
   ensureMgmtThemeDefaults();
+  ensureTitleThemeDefaults();
   const TV=buildTV();
   const s=getComputedStyle(document.documentElement);
   TV.forEach(tv=>{if(teVals[tv.v]===undefined)teVals[tv.v]=s.getPropertyValue(tv.v).trim()||'#000000';});
@@ -1860,7 +1903,7 @@ function applyTheme(){
 }
 function undoTheme(){if(!teHist.length)return;teVals=teHist.pop();renderTE();applyTheme();}
 function askResetTheme(){showConfirm('Réinitialiser','Supprimer toutes les personnalisations ?',()=>{teVals={};lss('tj_theme_vars',{});document.documentElement.removeAttribute('style');renderTE();refreshAllCharts();if(typeof currentUser!=="undefined"&&currentUser&&!_isSyncing){schedulePush(300);}});}
-function loadSavedTheme(){const s=ls('tj_theme_vars',null);if(s){Object.entries(s).forEach(([v,c])=>document.documentElement.style.setProperty(v,c));teVals=s;}ensureMgmtThemeDefaults();}
+function loadSavedTheme(){const s=ls('tj_theme_vars',null);if(s){Object.entries(s).forEach(([v,c])=>document.documentElement.style.setProperty(v,c));teVals=s;}ensureMgmtThemeDefaults();ensureTitleThemeDefaults();}
 
 // ══ INIT ══
 // ── INIT inside DOMContentLoaded ──
