@@ -1982,7 +1982,6 @@ function openEditTrade(id){
   if(eTgl){eTgl.classList.toggle('on',eIsAuto);}
   if(eGroup){eGroup.style.display=eIsAuto?'none':'';}
   sv('e-notes', t.notes);
-  autoGrow(document.getElementById('e-notes'));
   sv('e-stars', t.stars);
   [['e-paire',APP.lists.paires],['e-session',APP.lists.sessions],
    ['e-mgmt',APP.lists.mgmt_opts],['e-reprend',APP.lists.reprend_opts]].forEach(([elId,items])=>{
@@ -2007,6 +2006,7 @@ function openEditTrade(id){
   document.getElementById('e-conf-wrap').innerHTML =
     confList.map(c=>`<div class="chip${selConf.includes(c)?' sel':''}" data-v="${c}" onclick="this.classList.toggle('sel')">${c}</div>`).join('');
   document.getElementById('editModal').classList.add('open');
+  autoGrow(document.getElementById('e-notes'));
   // Init étoiles après ouverture du modal
   setTimeout(()=>initStarPicker('e-stars-picker','e-stars',t.stars||0),60);
 }
