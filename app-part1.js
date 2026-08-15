@@ -650,8 +650,8 @@ function applyRiskDecrease(rp,downVarType,downVarVal,runCap){
   return Math.max(0.01,Math.round((rp-delta)*100)/100);
 }
 
-function computeRiskHistory(){
-  const sorted=[...realTrades()].sort((a,b)=>a.date.localeCompare(b.date)||(a.heure||'').localeCompare(b.heure||''));
+function computeRiskHistory(includeBT=false){
+  const sorted=[...(includeBT?APP.trades:realTrades())].sort((a,b)=>a.date.localeCompare(b.date)||(a.heure||'').localeCompare(b.heure||''));
   const base=RBASE(),smart=SMART();
   let rp=base,ws=0,ls2=0;
   let runCap=CAPITAL();
@@ -822,10 +822,10 @@ function drawRiskChart(period){
     }
   });
 }
-function computeWorstLose(){const s=[...realTrades()].sort((a,b)=>a.date.localeCompare(b.date)||(a.heure||'').localeCompare(b.heure||''));let max=0,cur=0;s.forEach(t=>{if(t.res<0){cur++;max=Math.max(max,cur);}else if(t.res>0)cur=0;});return max;}
+function computeWorstLose(includeBT=false){const s=[...(includeBT?APP.trades:realTrades())].sort((a,b)=>a.date.localeCompare(b.date)||(a.heure||'').localeCompare(b.heure||''));let max=0,cur=0;s.forEach(t=>{if(t.res<0){cur++;max=Math.max(max,cur);}else if(t.res>0)cur=0;});return max;}
 // % maximum perdu d'affilée par rapport au plus haut du capital atteint (drawdown max)
-function computeMaxDrawdown(){
-  const s=[...realTrades()].sort((a,b)=>a.date.localeCompare(b.date)||(a.heure||'').localeCompare(b.heure||''));
+function computeMaxDrawdown(includeBT=false){
+  const s=[...(includeBT?APP.trades:realTrades())].sort((a,b)=>a.date.localeCompare(b.date)||(a.heure||'').localeCompare(b.heure||''));
   let peak=CAPITAL(),runCap=CAPITAL(),maxDD=0;
   s.forEach(t=>{
     runCap+=t.res||0;
@@ -1086,9 +1086,10 @@ function renderTable(){
     console.warn('Doublons de trades détectés et retirés:', APP.trades.length-dedup.length);
     APP.trades=dedup;
   }
-  const sorted=[...APP.trades].sort((a,b)=>b.date.localeCompare(a.date)||(b.heure||'').localeCompare(a.heure||''));
+  const base=BT_STATE.hist?APP.trades:APP.trades.filter(t=>!t.backtest);
+  const sorted=[...base].sort((a,b)=>b.date.localeCompare(a.date)||(b.heure||'').localeCompare(a.heure||''));
   const pctMap=computeAllPcts();
-  const tcEl=document.getElementById('tradeCount');if(tcEl)tcEl.textContent=`— ${APP.trades.length} trades`;
+  const tcEl=document.getElementById('tradeCount');if(tcEl)tcEl.textContent=`— ${sorted.length} trades`;
   document.getElementById('emptyState').style.display=sorted.length?'none':'block';
   document.getElementById('tradeTable').innerHTML=sorted.map(t=>{
     const p=pctMap[t.id]||0;
@@ -1322,7 +1323,7 @@ function filterT(period){
 // Sans backtests (comportement par défaut)
 function filterRealT(period){return filterT(period).filter(t=>!t.backtest);}
 // État BT par graphique — true = inclure les backtests dans ce graphique
-const BT_STATE={eq:false,pnl:false,pie:false,risk:false,mgmt:false,conf:false,pairs:false,sessions:false,jours:false,tf:false,top5:false,cal:false,pc:false};
+const BT_STATE={eq:false,pnl:false,pie:false,risk:false,mgmt:false,conf:false,pairs:false,sessions:false,jours:false,tf:false,top5:false,cal:false,pc:false,hist:false,kpi:false};
 function btFilter(key,period){return BT_STATE[key]?filterT(period):filterRealT(period);}
 function toggleBT(key){BT_STATE[key]=!BT_STATE[key];const el=document.getElementById('bt-'+key);if(el)el.checked=BT_STATE[key];redrawForKey(key);}
 function redrawForKey(k){
@@ -1338,6 +1339,8 @@ function redrawForKey(k){
   else if(k==='tf')drawComp('cTF','tf','tf',ST.tf,MODE.tf,true);
   else if(k==='top5')renderTop5();
   else if(k==='cal')renderCalendar();
+  else if(k==='hist')renderTable();
+  else if(k==='kpi')updateKPIs();
 }
 function wk(ds){const d=new Date(ds+'T12:00:00'),t=new Date(Date.UTC(d.getFullYear(),d.getMonth(),d.getDate()));const dy=(t.getUTCDay()+6)%7;t.setUTCDate(t.getUTCDate()-dy+3);const ft=new Date(Date.UTC(t.getUTCFullYear(),0,4));return t.getUTCFullYear()+'-W'+String(1+Math.round(((t-ft)/864e5-3+(ft.getUTCDay()+6)%7)/7)).padStart(2,'0');}
 function destroy(k){if(CH[k]){CH[k].destroy();delete CH[k];}}
@@ -1356,31 +1359,34 @@ function buildLabels(tr,period){
 }
 
 function updateKPIs(){
-  const t=realTrades();if(!t.length)return;
+  const t=BT_STATE.kpi?APP.trades:realTrades();if(!t.length)return;
   const gains=t.filter(x=>x.res>0),pertes=t.filter(x=>x.res<0);
   const pnl=t.reduce((s,x)=>s+(x.res||0),0),wr=gains.length/t.length*100;
   const rrArr=t.map(x=>computeRR(x));
   const rrMoy=rrArr.length?rrArr.reduce((a,b)=>a+b)/rrArr.length:0;
   const sumG=gains.reduce((s,x)=>s+x.res,0),sumP=Math.abs(pertes.reduce((s,x)=>s+x.res,0));
   const pf=sumP>0?sumG/sumP:(sumG>0?99:0);
-  const rp=getCurrentRiskPct(),re=getCurrentRiskEur(),worst=computeWorstLose();
+  const rp=BT_STATE.kpi?computeRiskHistory(true).finalRp:getCurrentRiskPct();
+  const worst=computeWorstLose(BT_STATE.kpi);
   const fr=n=>n.toLocaleString('fr-FR',{minimumFractionDigits:2,maximumFractionDigits:2});
-  document.getElementById('k0').textContent=fr(getCurrentCap())+'€';
+  const totalPO0=lsAcc('tj_payouts',[]).reduce((s,p)=>s+(p.amount||0),0);
+  const dispCap=CAPITAL()+t.reduce((s,x)=>s+(x.res||0),0)-totalPO0;
+  const re=Math.round(dispCap*rp/100*100)/100;
+  document.getElementById('k0').textContent=fr(dispCap)+'€';
   const k1=document.getElementById('k1');
   const pnlPct=CAPITAL()>0?(pnl/CAPITAL()*100):0;
   k1.textContent=(pnl>=0?'+':'')+fr(pnl)+'€ ('+(pnlPct>=0?'+':'')+pnlPct.toFixed(1)+'%)';
   k1.style.color=pnl>=0?'var(--green)':'var(--red)';
   document.getElementById('k2').textContent=wr.toFixed(1)+'%';document.getElementById('k3').textContent=rrMoy.toFixed(2)+'R';
   document.getElementById('k4').textContent=pf.toFixed(2);
-  {const totalPO=lsAcc('tj_payouts',[]).reduce((s,p)=>s+p.amount,0);
-   const k5el=document.getElementById('k5');
-   if(k5el){k5el.textContent=(totalPO>0?'-':'')+fr(totalPO)+' €';k5el.style.color=totalPO>0?'var(--gold)':'var(--muted)';}
+  {const k5el=document.getElementById('k5');
+   if(k5el){k5el.textContent=(totalPO0>0?'-':'')+fr(totalPO0)+' €';k5el.style.color=totalPO0>0?'var(--gold)':'var(--muted)';}
   }
   const btCount=APP.trades.filter(x=>x.backtest).length;
   const k6el=document.getElementById('k6');
-  if(k6el)k6el.innerHTML=t.length+(btCount?`<br><span style="font-size:9px;opacity:.7;">(${btCount} BT)</span>`:'');
+  if(k6el)k6el.innerHTML=t.length+(BT_STATE.kpi?(btCount?`<br><span style="font-size:9px;opacity:.7;">(dont ${btCount} BT)</span>`:''):(btCount?`<br><span style="font-size:9px;opacity:.7;">(${btCount} BT exclus)</span>`:''));
   document.getElementById('k7').textContent=re.toLocaleString('fr-FR')+'€ ('+fmtRiskPct(rp)+')';
-  document.getElementById('k8').textContent=worst+' T ('+computeMaxDrawdown().toFixed(1)+'%)';
+  document.getElementById('k8').textContent=worst+' T ('+computeMaxDrawdown(BT_STATE.kpi).toFixed(1)+'%)';
   for(let i=1;i<=9;i++){const c=gc(`--kpi${i}`);const bar=document.getElementById('kb'+i);const val=document.getElementById(`k${i-1}`);if(bar)bar.style.background=c;if(val)val.style.color=c;}
 }
 
