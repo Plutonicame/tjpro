@@ -1719,19 +1719,39 @@ function pcPrepareImagesForAI(trades, maxImages=8){
 }
 
 async function pcAskAI(question, trades, history){
+  const isCloud = !!(currentUser && currentUser.id);
+  let authToken = PC_SUPABASE_ANON_KEY;
+  let payload = {
+    question,
+    history: pcHistoryForAI(history),
+    images: pcPrepareImagesForAI(trades)
+  };
+
+  if (isCloud) {
+    // Compte cloud : on s'assure que journal_data est à jour côté serveur (le push est un
+    // no-op si rien n'a changé), puis on envoie le VRAI token de l'utilisateur — c'est lui qui
+    // permet à la fonction Edge d'aller chercher les données elle-même via ses outils, plutôt
+    // que de les recevoir poussées ici. On n'envoie donc plus trades/compte dans ce cas.
+    try { await pushToCloud(); } catch(e) { console.warn('Sync avant question IA impossible :', e); }
+    try {
+      const { data: sessionData } = await sb.auth.getSession();
+      if (sessionData?.session?.access_token) authToken = sessionData.session.access_token;
+    } catch(e) { console.warn('Session introuvable, repli sur envoi direct des données :', e); }
+  }
+  if (!isCloud || authToken === PC_SUPABASE_ANON_KEY) {
+    // Pas de compte cloud (ou session indisponible) : repli sur l'ancien comportement,
+    // les données sont envoyées directement dans la requête.
+    payload.compte = pcPrepareAccountContext();
+    payload.trades = pcPrepareTradesForAI(trades);
+  }
+
   const res = await fetch(PC_AI_ENDPOINT, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'Authorization': 'Bearer ' + PC_SUPABASE_ANON_KEY
+      'Authorization': 'Bearer ' + authToken
     },
-    body: JSON.stringify({
-      question,
-      compte: pcPrepareAccountContext(),
-      trades: pcPrepareTradesForAI(trades),
-      history: pcHistoryForAI(history),
-      images: pcPrepareImagesForAI(trades)
-    })
+    body: JSON.stringify(payload)
   });
   if(!res.ok) throw new Error('HTTP ' + res.status);
   const data = await res.json();
