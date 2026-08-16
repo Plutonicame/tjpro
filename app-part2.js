@@ -1626,23 +1626,69 @@ function pcDeleteConversation(id){
 const PC_AI_ENDPOINT = 'https://ghjashqgwlaofjubzrcp.supabase.co/functions/v1/hyper-task';
 const PC_SUPABASE_ANON_KEY = 'sb_publishable_v_Uc1c_TsGyA7ieZPfaGnw_Ajknc7af';
 
-// Prépare une version compacte des trades à envoyer à l'IA (sans données binaires lourdes)
+// Prépare une version complète des trades à envoyer à l'IA (sans données binaires lourdes —
+// les images sont gérées séparément par pcPrepareImagesForAI). Aucune donnée n'est filtrée ou
+// tronquée : chaque trade inclut aussi le capital et le % de risque qui étaient RÉELLEMENT actifs
+// au moment précis où il a été pris (mêmes valeurs historiques que celles utilisées pour calculer
+// le RR réalisé — voir computeRR/getRiskHistMap dans app-part1.js).
 function pcPrepareTradesForAI(trades){
-  return (trades||[]).map(t=>({
-    date: t.date || null,
-    paire: t.paire || null,
-    session: t.session || null,
-    tf: t.tf || null,
-    conf: t.conf || null,
-    res: typeof t.res === 'number' ? t.res : null,
-    rrCible: t.rrCible || null,
-    rrReel: (typeof computeRR === 'function') ? computeRR(t) : null,
-    mgmt: t.mgmt || null,
-    reprend: t.reprend || null,
-    notes: t.notes ? String(t.notes).slice(0, 500) : null,
-    nbImages: (t.images && t.images.length) ? t.images.length : 0,
-    stars: t.stars || null
-  }));
+  const histMap = (typeof getRiskHistMap==='function') ? getRiskHistMap() : null;
+  return (trades||[]).map(t=>{
+    const h = (histMap && !t.backtest && t.id!==undefined) ? histMap.get(t.id) : null;
+    const capAvant = h ? h.capUsed : null;
+    const capApres = (capAvant!==null && capAvant!==undefined) ? capAvant + (t.res||0) : null;
+    return {
+      id: t.id,
+      backtest: !!t.backtest,
+      date: t.date || null,
+      heure: t.heure || null,
+      paire: t.paire || null,
+      session: t.session || null,
+      tf: t.tf || null,
+      conf: t.conf || null,
+      direction: t.dir || null,
+      resultatEur: typeof t.res === 'number' ? t.res : null,
+      rrCible: t.rrCible || null,
+      rrReel: (typeof computeRR === 'function') ? computeRR(t) : null,
+      rrMode: t.rrAuto===false ? 'manuel' : 'auto',
+      rrPrisManuel: t.rrAuto===false ? t.rrPris : null,
+      risquePourcentAuMomentDuTrade: h ? h.rpUsed : null,
+      capitalAvantCeTrade: capAvant,
+      capitalApresCeTrade: capApres,
+      management: t.mgmt || null,
+      reprendrait: t.reprend || null,
+      notes: t.notes ? String(t.notes) : null,
+      nbImages: (t.images && t.images.length) ? t.images.length : 0,
+      stars: t.stars || null
+    };
+  });
+}
+
+// Contexte global du compte (réglages + état actuel) — envoyé une seule fois par requête,
+// en plus de la liste des trades, pour que l'IA ait toute l'image du compte sans exception.
+function pcPrepareAccountContext(){
+  const totalPO = lsAcc('tj_payouts',[]).reduce((s,p)=>s+(p.amount||0),0);
+  return {
+    capitalDepart: CAPITAL(),
+    risqueBasePct: RBASE(),
+    risqueMaxPct: RMAX(),
+    smartRiskActif: !!SMART(),
+    reglesHausseRisque: {declencheur:RM_UP_TRIGGER(),nbTrades:RM_UP_TRADES(),pourcentGain:RM_UP_PCT(),typeVariation:RM_UP_VAR_TYPE(),valeurVariation:RM_UP_VAR_VAL()},
+    reglesBaisseRisque: {declencheur:RM_DOWN_TRIGGER(),nbTrades:RM_DOWN_TRADES(),pourcentPerte:RM_DOWN_PCT(),typeVariation:RM_DOWN_VAR_TYPE(),valeurVariation:RM_DOWN_VAR_VAL()},
+    capitalActuel: getCurrentCap(),
+    risqueActuelPct: getCurrentRiskPct(),
+    risqueActuelEur: getCurrentRiskEur(),
+    totalPayoutsRetires: totalPO,
+    drawdownMaxPct: (typeof computeMaxDrawdown==='function') ? computeMaxDrawdown() : null,
+    pertesConsecutivesMax: (typeof computeWorstLose==='function') ? computeWorstLose() : null,
+    listesPersonnalisables: {
+      confluences: APP.lists.confluences||[],
+      typesManagement: APP.lists.mgmt_opts||[],
+      optionsReprendrait: APP.lists.reprend_opts||[],
+      paires: APP.lists.paires||[],
+      sessions: APP.lists.sessions||[]
+    }
+  };
 }
 
 // Convertit l'historique de chat (avec HTML) en texte brut pour l'IA, en excluant les indicateurs de chargement
@@ -1681,6 +1727,7 @@ async function pcAskAI(question, trades, history){
     },
     body: JSON.stringify({
       question,
+      compte: pcPrepareAccountContext(),
       trades: pcPrepareTradesForAI(trades),
       history: pcHistoryForAI(history),
       images: pcPrepareImagesForAI(trades)
@@ -1781,8 +1828,8 @@ function pcGlobalSummary(trades){
   });
 
   // RR
-  const withRR = trades.filter(t=>t.rrCible>0);
-  const rrMoy = withRR.length ? (withRR.reduce((s,t)=>s+computeRR(t),0)/withRR.length).toFixed(2) : null;
+  const rrArr = trades.map(t=>computeRR(t));
+  const rrMoy = rrArr.length ? (rrArr.reduce((a,b)=>a+b,0)/rrArr.length).toFixed(2) : null;
 
   // Notes
   const withNotes = trades.filter(t=>t.notes && t.notes.trim());
@@ -1802,7 +1849,7 @@ function pcGlobalSummary(trades){
   // ── Construction du résumé ──
   let r = `<strong>📊 Résumé global — ${total} trades</strong><br>`;
   r += `Win rate : <strong>${wr}%</strong> • P&L total : <strong>${totalPnl>=0?'+':''}${totalPnl.toFixed(2)}€</strong> • Profit factor : <strong>${pf}</strong> • Drawdown max : <strong>${maxDD.toFixed(1)}%</strong><br>`;
-  if (rrMoy !== null) r += `RR réalisé moyen : <strong>${rrMoy}R</strong> sur ${withRR.length} trade(s) avec RR cible.<br>`;
+  if (rrMoy !== null) r += `RR réalisé moyen : <strong>${rrMoy}R</strong> sur ${rrArr.length} trade(s).<br>`;
   r += '<br>';
 
   if (byPaire.length) {
