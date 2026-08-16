@@ -532,13 +532,13 @@ function togglePencil(){
   document.getElementById('pencilBtn').style.color=pencilActive?'var(--green)':'';
   document.getElementById('pencilToolbar').classList.toggle('show',pencilActive);
   if(!pencilActive){
-    const edits=ls('tj_pencil_edits',{});
+    const edits=ls(accKey('tj_pencil_edits'),{});
     document.querySelectorAll('[data-editable]').forEach(el=>{
       el.removeAttribute('contenteditable');
       const k=getEK(el);
       if(el.style.fontSize||el.style.color||el.innerHTML)edits[k]={html:el.innerHTML,fs:el.style.fontSize||'',col:el.style.color||''};
     });
-    lss('tj_pencil_edits',edits);
+    lss(accKey('tj_pencil_edits'),edits);
     if(typeof currentUser!=="undefined"&&currentUser&&!_isSyncing){schedulePush(300);}
   } else setupPencil();
 }
@@ -583,10 +583,10 @@ if(!window._pencilDelegateSet){
 }
 function saveOneEdit(el){
   const k=getEK(el);
-  const edits=ls('tj_pencil_edits',{});
+  const edits=ls(accKey('tj_pencil_edits'),{});
   const isDynamic=/^disp[0-9]$/.test(el.id||''); // valeurs calculées en direct : ne jamais figer le texte
   edits[k]={html:isDynamic?undefined:el.innerHTML,fs:el.style.fontSize||'',col:el.style.color||''};
-  lss('tj_pencil_edits',edits);
+  lss(accKey('tj_pencil_edits'),edits);
   if(typeof currentUser!=="undefined"&&currentUser&&!_isSyncing){schedulePush(300);}
 }
 function openCPforPencil(){openCP('Couleur texte',pencilColor,hex=>{pencilColor=hex;document.getElementById('pencilColorSwatch').style.background=hex;});}
@@ -615,7 +615,15 @@ function applyPencilStyle(){
 }
 
 function applyPencilEdits(){
-  const edits=ls('tj_pencil_edits',{});
+  // Migration ponctuelle : les éditions stylo étaient historiquement stockées sous une clé
+  // brute (non liée au compte), désormais sous une clé par compte comme le reste. On rapatrie
+  // l'ancienne donnée si elle existe encore et que la nouvelle clé est vide, sans rien écraser.
+  const oldRaw=localStorage.getItem('tj_pencil_edits');
+  const newKey=accKey('tj_pencil_edits');
+  if(oldRaw && !localStorage.getItem(newKey)){
+    localStorage.setItem(newKey,oldRaw);
+  }
+  const edits=ls(newKey,{});
   document.querySelectorAll('[data-editable]').forEach(el=>{
     const k=getEK(el);
     if(edits[k]){

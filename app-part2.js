@@ -839,6 +839,14 @@ function _applyCloudDataDirect(data, cloudTrades) {
       if (chat.conversations != null) localStorage.setItem('tjp_pc_conversations', chat.conversations);
       if (chat.active_conv != null) localStorage.setItem('tjp_pc_active_conv', chat.active_conv);
       if (chat.history != null) localStorage.setItem('tjp_pc_history', chat.history);
+      // pcConversations/pcActiveConvId sont chargées UNE SEULE FOIS au tout premier
+      // chargement du script (avant que ce pull cloud, asynchrone, n'ait eu le temps
+      // d'arriver) — sans ce recalage, la conversation restaurée reste invisible à
+      // l'écran tant que la page n'est pas rechargée manuellement.
+      if (typeof pcLoadConversations === 'function') pcConversations = pcLoadConversations();
+      if (typeof pcGetActiveConvId === 'function') pcActiveConvId = pcGetActiveConvId();
+      if (typeof pcRenderConvList === 'function') pcRenderConvList();
+      if (typeof renderPcChat === 'function') renderPcChat();
     } catch (e) { console.warn('Restauration ia_chat_data échouée :', e); }
   }
 
