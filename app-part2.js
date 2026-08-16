@@ -569,7 +569,7 @@ function buildSyncPayload(trades) {
       try {
         const edits = JSON.parse(localStorage.getItem(accKey('tj_pencil_edits')) || '{}');
         const toSync = {};
-        Object.entries(edits).forEach(([k, v]) => { toSync[k] = { html: v.html || '', col: v.col || '' }; });
+        Object.entries(edits).forEach(([k, v]) => { toSync[k] = { html: v.html || '', col: v.col || '', fs: v.fs || '' }; });
         return JSON.stringify(toSync);
       } catch (e) { return localStorage.getItem(accKey('tj_pencil_edits')); }
     })(),
@@ -800,16 +800,10 @@ function _applyCloudDataDirect(data, cloudTrades) {
       const localEdits = JSON.parse(localStorage.getItem(accKey('tj_pencil_edits')) || '{}');
       // Comme pour les trades : un texte déjà édité SUR CET APPAREIL est le plus
       // frais qui soit pour lui, donc la version locale l'emporte toujours sur
-      // celle du cloud pour un même texte. Seuls les textes édités UNIQUEMENT
-      // ailleurs (absents en local) sont récupérés depuis le cloud.
+      // celle du cloud pour un même texte (couleur, taille et contenu compris).
+      // Seuls les textes édités UNIQUEMENT ailleurs (absents en local) sont
+      // récupérés depuis le cloud, avec l'intégralité de leur style.
       const merged = { ...remoteEdits, ...localEdits };
-      Object.keys(merged).forEach(k => {
-        if (!localEdits[k] && remoteEdits[k]) {
-          // Texte connu seulement du cloud : on le récupère, sans sa taille de
-          // police (qui reste un réglage propre à chaque appareil).
-          merged[k] = { html: remoteEdits[k].html || '', fs: '', col: remoteEdits[k].col || '' };
-        }
-      });
       localStorage.setItem(accKey('tj_pencil_edits'), JSON.stringify(merged));
     } catch (e) { localStorage.setItem(accKey('tj_pencil_edits'), data.pencil_edits); }
   }
