@@ -1439,8 +1439,8 @@ function drawPnl(period){
   const avgLoss=pertes.length?pertes.reduce((a,b)=>a+b,0)/pertes.length:null;
 
   const datasets=[{type:'bar',label:'P&L',data,backgroundColor:colors,borderColor:colors,borderWidth:0,borderRadius:2,barPercentage:0.8,order:2}];
-  if(avgGain!==null)datasets.push({type:'line',label:'Moyenne gains',data:labels.map(()=>avgGain),borderColor:avgGainC,backgroundColor:avgGainC,borderWidth:2,borderDash:[6,4],pointRadius:0,pointHitRadius:0,fill:false,tension:0,order:1});
-  if(avgLoss!==null)datasets.push({type:'line',label:'Moyenne pertes',data:labels.map(()=>avgLoss),borderColor:avgLossC,backgroundColor:avgLossC,borderWidth:2,borderDash:[6,4],pointRadius:0,pointHitRadius:0,fill:false,tension:0,order:1});
+  if(avgGain!==null)datasets.push({type:'line',label:'Moyenne gains',data:labels.map(()=>avgGain),borderColor:avgGainC,backgroundColor:avgGainC,borderWidth:1,pointStyle:'line',borderDash:[6,4],pointRadius:0,pointHitRadius:0,fill:false,tension:0,order:1});
+  if(avgLoss!==null)datasets.push({type:'line',label:'Moyenne pertes',data:labels.map(()=>avgLoss),borderColor:avgLossC,backgroundColor:avgLossC,borderWidth:1,pointStyle:'line',borderDash:[6,4],pointRadius:0,pointHitRadius:0,fill:false,tension:0,order:1});
 
   const ctx=document.getElementById('cPnl').getContext('2d');
   CH['pnl']=new Chart(ctx,{
@@ -1449,7 +1449,7 @@ function drawPnl(period){
     options:{responsive:true,maintainAspectRatio:false,
       interaction:{mode:'index',intersect:false},
       plugins:{
-        legend:{display:true,position:'bottom',labels:{color:axC,font:{size:9},boxWidth:20,filter:item=>item.text&&item.text!=='P&L'}},
+        legend:{display:true,position:'bottom',labels:{color:axC,font:{size:9},usePointStyle:true,boxWidth:20,boxHeight:1,filter:item=>item.text&&item.text!=='P&L'}},
         tooltip:{callbacks:{
           title:items=>sorted[items[0].dataIndex]?.date||'',
           label:i=>{
