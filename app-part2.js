@@ -569,7 +569,7 @@ function buildSyncPayload(trades) {
       try {
         const edits = JSON.parse(localStorage.getItem(accKey('tj_pencil_edits')) || '{}');
         const toSync = {};
-        Object.entries(edits).forEach(([k, v]) => { toSync[k] = { html: v.html || '', col: v.col || '', fs: v.fs || '' }; });
+        Object.entries(edits).forEach(([k, v]) => { toSync[k] = { html: v.html || '', col: v.col || '', fs: v.fs || '', t: v.t || 0 }; });
         return JSON.stringify(toSync);
       } catch (e) { return localStorage.getItem(accKey('tj_pencil_edits')); }
     })(),
@@ -798,12 +798,16 @@ function _applyCloudDataDirect(data, cloudTrades) {
     try {
       const remoteEdits = JSON.parse(data.pencil_edits);
       const localEdits = JSON.parse(localStorage.getItem(accKey('tj_pencil_edits')) || '{}');
-      // Comme pour les trades : un texte déjà édité SUR CET APPAREIL est le plus
-      // frais qui soit pour lui, donc la version locale l'emporte toujours sur
-      // celle du cloud pour un même texte (couleur, taille et contenu compris).
-      // Seuls les textes édités UNIQUEMENT ailleurs (absents en local) sont
-      // récupérés depuis le cloud, avec l'intégralité de leur style.
-      const merged = { ...remoteEdits, ...localEdits };
+      // Fusion par horodatage : pour un même texte modifié sur deux appareils différents,
+      // c'est la modification la plus RÉCENTE (peu importe l'appareil) qui gagne — pas
+      // systématiquement celle de l'appareil sur lequel on se trouve actuellement.
+      const merged = {};
+      const allKeys = new Set([...Object.keys(remoteEdits), ...Object.keys(localEdits)]);
+      allKeys.forEach(k => {
+        const r = remoteEdits[k], l = localEdits[k];
+        if (r && l) merged[k] = (r.t || 0) > (l.t || 0) ? r : l;
+        else merged[k] = r || l;
+      });
       localStorage.setItem(accKey('tj_pencil_edits'), JSON.stringify(merged));
     } catch (e) { localStorage.setItem(accKey('tj_pencil_edits'), data.pencil_edits); }
   }

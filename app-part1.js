@@ -536,7 +536,7 @@ function togglePencil(){
     document.querySelectorAll('[data-editable]').forEach(el=>{
       el.removeAttribute('contenteditable');
       const k=getEK(el);
-      if(el.style.fontSize||el.style.color||el.innerHTML)edits[k]={html:el.innerHTML,fs:el.style.fontSize||'',col:el.style.color||''};
+      if(el.style.fontSize||el.style.color||el.innerHTML)edits[k]={html:el.innerHTML,fs:el.style.fontSize||'',col:el.style.color||'',t:Date.now()};
     });
     lss(accKey('tj_pencil_edits'),edits);
     if(typeof currentUser!=="undefined"&&currentUser&&!_isSyncing){schedulePush(300);}
@@ -585,7 +585,7 @@ function saveOneEdit(el){
   const k=getEK(el);
   const edits=ls(accKey('tj_pencil_edits'),{});
   const isDynamic=/^disp[0-9]$/.test(el.id||''); // valeurs calculées en direct : ne jamais figer le texte
-  edits[k]={html:isDynamic?undefined:el.innerHTML,fs:el.style.fontSize||'',col:el.style.color||''};
+  edits[k]={html:isDynamic?undefined:el.innerHTML,fs:el.style.fontSize||'',col:el.style.color||'',t:Date.now()};
   lss(accKey('tj_pencil_edits'),edits);
   if(typeof currentUser!=="undefined"&&currentUser&&!_isSyncing){schedulePush(300);}
 }
