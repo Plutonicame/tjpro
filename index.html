@@ -166,7 +166,7 @@
 
   <div class="chart-card" style="background:var(--risk-bg)" id="riskCard">
     <div class="chart-header">
-      <div><div class="chart-title" data-editable data-tvar="--ct-riskmgmt" style="color:var(--ct-riskmgmt,#00e5a0)">RISK MANAGEMENT</div><div style="font-size:10px;color:var(--muted);margin-top:2px" id="riskCardSub">+0.5% / 3 gains · −0.5% si −5% capital · plafond <span id="riskMaxLabel">10</span>%</div></div>
+      <div><div class="chart-title" data-editable data-tvar="--ct-riskmgmt" style="color:var(--ct-riskmgmt,#00e5a0)">RISK MANAGEMENT</div><div style="font-size:10px;color:var(--muted);margin-top:2px"><span id="riskCardSubText" data-editable>+0.5% / 3 gains · −0.5% si −5% capital · plafond </span><span id="riskMaxLabel">10</span>%</div></div>
       <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;"><label class="bt-toggle"><input type="checkbox" id="bt-risk" onchange="toggleBT('risk')"> BT</label><div class="period-btns"><button class="pbtn" data-chart="risk" data-p="jour">J</button><button class="pbtn" data-chart="risk" data-p="semaine">SEM</button><button class="pbtn" data-chart="risk" data-p="mois">MOIS</button><button class="pbtn" data-chart="risk" data-p="trimestre">TRIM</button><button class="pbtn" data-chart="risk" data-p="annee">AN</button><button class="pbtn active" data-chart="risk" data-p="tout">TOUT</button></div></div>
     </div>
     <div class="chart-body" style="height:220px"><canvas id="cRisk"></canvas></div>
@@ -407,7 +407,7 @@
           </div>
 
           <div style="margin-bottom:10px;">
-            <label style="font-size:10px;color:var(--muted);display:block;margin-bottom:5px;" data-editable>Augmentation du risque</label>
+            <label style="font-size:10px;color:var(--muted);display:block;margin-bottom:5px;font-weight:700;" data-editable>Augmentation du risque</label>
             <select id="rmUpVarType" style="width:100%;font-size:12px;">
               <option value="pct">En % de risk</option>
               <option value="eur">En € de risk</option>
@@ -604,7 +604,8 @@
   </div>
   <div class="auth-err" id="enterErr"></div>
   <div class="pin-pad" id="enterPad"></div>
-  <button class="change-pin-btn" onclick="showOverlay('overlayEmailPin')">← Changer d'email</button>
+  <button class="change-pin-btn" id="enterPinChangeEmailBtn" onclick="showOverlay('overlayEmailPin')">← Changer d'email</button>
+  <button class="change-pin-btn" id="enterPinCancelBtn" style="display:none" onclick="cancelChangePin()">← Annuler</button>
 </div>
 
 <!-- ÉTAPE 4 : Créer PIN (1ère fois) -->

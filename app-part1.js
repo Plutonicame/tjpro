@@ -1422,6 +1422,8 @@ function drawPnl(period){
   const negC=gc('--pnl-bar-neg')||'#ef4444';
   const axC=gc('--pnl-axis')||'#64748b';
   const grC=gc('--pnl-grid')||'rgba(100,116,139,.1)';
+  const avgGainC=gc('--pnl-avg-gain')||'#00e5a0';
+  const avgLossC=gc('--pnl-avg-loss')||'#f59e0b';
   const sorted=[...tr].sort((a,b)=>a.date.localeCompare(b.date)||(a.heure||'').localeCompare(b.heure||''));
   const labels=sorted.map(t=>{
     if(period==='jour'||period==='semaine')return t.heure||t.date.slice(5);
@@ -1430,16 +1432,32 @@ function drawPnl(period){
   });
   const data=sorted.map(t=>t.res||0);
   const colors=data.map(v=>v>=0?posC:negC);
+
+  // Moyennes calculées automatiquement sur les trades affichés (gains et pertes séparément)
+  const gains=data.filter(v=>v>0), pertes=data.filter(v=>v<0);
+  const avgGain=gains.length?gains.reduce((a,b)=>a+b,0)/gains.length:null;
+  const avgLoss=pertes.length?pertes.reduce((a,b)=>a+b,0)/pertes.length:null;
+
+  const datasets=[{type:'bar',label:'P&L',data,backgroundColor:colors,borderColor:colors,borderWidth:0,borderRadius:2,barPercentage:0.8,order:2}];
+  if(avgGain!==null)datasets.push({type:'line',label:'Moyenne gains',data:labels.map(()=>avgGain),borderColor:avgGainC,backgroundColor:avgGainC,borderWidth:2,borderDash:[6,4],pointRadius:0,pointHitRadius:0,fill:false,tension:0,order:1});
+  if(avgLoss!==null)datasets.push({type:'line',label:'Moyenne pertes',data:labels.map(()=>avgLoss),borderColor:avgLossC,backgroundColor:avgLossC,borderWidth:2,borderDash:[6,4],pointRadius:0,pointHitRadius:0,fill:false,tension:0,order:1});
+
   const ctx=document.getElementById('cPnl').getContext('2d');
   CH['pnl']=new Chart(ctx,{
     type:'bar',
-    data:{labels,datasets:[{data,backgroundColor:colors,borderColor:colors,borderWidth:0,borderRadius:2,barPercentage:0.8}]},
+    data:{labels,datasets},
     options:{responsive:true,maintainAspectRatio:false,
       interaction:{mode:'index',intersect:false},
-      plugins:{legend:{display:false},tooltip:{callbacks:{
-        title:items=>sorted[items[0].dataIndex]?.date||'',
-        label:i=>' P&L : '+(data[i.dataIndex]>=0?'+':'')+data[i.dataIndex].toLocaleString('fr-FR')+'€'
-      }}},
+      plugins:{
+        legend:{display:true,position:'bottom',labels:{color:axC,font:{size:9},boxWidth:20,filter:item=>item.text&&item.text!=='P&L'}},
+        tooltip:{callbacks:{
+          title:items=>sorted[items[0].dataIndex]?.date||'',
+          label:i=>{
+            if(i.dataset.type==='line')return ' '+i.dataset.label+' : '+(i.parsed.y>=0?'+':'')+i.parsed.y.toLocaleString('fr-FR',{maximumFractionDigits:2})+'€';
+            return ' P&L : '+(data[i.dataIndex]>=0?'+':'')+data[i.dataIndex].toLocaleString('fr-FR')+'€';
+          }
+        }}
+      },
       scales:{
         x:{grid:{color:grC},ticks:{color:axC,maxRotation:30,maxTicksLimit:16}},
         y:{grid:{color:grC},ticks:{color:axC,callback:v=>(v>=0?'+':'')+v.toLocaleString('fr-FR')+'€'}}
@@ -1661,6 +1679,7 @@ function buildTV(){return [
   {v:'--pnl-bg',l:'Fond',page:'Track Record',section:'P&L'},
   {v:'--pnl-bar-pos',l:'Positif',page:'Track Record',section:'P&L'},{v:'--pnl-bar-neg',l:'Négatif',page:'Track Record',section:'P&L'},
   {v:'--pnl-axis',l:'Axes',page:'Track Record',section:'P&L'},{v:'--pnl-grid',l:'Grille',page:'Track Record',section:'P&L'},
+  {v:'--pnl-avg-gain',l:'Ligne moyenne des gains',page:'Track Record',section:'P&L'},{v:'--pnl-avg-loss',l:'Ligne moyenne des pertes',page:'Track Record',section:'P&L'},
   {v:'--ct-pnl',l:'Titre',page:'Track Record',section:'P&L'},
   {v:'--risk-bg',l:'Fond',page:'Track Record',section:'Risk Management (graphique)'},{v:'--risk-line',l:'Courbe',page:'Track Record',section:'Risk Management (graphique)'},
   {v:'--risk-fill-top',l:'Dégradé haut',page:'Track Record',section:'Risk Management (graphique)'},{v:'--risk-fill-bot',l:'Dégradé bas',page:'Track Record',section:'Risk Management (graphique)'},

@@ -379,10 +379,46 @@ async function _doResetPin() {
 
 function changePinFlow() {
   if (!currentUser) return;
-  localStorage.removeItem(pinKey(currentUser.id));
-  pinFirstEntry = '';
-  showOverlay('overlayCreatePin');
-  setupCreatePin();
+  pinAttempts = 0;
+  document.getElementById('enterPinSub').textContent = 'Confirme ton code PIN actuel';
+  document.getElementById('enterPinChangeEmailBtn').style.display = 'none';
+  document.getElementById('enterPinCancelBtn').style.display = '';
+  showOverlay('overlayEnterPin');
+  buildPad('enterPad','enterDots', async (val, reset) => {
+    const stored = localStorage.getItem(pinKey(currentUser.id));
+    const attempt = await localPinHash(val, currentUser.id);
+    const isLegacyMatch = stored === val; // migration silencieuse, comme à la connexion
+    if (attempt === stored || isLegacyMatch) {
+      pinAttempts = 0;
+      localStorage.removeItem(pinKey(currentUser.id));
+      pinFirstEntry = '';
+      restoreEnterPinOverlayDefaults();
+      showOverlay('overlayCreatePin');
+      setupCreatePin();
+    } else {
+      pinAttempts++;
+      const err = document.getElementById('enterErr');
+      if (pinAttempts >= 5) {
+        err.textContent = 'Trop de tentatives.'; err.style.display = 'block';
+        setTimeout(() => cancelChangePin(), 2000);
+      } else {
+        err.textContent = `PIN incorrect (${5-pinAttempts} essai${5-pinAttempts>1?'s':''} restant${5-pinAttempts>1?'s':''})`;
+        err.style.display = 'block'; reset(true);
+      }
+    }
+  }, 'enterErr');
+}
+// Remet l'overlay de saisie PIN dans son état par défaut (usage normal : connexion)
+function restoreEnterPinOverlayDefaults() {
+  document.getElementById('enterPinChangeEmailBtn').style.display = '';
+  document.getElementById('enterPinCancelBtn').style.display = 'none';
+  document.getElementById('enterErr').style.display = 'none';
+}
+// Annule le changement de PIN (mauvais code trop de fois, ou clic sur Annuler) : retour à l'app, rien n'est modifié
+function cancelChangePin() {
+  restoreEnterPinOverlayDefaults();
+  pinAttempts = 0;
+  showOverlay(null);
 }
 
 // Email saisi à la 2ème connexion → retrouver le PIN associé
