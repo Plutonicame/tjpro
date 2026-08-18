@@ -592,10 +592,20 @@ function saveOneEdit(el){
 function openCPforPencil(){openCP('Couleur texte',pencilColor,hex=>{pencilColor=hex;document.getElementById('pencilColorSwatch').style.background=hex;});}
 function applyPencilStyle(){
   if(!currentEditEl)return;
+  const isKpiLabel=currentEditEl.classList.contains('kpi-label');
   const sz=document.getElementById('pencilFontSize').value;
   if(sz){
-    currentEditEl.style.setProperty('font-size', sz+'px', 'important');
-    currentEditEl.dataset.userFs='1';
+    if(isKpiLabel){
+      // Cas particulier : les 9 titres de KPI sont volontairement liés (la couleur l'est déjà
+      // via --kpi-label-color) — la taille doit donc aussi s'appliquer aux 9 en même temps.
+      document.querySelectorAll('.kpi-label').forEach(el=>{
+        el.style.setProperty('font-size', sz+'px', 'important');
+        el.dataset.userFs='1';
+      });
+    } else {
+      currentEditEl.style.setProperty('font-size', sz+'px', 'important');
+      currentEditEl.dataset.userFs='1';
+    }
   }
   const themeVar = pencilVarForEl(currentEditEl);
   if(themeVar){
@@ -611,7 +621,11 @@ function applyPencilStyle(){
   } else {
     currentEditEl.style.setProperty('color', pencilColor, 'important');
   }
-  saveOneEdit(currentEditEl);
+  if(isKpiLabel){
+    document.querySelectorAll('.kpi-label').forEach(el=>saveOneEdit(el));
+  } else {
+    saveOneEdit(currentEditEl);
+  }
 }
 
 function applyPencilEdits(){
@@ -1018,7 +1032,7 @@ function ensureMgmtThemeDefaults(){
 const TITLE_DEFAULTS={
   '--pt-trackrecord':'#00e5a0','--pt-pointscles':'#00e5a0','--pt-journal':'#00e5a0','--pt-calendrier':'#00e5a0','--pt-modifs':'#00e5a0',
   '--ps-trackrecord':'#64748b',
-  '--kl-capital':'#64748b','--kl-pnltotal':'#64748b','--kl-winrate':'#64748b','--kl-rrmoyen':'#64748b','--kl-profitfactor':'#64748b','--kl-payout':'#64748b','--kl-trades':'#64748b','--kl-riskactuel':'#64748b','--kl-drawdown':'#64748b',
+  '--kpi-label-color':'#64748b',
   '--ct-evolution':'#00e5a0','--ct-pnl':'#00e5a0','--ct-riskmgmt':'#00e5a0','--ct-winrate':'#00e5a0','--ct-mgmtimpact':'#00e5a0',
   '--ct-comp-conf':'#00e5a0','--ct-comp-pairs':'#00e5a0','--ct-comp-sessions':'#00e5a0','--ct-comp-jours':'#00e5a0','--ct-comp-tf':'#00e5a0',
   '--crt-top5':'#00e5a0','--crt-pires5':'#ef4444','--crt-assistant':'#00e5a0','--crt-nouveautrade':'#00e5a0','--crt-historique':'#00e5a0',
@@ -1449,7 +1463,7 @@ function drawPnl(period){
     options:{responsive:true,maintainAspectRatio:false,
       interaction:{mode:'index',intersect:false},
       plugins:{
-        legend:{display:true,position:'bottom',labels:{color:axC,font:{size:9},usePointStyle:true,boxWidth:20,boxHeight:1,filter:item=>item.text&&item.text!=='P&L'}},
+        legend:{display:true,position:'bottom',labels:{color:axC,font:{size:9},boxWidth:16,boxHeight:2,filter:item=>item.text&&item.text!=='P&L'}},
         tooltip:{callbacks:{
           title:items=>sorted[items[0].dataIndex]?.date||'',
           label:i=>{
@@ -1794,11 +1808,7 @@ function buildTV(){return [
   {v:'--undo-toast-btn-color',l:'.undo-toast-btn — texte',page:'Journal de trading',section:'Historique des trades'},
   // Track Record > KPI
   {v:'--kpi-strip-background',l:'.kpi-strip — fond',page:'Track Record',section:'KPI'},{v:'--kpi-card-background',l:'.kpi-card — fond',page:'Track Record',section:'KPI'},
-  {v:'--kl-capital',l:'Libellé — Capital',page:'Track Record',section:'KPI'},{v:'--kl-pnltotal',l:'Libellé — P&L Total',page:'Track Record',section:'KPI'},
-  {v:'--kl-winrate',l:'Libellé — Win Rate',page:'Track Record',section:'KPI'},{v:'--kl-rrmoyen',l:'Libellé — RR Moyen',page:'Track Record',section:'KPI'},
-  {v:'--kl-profitfactor',l:'Libellé — Profit Factor',page:'Track Record',section:'KPI'},{v:'--kl-payout',l:'Libellé — Pay Out',page:'Track Record',section:'KPI'},
-  {v:'--kl-trades',l:'Libellé — Trades',page:'Track Record',section:'KPI'},{v:'--kl-riskactuel',l:'Libellé — Risk Actuel',page:'Track Record',section:'KPI'},
-  {v:'--kl-drawdown',l:'Libellé — Drawdown Max',page:'Track Record',section:'KPI'},
+  {v:'--kpi-label-color',l:'Libellés (les 9 liés ensemble)',page:'Track Record',section:'KPI'},
   // Track Record > Cartes graphiques
   {v:'--chart-card-border',l:'.chart-card — bordure',page:'Track Record',section:'Cartes graphiques'},{v:'--chart-header-background',l:'.chart-header — fond',page:'Track Record',section:'Cartes graphiques'},
   {v:'--chart-header-borderbott',l:'.chart-header — bordure',page:'Track Record',section:'Cartes graphiques'},
