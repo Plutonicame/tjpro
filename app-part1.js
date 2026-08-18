@@ -1463,7 +1463,7 @@ function drawPnl(period){
     options:{responsive:true,maintainAspectRatio:false,
       interaction:{mode:'index',intersect:false},
       plugins:{
-        legend:{display:true,position:'bottom',labels:{color:axC,font:{size:9},boxWidth:16,boxHeight:2,filter:item=>item.text&&item.text!=='P&L'}},
+        legend:{display:false},
         tooltip:{callbacks:{
           title:items=>sorted[items[0].dataIndex]?.date||'',
           label:i=>{
