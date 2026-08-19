@@ -642,8 +642,8 @@ function applyPencilEdits(){
     const k=getEK(el);
     if(edits[k]){
       if(edits[k].html!==undefined&&edits[k].html!==null)el.innerHTML=edits[k].html;
-      if(edits[k].fs){el.style.fontSize=edits[k].fs;el.dataset.userFs='1';}
-      if(edits[k].col)el.style.color=edits[k].col;
+      if(edits[k].fs){el.style.setProperty('font-size',edits[k].fs,'important');el.dataset.userFs='1';}
+      if(edits[k].col)el.style.setProperty('color',edits[k].col,'important');
     }
   });
 }
