@@ -1746,6 +1746,25 @@ function pcHistoryForAI(history){
 
 // Extrait un échantillon raisonnable d'images de trades (les plus récentes) pour l'IA,
 // avec leur contexte (date/paire/résultat), pour rester dans des limites de taille/coût acceptables.
+// Capture tous les graphiques Track Record actuellement rendus (Chart.js) en images, pour
+// que l'IA puisse les voir. Contrairement aux trades/comptes, un graphique n'existe QUE dans
+// le navigateur (rendu sur un <canvas>) — impossible à aller chercher côté serveur, donc on
+// les envoie directement à chaque question (l'IA ne les regarde que si la question l'exige).
+const CHART_LABELS={eq:'Évolution du capital',pnl:'P&L',pie:'Win Rate',risk:'Risk Management',mgmt:'Impact du Management',cConf:'Comparaison par confluence',cPairs:'Comparaison par paire',cSessions:'Comparaison par session',jours:'Comparaison par jour de semaine',cTF:'Comparaison par timeframe'};
+function pcPrepareChartImages(){
+  const out=[];
+  if(typeof CH!=='object'||!CH)return out;
+  Object.keys(CH).forEach(key=>{
+    try{
+      const chart=CH[key];
+      if(!chart||typeof chart.toBase64Image!=='function')return;
+      const dataUrl=chart.toBase64Image();
+      if(dataUrl&&dataUrl.startsWith('data:image'))out.push({name:CHART_LABELS[key]||key,dataUrl});
+    }catch(e){ /* graphique pas encore rendu ou détruit : on l'ignore simplement */ }
+  });
+  return out;
+}
+
 function pcPrepareImagesForAI(trades, maxImages=8){
   const sorted=[...(trades||[])].filter(t=>t.images&&t.images.length).sort((a,b)=>(b.date||'').localeCompare(a.date||''));
   const out=[];
@@ -1766,14 +1785,16 @@ async function pcAskAI(question, trades, history){
   let payload = {
     question,
     history: pcHistoryForAI(history),
-    images: pcPrepareImagesForAI(trades)
+    chartImages: pcPrepareChartImages()
   };
 
   if (isCloud) {
     // Compte cloud : on s'assure que journal_data est à jour côté serveur (le push est un
     // no-op si rien n'a changé), puis on envoie le VRAI token de l'utilisateur — c'est lui qui
     // permet à la fonction Edge d'aller chercher les données elle-même via ses outils, plutôt
-    // que de les recevoir poussées ici. On n'envoie donc plus trades/compte dans ce cas.
+    // que de les recevoir poussées ici. On n'envoie donc plus trades/compte/images de trades
+    // dans ce cas : l'IA peut demander get_trades puis get_trade_images (TOUS les trades sont
+    // potentiellement accessibles, pas juste un échantillon de 8) si elle en a besoin.
     try { await pushToCloud(); } catch(e) { console.warn('Sync avant question IA impossible :', e); }
     try {
       const { data: sessionData } = await sb.auth.getSession();
@@ -1782,9 +1803,11 @@ async function pcAskAI(question, trades, history){
   }
   if (!isCloud || authToken === PC_SUPABASE_ANON_KEY) {
     // Pas de compte cloud (ou session indisponible) : repli sur l'ancien comportement,
-    // les données sont envoyées directement dans la requête.
+    // les données et un échantillon d'images sont envoyés directement dans la requête
+    // (impossible d'aller chercher plus à la demande sans compte cloud).
     payload.compte = pcPrepareAccountContext();
     payload.trades = pcPrepareTradesForAI(trades);
+    payload.images = pcPrepareImagesForAI(trades);
   }
 
   const res = await fetch(PC_AI_ENDPOINT, {
