@@ -26,7 +26,20 @@ function uidByEmailKey(email) { return 'tjp_uid_' + email.toLowerCase().replace(
 
 const PIN_AUTH_ENDPOINT = 'https://ghjashqgwlaofjubzrcp.supabase.co/functions/v1/pin-auth';
 
+// v2 : PBKDF2-SHA256 avec 100 000 itérations. Beaucoup plus coûteux à casser
+// hors-ligne qu'un simple SHA-256 mono-passe, ce qui compte vu qu'un PIN à 4
+// chiffres n'a que 10 000 combinaisons possibles. Préfixé "v2:" pour pouvoir
+// distinguer un hash déjà migré d'un ancien hash v1.
 async function localPinHash(pin, uid) {
+  const enc = new TextEncoder();
+  const keyMaterial = await crypto.subtle.importKey('raw', enc.encode(pin), { name: 'PBKDF2' }, false, ['deriveBits']);
+  const salt = enc.encode('tjp_pin_v2:' + uid);
+  const bits = await crypto.subtle.deriveBits({ name: 'PBKDF2', salt, iterations: 100000, hash: 'SHA-256' }, keyMaterial, 256);
+  return 'v2:' + Array.from(new Uint8Array(bits)).map(b => b.toString(16).padStart(2,'0')).join('');
+}
+// Ancien format (v1) : un seul passage SHA-256. Conservé uniquement pour
+// détecter un hash existant et le migrer silencieusement vers le v2 ci-dessus.
+async function localPinHashV1(pin, uid) {
   const enc = new TextEncoder().encode('tjp_pin_v1:' + uid + ':' + pin);
   const digest = await crypto.subtle.digest('SHA-256', enc);
   return Array.from(new Uint8Array(digest)).map(b => b.toString(16).padStart(2,'0')).join('');
@@ -117,9 +130,12 @@ function setupEnterPin() {
     // ce correctif de sécurité) et correspond, on le fait passer au nouveau format
     // — en local ET côté serveur — sans rien demander de plus à l'utilisateur.
     const isLegacyMatch = stored === val;
-    if (attempt === stored || isLegacyMatch) {
+    // Migration silencieuse v1 → v2 (PBKDF2) : l'ancien hash SHA-256 mono-passe
+    // est toujours valide tant qu'il n'a pas été remplacé par un v2.
+    const isV1Match = !isLegacyMatch && stored && !stored.startsWith('v2:') && stored === await localPinHashV1(val, currentUser.id);
+    if (attempt === stored || isLegacyMatch || isV1Match) {
       pinAttempts = 0;
-      if (isLegacyMatch) {
+      if (isLegacyMatch || isV1Match) {
         try {
           localStorage.setItem(pinKey(currentUser.id), attempt);
           const { data: sessionData } = await sb.auth.getSession();
@@ -1844,7 +1860,11 @@ async function sendPcMessage(){
   const trades = APP.trades || [];
   let answer;
   try {
-    answer = await pcAskAI(q, trades, historySnapshot);
+    const rawAnswer = await pcAskAI(q, trades, historySnapshot);
+    // Sécurité : la réponse vient d'une source externe (edge function / Gemini).
+    // On l'échappe avant de la mettre en innerHTML, puis on ne réintroduit que
+    // le formatage minimal (retours à la ligne) — jamais de HTML brut d'origine externe.
+    answer = escapeHtml(rawAnswer).replace(/\r\n|\r|\n/g,'<br>');
   } catch(err) {
     console.warn('Agent IA indisponible, bascule sur le moteur local :', err);
     answer = pcAnalyze(q) + '<br><br><span style="opacity:.6;font-size:.85em;">(réponse générée en local, l\'assistant IA est momentanément indisponible)</span>';
@@ -1863,7 +1883,8 @@ async function sendPcMessage(){
 }
 
 function escapeHtml(s){
-  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  if(s==null) return '';
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
 }
 // Détecte le mode téléphone (même seuil que les media queries CSS)
 function isMobileView(){return window.innerWidth<=1100;}
@@ -1938,11 +1959,11 @@ function pcGlobalSummary(trades){
   r += '<br>';
 
   if (byPaire.length) {
-    r += `Meilleure paire : <strong>${byPaire[0][0]}</strong> (${byPaire[0][1].pnl>=0?'+':''}${byPaire[0][1].pnl.toFixed(0)}€)`;
-    if (byPaire.length>1 && byPaire[byPaire.length-1][1].pnl<0) r += `, pire paire : <strong>${byPaire[byPaire.length-1][0]}</strong> (${byPaire[byPaire.length-1][1].pnl.toFixed(0)}€)`;
+    r += `Meilleure paire : <strong>${escapeHtml(byPaire[0][0])}</strong> (${byPaire[0][1].pnl>=0?'+':''}${byPaire[0][1].pnl.toFixed(0)}€)`;
+    if (byPaire.length>1 && byPaire[byPaire.length-1][1].pnl<0) r += `, pire paire : <strong>${escapeHtml(byPaire[byPaire.length-1][0])}</strong> (${byPaire[byPaire.length-1][1].pnl.toFixed(0)}€)`;
     r += '.<br>';
   }
-  if (bySess.length) r += `Meilleure session : <strong>${bySess[0][0]}</strong> (${bySess[0][1].pnl>=0?'+':''}${bySess[0][1].pnl.toFixed(0)}€).<br>`;
+  if (bySess.length) r += `Meilleure session : <strong>${escapeHtml(bySess[0][0])}</strong> (${bySess[0][1].pnl>=0?'+':''}${bySess[0][1].pnl.toFixed(0)}€).<br>`;
   if (byDay.length) {
     const bestDay = byDay[0], worstDay=[...byDay].sort((a,b)=>a[1].pnl-b[1].pnl)[0];
     r += `Meilleur jour : <strong>${bestDay[0]}</strong> (${bestDay[1].pnl>=0?'+':''}${bestDay[1].pnl.toFixed(0)}€)`;
@@ -2020,7 +2041,7 @@ function pcAnalyze(q){
     const pnl = dayTrades.reduce((s,t)=>s+(t.res||0),0);
     const dwr = (dayTrades.filter(t=>(t.res||0)>0).length / dayTrades.length * 100).toFixed(0);
     let r = `<strong>${jours[dayIdx].charAt(0).toUpperCase()+jours[dayIdx].slice(1)}</strong> : ${dayTrades.length} trade(s), P&L total ${pnl>=0?'+':''}${pnl.toFixed(2)}€, win rate ${dwr}%.`;
-    if (pBy.length) r += `<br>Meilleure paire ce jour-là : ${pBy[0][0]} (${pBy[0][1].pnl>=0?'+':''}${pBy[0][1].pnl.toFixed(0)}€).`;
+    if (pBy.length) r += `<br>Meilleure paire ce jour-là : ${escapeHtml(pBy[0][0])} (${pBy[0][1].pnl>=0?'+':''}${pBy[0][1].pnl.toFixed(0)}€).`;
     return r;
   }
 
@@ -2030,7 +2051,7 @@ function pcAnalyze(q){
     if (pNorm.length >= 3 && qNorm.includes(pNorm)) {
       const pTrades = trades.filter(t=>(t.paire||'')===paire);
       const dwr = (d.w/d.n*100).toFixed(0);
-      let r = `<strong>${paire}</strong> : ${d.n} trade(s), P&L ${d.pnl>=0?'+':''}${d.pnl.toFixed(2)}€, win rate ${dwr}%.`;
+      let r = `<strong>${escapeHtml(paire)}</strong> : ${d.n} trade(s), P&L ${d.pnl>=0?'+':''}${d.pnl.toFixed(2)}€, win rate ${dwr}%.`;
       const noted = pTrades.filter(t=>t.notes&&t.notes.trim());
       if (noted.length) r += `<br>${noted.length} trade(s) commenté(s) sur cette paire.`;
       return r;
@@ -2041,7 +2062,7 @@ function pcAnalyze(q){
   for (const [conf, d] of byConf) {
     const cNorm = stripAccents(conf.toLowerCase());
     if (cNorm.length >= 3 && qNorm.includes(cNorm)) {
-      return `Confluence <strong>"${conf}"</strong> : ${d.n} trade(s), P&L ${d.pnl>=0?'+':''}${d.pnl.toFixed(2)}€, win rate ${(d.w/d.n*100).toFixed(0)}%.`;
+      return `Confluence <strong>"${escapeHtml(conf)}"</strong> : ${d.n} trade(s), P&L ${d.pnl>=0?'+':''}${d.pnl.toFixed(2)}€, win rate ${(d.w/d.n*100).toFixed(0)}%.`;
     }
   }
 
@@ -2049,7 +2070,7 @@ function pcAnalyze(q){
   for (const [sess, d] of bySess) {
     const sNorm = stripAccents(sess.toLowerCase());
     if (sNorm.length >= 3 && qNorm.includes(sNorm)) {
-      return `Session <strong>${sess}</strong> : ${d.n} trade(s), P&L ${d.pnl>=0?'+':''}${d.pnl.toFixed(2)}€, win rate ${(d.w/d.n*100).toFixed(0)}%.`;
+      return `Session <strong>${escapeHtml(sess)}</strong> : ${d.n} trade(s), P&L ${d.pnl>=0?'+':''}${d.pnl.toFixed(2)}€, win rate ${(d.w/d.n*100).toFixed(0)}%.`;
     }
   }
 
@@ -2119,7 +2140,7 @@ function pcAnalyze(q){
       let r = `${withNotes.length} trade(s) avec une note sur ${total} (${winNotes} gagnants, ${loseNotes} perdants).<br>`;
       if (topWords.length) r += `Mots/thèmes qui reviennent souvent dans tes notes : ${topWords.join(', ')}.<br>`;
       const lastNoted = [...withNotes].sort((a,b)=>(b.date||'').localeCompare(a.date||''))[0];
-      if (lastNoted) r += `Dernière note (${lastNoted.date||'?'}, ${lastNoted.paire||''}) : "${lastNoted.notes.slice(0,140)}${lastNoted.notes.length>140?'…':''}"`;
+      if (lastNoted) r += `Dernière note (${escapeHtml(lastNoted.date)||'?'}, ${escapeHtml(lastNoted.paire)||''}) : "${escapeHtml(lastNoted.notes.slice(0,140))}${lastNoted.notes.length>140?'…':''}"`;
       return r;
     }
 
@@ -2136,7 +2157,7 @@ function pcAnalyze(q){
       const byReprend = pcStat(trades,'reprend');
       let r = '';
       if (byMgmt.length) {
-        r += `Gestion de trade la plus rentable : <strong>${byMgmt[0][0]}</strong> (${byMgmt[0][1].pnl>=0?'+':''}${byMgmt[0][1].pnl.toFixed(0)}€, ${(byMgmt[0][1].w/byMgmt[0][1].n*100).toFixed(0)}% WR).<br>`;
+        r += `Gestion de trade la plus rentable : <strong>${escapeHtml(byMgmt[0][0])}</strong> (${byMgmt[0][1].pnl>=0?'+':''}${byMgmt[0][1].pnl.toFixed(0)}€, ${(byMgmt[0][1].w/byMgmt[0][1].n*100).toFixed(0)}% WR).<br>`;
       }
       if (byReprend.length) {
         const totPnl = byReprend.reduce((s,[,d])=>s+d.pnl,0);
@@ -2151,9 +2172,9 @@ function pcAnalyze(q){
       if (parseFloat(wr) >= 50) pts.push(`Win rate solide de ${wr}% sur ${total} trades`);
       if (parseFloat(pf) >= 1.2) pts.push(`Profit factor de ${pf}, tes gains dépassent tes pertes`);
       if (totalPnl > 0) pts.push(`Compte en hausse de ${totalPnl>=0?'+':''}${totalPnl.toFixed(2)}€`);
-      byPaire.filter(([,d])=>d.pnl>0).slice(0,2).forEach(([p,d])=>pts.push(`${p} est rentable : ${d.pnl>=0?'+':''}${d.pnl.toFixed(0)}€ sur ${d.n} trades (${(d.w/d.n*100).toFixed(0)}% WR)`));
-      bySess.filter(([,d])=>d.pnl>0).slice(0,1).forEach(([s,d])=>pts.push(`La session ${s} te réussit bien (${d.pnl>=0?'+':''}${d.pnl.toFixed(0)}€)`));
-      byConf.filter(([,d])=>d.pnl>0&&d.n>=2).slice(0,2).forEach(([c,d])=>pts.push(`La confluence "${c}" fonctionne (${(d.w/d.n*100).toFixed(0)}% WR sur ${d.n} trades)`));
+      byPaire.filter(([,d])=>d.pnl>0).slice(0,2).forEach(([p,d])=>pts.push(`${escapeHtml(p)} est rentable : ${d.pnl>=0?'+':''}${d.pnl.toFixed(0)}€ sur ${d.n} trades (${(d.w/d.n*100).toFixed(0)}% WR)`));
+      bySess.filter(([,d])=>d.pnl>0).slice(0,1).forEach(([s,d])=>pts.push(`La session ${escapeHtml(s)} te réussit bien (${d.pnl>=0?'+':''}${d.pnl.toFixed(0)}€)`));
+      byConf.filter(([,d])=>d.pnl>0&&d.n>=2).slice(0,2).forEach(([c,d])=>pts.push(`La confluence "${escapeHtml(c)}" fonctionne (${(d.w/d.n*100).toFixed(0)}% WR sur ${d.n} trades)`));
       if (!pts.length) return `Je n'ai pas encore identifié de point fort net — continue à logger tes trades pour affiner l'analyse.`;
       return `<strong>Tes points forts :</strong><br>• ${pts.slice(0,5).join('<br>• ')}`;
     }
@@ -2163,11 +2184,11 @@ function pcAnalyze(q){
       if (parseFloat(wr) < 50) pts.push(`Win rate de ${wr}%, sous la barre des 50%`);
       if (parseFloat(pf) < 1) pts.push(`Profit factor de ${pf} : tes pertes dépassent tes gains`);
       if (totalPnl < 0) pts.push(`Compte en baisse de ${totalPnl.toFixed(2)}€`);
-      byPaire.filter(([,d])=>d.pnl<0).slice(0,2).forEach(([p,d])=>pts.push(`${p} est déficitaire : ${d.pnl.toFixed(0)}€ sur ${d.n} trades (${(d.w/d.n*100).toFixed(0)}% WR)`));
-      byTF.filter(([,d])=>d.pnl<0).slice(0,2).forEach(([tf,d])=>pts.push(`Le timeframe ${tf} te coûte ${d.pnl.toFixed(0)}€`));
+      byPaire.filter(([,d])=>d.pnl<0).slice(0,2).forEach(([p,d])=>pts.push(`${escapeHtml(p)} est déficitaire : ${d.pnl.toFixed(0)}€ sur ${d.n} trades (${(d.w/d.n*100).toFixed(0)}% WR)`));
+      byTF.filter(([,d])=>d.pnl<0).slice(0,2).forEach(([tf,d])=>pts.push(`Le timeframe ${escapeHtml(tf)} te coûte ${d.pnl.toFixed(0)}€`));
       const worstDays = [...byDay].sort((a,b)=>a[1].pnl-b[1].pnl).filter(([,d])=>d.pnl<0).slice(0,2);
       worstDays.forEach(([day,d])=>pts.push(`Le ${day} est ton jour le moins bon (${d.pnl.toFixed(0)}€)`));
-      byConf.filter(([,d])=>d.pnl<0&&d.n>=2).slice(0,2).forEach(([c,d])=>pts.push(`La confluence "${c}" ne fonctionne pas bien (${d.pnl.toFixed(0)}€)`));
+      byConf.filter(([,d])=>d.pnl<0&&d.n>=2).slice(0,2).forEach(([c,d])=>pts.push(`La confluence "${escapeHtml(c)}" ne fonctionne pas bien (${d.pnl.toFixed(0)}€)`));
       if (!pts.length) return `Rien de problématique détecté pour le moment, continue comme ça !`;
       return `<strong>Tes points à améliorer :</strong><br>• ${pts.slice(0,5).join('<br>• ')}`;
     }
@@ -2192,37 +2213,37 @@ function pcAnalyze(q){
     case 'meilleurepaire': {
       if (!byPaire.length) return 'Aucune paire renseignée dans le journal.';
       const [p, d] = byPaire[0];
-      return `Ta meilleure paire est <strong>${p}</strong> avec ${d.pnl>=0?'+':''}${d.pnl.toFixed(2)}€ sur ${d.n} trade(s), soit ${(d.w/d.n*100).toFixed(0)}% de win rate.`;
+      return `Ta meilleure paire est <strong>${escapeHtml(p)}</strong> avec ${d.pnl>=0?'+':''}${d.pnl.toFixed(2)}€ sur ${d.n} trade(s), soit ${(d.w/d.n*100).toFixed(0)}% de win rate.`;
     }
 
     case 'pirepaire': {
       if (!byPaire.length) return 'Aucune paire renseignée dans le journal.';
       const [p, d] = byPaire[byPaire.length-1];
-      return `Ta paire la moins performante est <strong>${p}</strong> avec ${d.pnl>=0?'+':''}${d.pnl.toFixed(2)}€ sur ${d.n} trade(s), soit ${(d.w/d.n*100).toFixed(0)}% de win rate.`;
+      return `Ta paire la moins performante est <strong>${escapeHtml(p)}</strong> avec ${d.pnl>=0?'+':''}${d.pnl.toFixed(2)}€ sur ${d.n} trade(s), soit ${(d.w/d.n*100).toFixed(0)}% de win rate.`;
     }
 
     case 'session': {
       if (!bySess.length) return 'Aucune session renseignée dans le journal.';
       const best = bySess[0];
       const worst = bySess[bySess.length-1];
-      let r = `Meilleure session : <strong>${best[0]}</strong> (${best[1].pnl>=0?'+':''}${best[1].pnl.toFixed(2)}€, ${(best[1].w/best[1].n*100).toFixed(0)}% WR).`;
-      if (bySess.length > 1) r += `<br>Session la moins bonne : <strong>${worst[0]}</strong> (${worst[1].pnl>=0?'+':''}${worst[1].pnl.toFixed(2)}€).`;
+      let r = `Meilleure session : <strong>${escapeHtml(best[0])}</strong> (${best[1].pnl>=0?'+':''}${best[1].pnl.toFixed(2)}€, ${(best[1].w/best[1].n*100).toFixed(0)}% WR).`;
+      if (bySess.length > 1) r += `<br>Session la moins bonne : <strong>${escapeHtml(worst[0])}</strong> (${worst[1].pnl>=0?'+':''}${worst[1].pnl.toFixed(2)}€).`;
       return r;
     }
 
     case 'timeframe': {
       if (!byTF.length) return 'Aucun timeframe renseigné dans le journal.';
       const best = byTF[0];
-      let r = `Meilleur timeframe : <strong>${best[0]}</strong> (${best[1].pnl>=0?'+':''}${best[1].pnl.toFixed(2)}€, ${(best[1].w/best[1].n*100).toFixed(0)}% WR sur ${best[1].n} trades).`;
+      let r = `Meilleur timeframe : <strong>${escapeHtml(best[0])}</strong> (${best[1].pnl>=0?'+':''}${best[1].pnl.toFixed(2)}€, ${(best[1].w/best[1].n*100).toFixed(0)}% WR sur ${best[1].n} trades).`;
       const worst = byTF[byTF.length-1];
-      if (byTF.length > 1 && worst[1].pnl < 0) r += `<br>À éviter : <strong>${worst[0]}</strong> (${worst[1].pnl.toFixed(2)}€).`;
+      if (byTF.length > 1 && worst[1].pnl < 0) r += `<br>À éviter : <strong>${escapeHtml(worst[0])}</strong> (${worst[1].pnl.toFixed(2)}€).`;
       return r;
     }
 
     case 'confluence': {
       if (!byConf.length) return 'Aucune confluence renseignée dans le journal.';
       const best = byConf[0];
-      return `Confluence la plus rentable : <strong>"${best[0]}"</strong> (${best[1].pnl>=0?'+':''}${best[1].pnl.toFixed(2)}€, ${(best[1].w/best[1].n*100).toFixed(0)}% WR sur ${best[1].n} trades).`;
+      return `Confluence la plus rentable : <strong>"${escapeHtml(best[0])}"</strong> (${best[1].pnl>=0?'+':''}${best[1].pnl.toFixed(2)}€, ${(best[1].w/best[1].n*100).toFixed(0)}% WR sur ${best[1].n} trades).`;
     }
 
     case 'winrate':

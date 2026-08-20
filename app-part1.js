@@ -993,8 +993,8 @@ function pcShowUndoToast(){
 // Ajuste la hauteur d'un textarea à son contenu (1 ligne mini, autant que nécessaire au-delà, jamais de scroll interne)
 function autoGrow(el){if(!el)return;el.style.height='auto';el.style.height=el.scrollHeight+'px';}
 function resetForm(){['f-date','f-heure','f-paire','f-session','f-dir','f-rrcible','f-res','f-mgmt','f-reprend','f-notes','f-rrpris'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});const fbt=document.getElementById('f-backtest');if(fbt)fbt.checked=false;document.querySelectorAll('#tf-wrap .chip,#conf-wrap .chip').forEach(c=>c.classList.remove('sel'));document.getElementById('f-date').value=new Date().toISOString().split('T')[0];initStarPicker('f-stars-picker','f-stars',0);window._formImages=[];renderFormImages();const fTgl=document.getElementById('f-tglRrAuto');if(fTgl){fTgl.classList.add('on');document.getElementById('f-rrpris-group').style.display='none';}autoGrow(document.getElementById('f-notes'));}
-function tagD(v){return v==='LONG'?'<span class="tag tag-long">LONG</span>':v==='SHORT'?'<span class="tag tag-short">SHORT</span>':v||'—';}
-function tagO(v){const m={Oui:'oui',Non:'non','Peut-être':'peut','N/A':'na'};return v?`<span class="tag tag-${m[v]||'na'}">${v}</span>`:'—';}
+function tagD(v){return v==='LONG'?'<span class="tag tag-long">LONG</span>':v==='SHORT'?'<span class="tag tag-short">SHORT</span>':(v?escapeHtml(v):'—');}
+function tagO(v){const m={Oui:'oui',Non:'non','Peut-être':'peut','N/A':'na'};return v?`<span class="tag tag-${m[v]||'na'}">${escapeHtml(v)}</span>`:'—';}
 const MGMT_PALETTE=[
   {bg:'rgba(0,229,160,.12)',tx:'#00e5a0',bd:'#00e5a0'},
   {bg:'rgba(239,68,68,.12)',tx:'#ef4444',bd:'#ef4444'},
@@ -1009,9 +1009,9 @@ function mgmtPal(i,ch){return MGMT_PALETTE[i%MGMT_PALETTE.length][ch];}
 function tagMgmt(v){
   if(!v)return '—';
   const idx=(APP.lists.mgmt_opts||[]).indexOf(v);
-  if(idx<0)return `<span class="tag" style="background:var(--tag-na-bg);color:var(--tag-na-tx);border-color:var(--tag-na-bd)">${v}</span>`;
+  if(idx<0)return `<span class="tag" style="background:var(--tag-na-bg);color:var(--tag-na-tx);border-color:var(--tag-na-bd)">${escapeHtml(v)}</span>`;
   const bg=`var(--tag-mgmt-${idx}-bg,${mgmtPal(idx,'bg')})`,tx=`var(--tag-mgmt-${idx}-tx,${mgmtPal(idx,'tx')})`,bd=`var(--tag-mgmt-${idx}-bd,${mgmtPal(idx,'bd')})`;
-  return `<span class="tag" style="background:${bg};color:${tx};border-color:${bd}">${v}</span>`;
+  return `<span class="tag" style="background:${bg};color:${tx};border-color:${bd}">${escapeHtml(v)}</span>`;
 }
 function ensureMgmtThemeDefaults(){
   (APP.lists.mgmt_opts||[]).forEach((m,i)=>{
@@ -1120,13 +1120,13 @@ function renderTable(){
     const p=pctMap[t.id]||0;
     const pctHtml=`<span class="${p>=0?'rp':'rn'}">${p>=0?'+':''}${p.toFixed(2)}%</span>`;
     return `<tr>
-    <td style="font-family:var(--mono)">${t.date||'—'}</td>
-    <td style="font-family:var(--mono)">${t.heure||'—'}</td>
-    <td style="color:var(--muted)">${t.session||'—'}</td>
-    <td><strong>${t.paire||'—'}</strong>${t.backtest?'&nbsp;<span style="font-size:11px;line-height:1;padding:1px 3px;background:var(--bt-bg);color:var(--bt-tx);border-radius:3px;font-family:var(--mono);display:inline-block;">BT</span>':''}</td>
+    <td style="font-family:var(--mono)">${escapeHtml(t.date)||'—'}</td>
+    <td style="font-family:var(--mono)">${escapeHtml(t.heure)||'—'}</td>
+    <td style="color:var(--muted)">${escapeHtml(t.session)||'—'}</td>
+    <td><strong>${escapeHtml(t.paire)||'—'}</strong>${t.backtest?'&nbsp;<span style="font-size:11px;line-height:1;padding:1px 3px;background:var(--bt-bg);color:var(--bt-tx);border-radius:3px;font-family:var(--mono);display:inline-block;">BT</span>':''}</td>
     <td>${tagD(t.dir)}</td>
-    <td style="font-family:var(--mono);color:var(--state-tf)">${t.tf||'—'}</td>
-    <td style="color:var(--muted);max-width:120px;overflow:hidden;text-overflow:ellipsis" title="${t.conf||''}">${t.conf||'—'}</td>
+    <td style="font-family:var(--mono);color:var(--state-tf)">${escapeHtml(t.tf)||'—'}</td>
+    <td style="color:var(--muted);max-width:120px;overflow:hidden;text-overflow:ellipsis" title="${escapeHtml(t.conf)}">${escapeHtml(t.conf)||'—'}</td>
     <td style="font-family:var(--mono);color:var(--muted)">${t.rrCible?t.rrCible+'R':'—'}</td>
     <td style="font-family:var(--mono)">${computeRR(t)}R</td>
     <td>${fmtR(t.res)}</td><td>${pctHtml}</td>
