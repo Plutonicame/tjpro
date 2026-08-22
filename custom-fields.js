@@ -44,9 +44,13 @@ const CF_BUILTIN_KPIS = [
 const CF_BUILTIN_CHARTS = [
   {id:'eq',label:'Évolution du capital'},{id:'pnl',label:'P&L'},{id:'risk',label:'Risk Management'},
   {id:'pie',label:'Win Rate'},{id:'mgmt',label:'Impact du management'},
+  {id:'top5',label:'Top 5 / Pires 5 trades'},
   {id:'conf',label:'Par confluence'},{id:'pairs',label:'Par paire / actif'},
   {id:'sessions',label:'Par session'},{id:'jours',label:'Par jour de semaine'},{id:'tf',label:'Par timeframe'}
 ];
+// Graphiques natifs à largeur FIXE de 1/2 (les autres graphiques natifs sont
+// pleine largeur ; les camemberts ont une largeur dynamique selon leur nombre)
+const CF_HALF_WIDTH_NATIVE = new Set(['mgmt','top5']);
 const CF_TYPE_META = {
   stars:{label:'Note en étoiles (1 à 5)', widgets:['none','kpi','card','bar-v','bar-h','pie']},
   text:{label:'Zone de texte', widgets:['none']},
@@ -87,13 +91,12 @@ function cfNewId(){
 function cfInsertIntoOrder(orderArr, id, afterId){
   const idx=orderArr.indexOf(id);
   if(idx!==-1)orderArr.splice(idx,1);
+  if(afterId==='__start__'){ orderArr.unshift(id); return; } // choix explicite "— Au début —"
   if(afterId){
     const pos=orderArr.indexOf(afterId);
     if(pos!==-1){orderArr.splice(pos+1,0,id);return;}
-    orderArr.push(id); // ancre introuvable (ex: champ supprimé entre-temps) : on ajoute à la fin plutôt que de perdre l'élément
-    return;
   }
-  orderArr.unshift(id); // pas d'ancre = "— Au début —" : doit correspondre au libellé affiché dans le menu
+  orderArr.push(id); // par défaut ("— À la fin —") ou ancre introuvable : on ajoute à la fin
 }
 function cfEnsureOrders(){
   if(!APP.cfColOrder)APP.cfColOrder=CF_BUILTIN_COLS.map(c=>c.id);
@@ -128,14 +131,16 @@ function cfDisplayValue(field,t){
   if(field.type==='toggle')return v?'Oui':(v===false?'Non':undefined);
   return v;
 }
-function cfNumericStats(field){
-  const vals=realTrades().map(t=>t['cf_'+field.id]).filter(v=>v!==undefined&&v!==null&&v!==''&&!isNaN(parseFloat(v))).map(v=>parseFloat(v));
+function cfNumericStats(field,trades){
+  const list=trades||realTrades();
+  const vals=list.map(t=>t['cf_'+field.id]).filter(v=>v!==undefined&&v!==null&&v!==''&&!isNaN(parseFloat(v))).map(v=>parseFloat(v));
   const sum=vals.reduce((a,b)=>a+b,0);
   return {vals,count:vals.length,avg:vals.length?sum/vals.length:0,sum};
 }
-function cfCategoryStats(field){
+function cfCategoryStats(field,trades){
+  const list=trades||realTrades();
   const map={};
-  realTrades().forEach(t=>{
+  list.forEach(t=>{
     const raw=cfDisplayValue(field,t);
     if(raw===undefined||raw===null||raw==='')return;
     const v=String(raw);
@@ -226,7 +231,8 @@ function cfInjectFormFields(prefix){
       const f=remaining[i];
       const anchor=f.afterField;
       let anchorEl=null,isStart=false;
-      if(!anchor){isStart=true;}
+      if(anchor==='__start__'){isStart=true;}
+      else if(!anchor){ /* "— À la fin —" (par défaut) : reste en attente, traité par le passage final ci-dessous */ }
       else if(anchor.indexOf('cf_')===0){anchorEl=document.getElementById(prefix+'-cf-'+anchor+'-wrap');}
       else{anchorEl=cfBuiltinAnchorEl(prefix,anchor);}
       if(isStart||anchorEl){
@@ -350,11 +356,90 @@ function cfApplyKpiOrder(){
   cfTagBuiltinKpiCards();
   cfEnsureOrders();
   const map={};
-  Array.from(strip.children).forEach(card=>{ if(card.dataset.kpiId)map[card.dataset.kpiId]=card; });
+  Array.from(strip.querySelectorAll('.kpi-card')).forEach(card=>{ if(card.dataset.kpiId)map[card.dataset.kpiId]=card; });
   APP.cfKpiOrder.forEach(id=>{ if(map[id])strip.appendChild(map[id]); });
+}
+// Empile les cases KPI par lignes de taille égale, ex: 15 -> 8+7, 16 -> 8+8
+// (répartition la plus équilibrée possible sur le minimum de lignes).
+function cfBalancedRowSizes(total,maxPerRow){
+  const rows=Math.max(1,Math.ceil(total/maxPerRow));
+  const base=Math.floor(total/rows);
+  const extra=total%rows;
+  const sizes=[];
+  for(let i=0;i<rows;i++)sizes.push(base+(i<extra?1:0));
+  return sizes;
+}
+// Réorganise le DOM des cases KPI en lignes :
+//  - Téléphone : toujours des lignes de 3, complétées par des cases vides
+//    (juste le fond, pas de contenu) si la dernière ligne n'est pas pleine —
+//    les cases ne changent jamais de taille.
+//  - PC : une seule ligne tant qu'il y a 14 cases ou moins (elles se
+//    partagent alors la largeur totale, donc rétrécissent progressivement) ;
+//    au-delà de 14, répartition équilibrée sur plusieurs lignes de 14 max.
+function cfLayoutKpiStrip(){
+  const strip=document.querySelector('#page-trackrecord .kpi-strip');
+  if(!strip)return;
+  const cards=Array.from(strip.querySelectorAll('.kpi-card:not(.cf-kpi-placeholder)'));
+  const n=cards.length;
+  if(!n)return;
+  strip.querySelectorAll('.cf-kpi-row').forEach(row=>{
+    Array.from(row.children).forEach(ch=>{ if(ch.classList.contains('kpi-card')&&!ch.classList.contains('cf-kpi-placeholder'))strip.appendChild(ch); });
+    row.remove();
+  });
+  const rowBg=gc('--kpi-strip-background')||'#1e2d45';
+  if(cfIsMobile()){
+    strip.style.display='flex';
+    strip.style.flexDirection='column';
+    strip.style.gap='1px';
+    strip.style.gridTemplateColumns='';
+    const rowSize=3;
+    const rows=Math.ceil(n/rowSize);
+    for(let r=0;r<rows;r++){
+      const rowEl=document.createElement('div');
+      rowEl.className='cf-kpi-row';
+      rowEl.style.cssText='display:grid;grid-template-columns:repeat('+rowSize+',1fr);gap:1px;background:'+rowBg+';';
+      for(let i=0;i<rowSize;i++){
+        const idx=r*rowSize+i;
+        if(idx<n)rowEl.appendChild(cards[idx]);
+        else{
+          const ph=document.createElement('div');
+          ph.className='kpi-card cf-kpi-placeholder';
+          rowEl.appendChild(ph);
+        }
+      }
+      strip.appendChild(rowEl);
+    }
+    return;
+  }
+  if(n<=14){
+    strip.style.display='grid';
+    strip.style.flexDirection='';
+    strip.style.gridTemplateColumns='repeat('+n+',1fr)';
+    strip.style.gap='1px';
+    cards.forEach(c=>strip.appendChild(c));
+  } else {
+    strip.style.display='flex';
+    strip.style.flexDirection='column';
+    strip.style.gap='1px';
+    strip.style.gridTemplateColumns='';
+    const sizes=cfBalancedRowSizes(n,14);
+    let idx=0;
+    sizes.forEach(size=>{
+      const rowEl=document.createElement('div');
+      rowEl.className='cf-kpi-row';
+      rowEl.style.cssText='display:grid;grid-template-columns:repeat('+size+',1fr);gap:1px;background:'+rowBg+';';
+      for(let i=0;i<size;i++){ rowEl.appendChild(cards[idx]); idx++; }
+      strip.appendChild(rowEl);
+    });
+  }
 }
 
 // ── Zone graphiques/widgets du Track Record ──
+// Système de largeur : grille à 6 colonnes. Pleine largeur = span 6,
+// demi-largeur = span 3, tiers = span 2. grid-auto-flow:row dense permet aux
+// graphiques de largeur réduite de se caler naturellement les uns à côté des
+// autres (ou à côté d'un graphique plein qui laisse un trou), sans calcul
+// manuel de "qui va sur quelle ligne".
 function cfEnsureChartsContainer(){
   if(document.getElementById('chartsContainer'))return;
   const eqCanvas=document.getElementById('cEq');
@@ -364,21 +449,30 @@ function cfEnsureChartsContainer(){
   const riskCard=document.getElementById('riskCard');
   const pieCard=document.getElementById('cPie')&&document.getElementById('cPie').closest('.chart-card');
   const mgmtCard=document.getElementById('cMgmt')&&document.getElementById('cMgmt').closest('.chart-card');
+  const top5El=document.getElementById('top5trades');
+  const top5Wrap=top5El&&top5El.closest('.two-col');
   if(!eqCard||!pnlCard||!riskCard||!pieCard||!mgmtCard)return;
 
   const container=document.createElement('div');
   container.id='chartsContainer';
-  container.style.cssText='display:grid;grid-template-columns:1fr 1fr;gap:16px;';
+  container.style.cssText='display:grid;grid-template-columns:repeat(6,1fr);gap:16px;grid-auto-flow:row dense;';
   eqCard.parentNode.insertBefore(container,eqCard);
 
-  eqCard.dataset.chartId='eq';eqCard.style.gridColumn='1/-1';container.appendChild(eqCard);
-  pnlCard.dataset.chartId='pnl';pnlCard.style.gridColumn='1/-1';container.appendChild(pnlCard);
-  riskCard.dataset.chartId='risk';riskCard.style.gridColumn='1/-1';container.appendChild(riskCard);
+  eqCard.dataset.chartId='eq';container.appendChild(eqCard);
+  pnlCard.dataset.chartId='pnl';container.appendChild(pnlCard);
+  riskCard.dataset.chartId='risk';container.appendChild(riskCard);
 
   const twoColWrap=pieCard.parentElement;
   pieCard.dataset.chartId='pie';container.appendChild(pieCard);
   mgmtCard.dataset.chartId='mgmt';container.appendChild(mgmtCard);
   if(twoColWrap&&twoColWrap.classList.contains('two-col')&&!twoColWrap.children.length)twoColWrap.remove();
+
+  if(top5Wrap){
+    top5Wrap.dataset.chartId='top5';
+    top5Wrap.style.marginTop='0';
+    top5Wrap.style.marginBottom='0';
+    container.appendChild(top5Wrap);
+  }
 
   const compDiv=document.getElementById('compCharts');
   if(compDiv){
@@ -387,7 +481,6 @@ function cfEnsureChartsContainer(){
       const canvas=card.querySelector('canvas');
       const cid=canvas?canvasMap[canvas.id]:null;
       if(cid)card.dataset.chartId=cid;
-      card.style.gridColumn='1/-1';
       container.appendChild(card);
     });
   }
@@ -395,8 +488,6 @@ function cfEnsureChartsContainer(){
   const style=document.createElement('style');
   style.id='cfInjectedStyle';
   style.textContent=`
-@media(max-width:1100px){#chartsContainer{grid-template-columns:1fr!important;}}
-@media(min-width:1101px){#page-trackrecord .kpi-strip{grid-template-columns:repeat(auto-fill,minmax(100px,1fr))!important;}}
 .cf-stat-card{display:flex;align-items:center;justify-content:center;padding:14px;}
 .cf-stat-inner{text-align:center;}
 .cf-stat-label{font-size:10px;letter-spacing:1px;text-transform:uppercase;color:var(--muted);margin-bottom:6px;}
@@ -404,21 +495,43 @@ function cfEnsureChartsContainer(){
 .cf-shape-square{max-width:200px;aspect-ratio:1/1;margin:0 auto;}
 .cf-shape-circle{max-width:200px;aspect-ratio:1/1;border-radius:50%;margin:0 auto;}
 .cf-shape-rect{max-width:360px;min-height:90px;margin:0 auto;}
+.cf-pie-body{display:flex;align-items:center;justify-content:center;}
 `;
   document.head.appendChild(style);
+}
+function cfChartHeaderControlsHtml(fieldId){
+  return `<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+    <label class="bt-toggle"><input type="checkbox" id="bt-${fieldId}" onchange="toggleBT('${fieldId}')"> BT</label>
+    <div class="period-btns">
+      <button class="pbtn" data-chart="${fieldId}" data-p="jour">J</button>
+      <button class="pbtn" data-chart="${fieldId}" data-p="semaine">SEM</button>
+      <button class="pbtn" data-chart="${fieldId}" data-p="mois">MOIS</button>
+      <button class="pbtn" data-chart="${fieldId}" data-p="trimestre">TRIM</button>
+      <button class="pbtn" data-chart="${fieldId}" data-p="annee">AN</button>
+      <button class="pbtn active" data-chart="${fieldId}" data-p="tout">TOUT</button>
+    </div>
+  </div>`;
+}
+function cfEnsureChartState(fieldId){
+  if(!(fieldId in BT_STATE))BT_STATE[fieldId]=false;
+  if(!(fieldId in ST))ST[fieldId]='tout';
 }
 function cfEnsureChartNode(field){
   let card=document.getElementById('cfcard-'+field.id);
   const container=document.getElementById('chartsContainer');
   if(!container)return null;
+  cfEnsureChartState(field.id);
   if(!card){
     card=document.createElement('div');
     card.id='cfcard-'+field.id;
     card.className='chart-card';
     card.dataset.chartId=field.id;
-    card.style.cssText='background:var(--card);grid-column:1/-1;';
-    card.innerHTML=`<div class="chart-header"><div class="chart-title" style="color:var(--cf-${field.id}-title,#00e5a0)">${escapeHtml((field.colName||field.label).toUpperCase())}</div></div>
-      <div class="chart-body" style="height:220px"><canvas id="cfchart-${field.id}"></canvas></div>`;
+    card.style.background='var(--card)';
+    const isPie=field.widget.kind==='pie';
+    const canvasStyle=isPie?' style="max-width:195px;max-height:195px;"':'';
+    const bodyClass=isPie?'chart-body cf-pie-body':'chart-body';
+    card.innerHTML=`<div class="chart-header"><div class="chart-title" style="color:var(--cf-${field.id}-title,#00e5a0)">${escapeHtml((field.colName||field.label).toUpperCase())}</div>${cfChartHeaderControlsHtml(field.id)}</div>
+      <div class="${bodyClass}" style="height:220px"><canvas id="cfchart-${field.id}"${canvasStyle}></canvas></div>`;
     container.appendChild(card);
   }
   return card;
@@ -432,7 +545,6 @@ function cfEnsureStatCardNode(field){
     card.id='cfcard-'+field.id;
     card.dataset.chartId=field.id;
     card.className='chart-card cf-stat-card cf-shape-'+((field.widget&&field.widget.shape)||'rect');
-    card.style.gridColumn='1/-1';
     card.innerHTML=`<div class="cf-stat-inner"><div class="cf-stat-label">${escapeHtml(field.colName||field.label)}</div><div class="cf-stat-value" id="cfstatval-${field.id}">—</div></div>`;
     container.appendChild(card);
   }
@@ -440,27 +552,30 @@ function cfEnsureStatCardNode(field){
 }
 function cfDrawChart(field){
   const canvasEl=document.getElementById('cfchart-'+field.id);
-  destroy('cf_'+field.id);
+  destroy(field.id);
   if(!canvasEl||typeof Chart==='undefined')return;
   const ctx=canvasEl.getContext('2d');
   const kind=field.widget.kind;
+  cfEnsureChartState(field.id);
+  const period=ST[field.id]||'tout';
+  const trades=(typeof btFilter==='function')?btFilter(field.id,period):realTrades();
   const axC=gc('--comp-axis')||'#64748b',grC=gc('--comp-grid')||'rgba(100,116,139,.1)';
   if(kind==='line'){
-    const trs=realTrades().filter(t=>{const v=t['cf_'+field.id];return v!==undefined&&v!==''&&!isNaN(parseFloat(v));})
+    const trs=trades.filter(t=>{const v=t['cf_'+field.id];return v!==undefined&&v!==''&&!isNaN(parseFloat(v));})
       .sort((a,b)=>a.date.localeCompare(b.date)||(a.heure||'').localeCompare(b.heure||''));
     if(!trs.length)return;
     const data=trs.map(t=>parseFloat(t['cf_'+field.id]));
-    const labels=trs.map(t=>{const d=new Date(t.date+'T12:00:00');return d.toLocaleDateString('fr-FR',{day:'numeric',month:'short'});});
+    const labels=typeof buildLabels==='function'?buildLabels(trs,period):trs.map(t=>t.date);
     const lc=gc('--cf-'+field.id+'-line')||'#00e5a0';
     const ftop=gc('--cf-'+field.id+'-fill-top')||'rgba(0,229,160,.32)',fbot=gc('--cf-'+field.id+'-fill-bot')||'rgba(0,229,160,0)';
     const g=ctx.createLinearGradient(0,0,0,210);g.addColorStop(0,ftop);g.addColorStop(1,fbot);
-    CH['cf_'+field.id]=new Chart(ctx,{type:'line',data:{labels,datasets:[{data,borderColor:lc,backgroundColor:g,borderWidth:2.5,fill:true,tension:0,pointRadius:0,pointHoverRadius:4}]},
+    CH[field.id]=new Chart(ctx,{type:'line',data:{labels,datasets:[{data,borderColor:lc,backgroundColor:g,borderWidth:2.5,fill:true,tension:0,pointRadius:0,pointHoverRadius:4}]},
       options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},
         scales:{x:{grid:{color:grC},ticks:{color:axC,maxTicksLimit:10,maxRotation:30}},y:{grid:{color:grC},ticks:{color:axC}}}}});
     return;
   }
   if(kind==='bar-v'||kind==='bar-h'){
-    const map=cfCategoryStats(field);
+    const map=cfCategoryStats(field,trades);
     const ks=Object.keys(map).sort((a,b)=>map[b].pnl-map[a].pnl).slice(0,20);
     if(!ks.length)return;
     const data=ks.map(k=>map[k].pnl);
@@ -469,19 +584,19 @@ function cfDrawChart(field){
     const scales={};
     scales[valueAxis]={grid:{color:grC},ticks:{color:axC,callback:v=>(v>=0?'+':'')+v+'€'}};
     scales[catAxis]={grid:{color:grC},ticks:{color:'#e2e8f0'}};
-    CH['cf_'+field.id]=new Chart(ctx,{type:'bar',data:{labels:ks,datasets:[{data,backgroundColor:data.map(v=>v>=0?posC:negC),borderRadius:4,borderWidth:0}]},
+    CH[field.id]=new Chart(ctx,{type:'bar',data:{labels:ks,datasets:[{data,backgroundColor:data.map(v=>v>=0?posC:negC),borderRadius:4,borderWidth:0}]},
       options:{responsive:true,maintainAspectRatio:false,indexAxis:kind==='bar-h'?'y':'x',
         plugins:{legend:{display:false}},scales}});
     return;
   }
   if(kind==='pie'){
-    const map=cfCategoryStats(field);
+    const map=cfCategoryStats(field,trades);
     const ks=Object.keys(map).slice(0,8);
     if(!ks.length)return;
     const data=ks.map(k=>map[k].total);
     const fallback=['#00e5a0','#3b82f6','#f59e0b','#ef4444','#a78bfa','#f472b6','#22d3ee','#84cc16'];
     const palette=ks.map((k,i)=>gc('--cf-'+field.id+'-slice-'+(i+1))||fallback[i%fallback.length]);
-    CH['cf_'+field.id]=new Chart(ctx,{type:'doughnut',data:{labels:ks,datasets:[{data,backgroundColor:palette,borderColor:'#0b0f1a',borderWidth:3,hoverOffset:5}]},
+    CH[field.id]=new Chart(ctx,{type:'doughnut',data:{labels:ks,datasets:[{data,backgroundColor:palette,borderColor:'#0b0f1a',borderWidth:3,hoverOffset:5}]},
       options:{responsive:true,maintainAspectRatio:true,cutout:'60%',plugins:{legend:{position:'bottom',labels:{color:'#94a3b8',font:{size:10},boxWidth:11,boxHeight:11}}}}});
   }
 }
@@ -505,7 +620,7 @@ function cfRenderCustomCharts(){
     const id=el.id.replace('cfcard-','');
     const f=APP.cfFields.find(x=>x.id===id);
     const stillChart=f&&f.widget&&CF_CHART_WIDGET_KINDS.includes(f.widget.kind);
-    if(!stillChart){destroy('cf_'+id);el.remove();}
+    if(!stillChart){destroy(id);el.remove();}
   });
 }
 function cfApplyChartOrder(){
@@ -515,6 +630,39 @@ function cfApplyChartOrder(){
   const map={};
   Array.from(container.children).forEach(card=>{ if(card.dataset.chartId)map[card.dataset.chartId]=card; });
   APP.cfChartOrder.forEach(id=>{ if(map[id])container.appendChild(map[id]); });
+}
+function cfIsMobile(){
+  return !!(window.matchMedia && window.matchMedia('(max-width:1100px)').matches);
+}
+// Largeurs : pleine=span 6, demie=span 3, camembert dynamique (1 seul=6,
+// 2=3 chacun, 3 ou plus=2 chacun → jamais plus de 3 camemberts par ligne).
+// En mode téléphone, tout repasse en pleine largeur (span 6, une seule
+// colonne visible de toute façon vu le CSS mobile du reste de l'appli).
+function cfApplyChartLayout(){
+  const container=document.getElementById('chartsContainer');
+  if(!container)return;
+  const children=Array.from(container.children);
+  if(cfIsMobile()){
+    children.forEach(el=>{el.style.gridColumn='span 6';});
+    return;
+  }
+  const isPieEl=(el)=>{
+    const id=el.dataset.chartId;
+    if(id==='pie')return true;
+    const f=APP.cfFields.find(x=>x.id===id);
+    return !!(f&&f.widget&&f.widget.kind==='pie');
+  };
+  const pies=children.filter(isPieEl);
+  let pieSpan=6;
+  if(pies.length===2)pieSpan=3;
+  else if(pies.length>=3)pieSpan=2;
+  children.forEach(el=>{
+    const id=el.dataset.chartId;
+    let span=6;
+    if(isPieEl(el))span=pieSpan;
+    else if(CF_HALF_WIDTH_NATIVE.has(id))span=3;
+    el.style.gridColumn='span '+span;
+  });
 }
 
 // ── Intégration thème ──
@@ -610,26 +758,44 @@ function cfEnsureCard(){
   card.innerHTML=`
     <div class="card-header">
       <div class="card-title">CHAMPS PERSONNALISÉS</div>
-      <button class="btn btn-p" onclick="cfOpenBuilder()">+ Nouveau graphique</button>
+      <div style="display:flex;gap:7px;flex-wrap:wrap;">
+        <button class="btn btn-p" onclick="cfOpenBuilder()">+ Nouveau graphique</button>
+        <button class="btn btn-g" id="cfToggleBtn" onclick="cfToggleCard()">Afficher</button>
+      </div>
     </div>
-    <div class="card-body">
+    <div id="cfCardBody" style="display:none;padding:14px;">
       <div style="font-size:11px;color:var(--muted);margin-bottom:12px;">Ajoute tes propres questions au questionnaire. Chaque question crée une colonne dans l'historique et, si tu veux, une case KPI ou un graphique dans le Track Record.</div>
       <div id="cfFieldsList"></div>
       <div id="cfNoFields" style="font-size:11px;color:var(--muted);padding:10px 0;">Aucun champ personnalisé pour l'instant.</div>
-      <div style="margin-top:18px;">
-        <div class="mod-col-title" style="margin-bottom:8px;">ORDRE DES COLONNES — HISTORIQUE DES TRADES</div>
-        <div class="mod-list" id="cfColOrderList"></div>
-      </div>
-      <div style="margin-top:18px;">
-        <div class="mod-col-title" style="margin-bottom:8px;">ORDRE DES CASES KPI</div>
-        <div class="mod-list" id="cfKpiOrderList"></div>
-      </div>
-      <div style="margin-top:18px;">
-        <div class="mod-col-title" style="margin-bottom:8px;">ORDRE DES GRAPHIQUES / WIDGETS</div>
-        <div class="mod-list" id="cfChartOrderList"></div>
+      <div style="margin-top:16px;">
+        <button class="btn btn-g" id="cfOrderToggleBtn" onclick="cfToggleOrderSection()">▾ Ordre (colonnes / KPI / graphiques)</button>
+        <div id="cfOrderSection" style="display:none;margin-top:12px;">
+          <div class="mod-col-title" style="margin-bottom:8px;">ORDRE DES COLONNES — HISTORIQUE DES TRADES</div>
+          <div class="mod-list" id="cfColOrderList"></div>
+          <div class="mod-col-title" style="margin-top:16px;margin-bottom:8px;">ORDRE DES CASES KPI</div>
+          <div class="mod-list" id="cfKpiOrderList"></div>
+          <div class="mod-col-title" style="margin-top:16px;margin-bottom:8px;">ORDRE DES GRAPHIQUES / WIDGETS</div>
+          <div class="mod-list" id="cfChartOrderList"></div>
+        </div>
       </div>
     </div>`;
   modGrid.parentNode.insertBefore(card,modGrid);
+}
+function cfToggleCard(){
+  const body=document.getElementById('cfCardBody');
+  const btn=document.getElementById('cfToggleBtn');
+  if(!body||!btn)return;
+  const opening=body.style.display==='none';
+  body.style.display=opening?'block':'none';
+  btn.textContent=opening?'Masquer':'Afficher';
+}
+function cfToggleOrderSection(){
+  const sec=document.getElementById('cfOrderSection');
+  const btn=document.getElementById('cfOrderToggleBtn');
+  if(!sec||!btn)return;
+  const opening=sec.style.display==='none';
+  sec.style.display=opening?'block':'none';
+  btn.textContent=opening?'▲ Replier l\'ordre':'▾ Ordre (colonnes / KPI / graphiques)';
 }
 function cfRenderSettings(){
   cfEnsureCard();
@@ -716,26 +882,30 @@ function cfWidgetOptionsHtml(type){
   return allowed.map(k=>`<option value="${k}">${CF_WIDGET_META[k].label}</option>`).join('');
 }
 function cfPopulateAnchorSelects(f){
-  const fieldOpts=['<option value="">— Au début —</option>']
+  const fieldOpts=['<option value="">— À la fin —</option>']
     .concat(CF_BUILTIN_FORM_ANCHORS.map(b=>`<option value="${b.id}">Après : ${escapeHtml(b.label)}</option>`))
-    .concat(APP.cfFields.filter(x=>!f||x.id!==f.id).map(x=>`<option value="${x.id}">Après : ${escapeHtml(x.label)}</option>`));
+    .concat(APP.cfFields.filter(x=>!f||x.id!==f.id).map(x=>`<option value="${x.id}">Après : ${escapeHtml(x.label)}</option>`))
+    .concat(['<option value="__start__">— Au début —</option>']);
   document.getElementById('cfm-afterfield').innerHTML=fieldOpts.join('');
 
-  const colOpts=['<option value="">— Au début —</option>']
+  const colOpts=['<option value="">— À la fin —</option>']
     .concat(CF_BUILTIN_COLS.map(b=>`<option value="${b.id}">Après : ${escapeHtml(b.label)}</option>`))
-    .concat(APP.cfFields.filter(x=>!f||x.id!==f.id).map(x=>`<option value="${x.id}">Après : ${escapeHtml(x.colName||x.label)}</option>`));
+    .concat(APP.cfFields.filter(x=>!f||x.id!==f.id).map(x=>`<option value="${x.id}">Après : ${escapeHtml(x.colName||x.label)}</option>`))
+    .concat(['<option value="__start__">— Au début —</option>']);
   document.getElementById('cfm-aftercol').innerHTML=colOpts.join('');
 }
 function cfPopulateWidgetPosSelect(f){
   const kind=document.getElementById('cfm-widgetkind').value;
   const sel=document.getElementById('cfm-widgetpos');
   if(kind==='kpi'){
-    const opts=['<option value="">— Au début —</option>'].concat(CF_BUILTIN_KPIS.map(b=>`<option value="${b.id}">Après : ${escapeHtml(b.label)}</option>`))
-      .concat(APP.cfFields.filter(x=>(!f||x.id!==f.id)&&x.widget&&x.widget.kind==='kpi').map(x=>`<option value="${x.id}">Après : ${escapeHtml(x.label)}</option>`));
+    const opts=['<option value="">— À la fin —</option>'].concat(CF_BUILTIN_KPIS.map(b=>`<option value="${b.id}">Après : ${escapeHtml(b.label)}</option>`))
+      .concat(APP.cfFields.filter(x=>(!f||x.id!==f.id)&&x.widget&&x.widget.kind==='kpi').map(x=>`<option value="${x.id}">Après : ${escapeHtml(x.label)}</option>`))
+      .concat(['<option value="__start__">— Au début —</option>']);
     sel.innerHTML=opts.join('');
   } else if(kind&&kind!=='none'){
-    const opts=['<option value="">— Au début —</option>'].concat(CF_BUILTIN_CHARTS.map(b=>`<option value="${b.id}">Après : ${escapeHtml(b.label)}</option>`))
-      .concat(APP.cfFields.filter(x=>(!f||x.id!==f.id)&&x.widget&&CF_CHART_WIDGET_KINDS.includes(x.widget.kind)).map(x=>`<option value="${x.id}">Après : ${escapeHtml(x.label)}</option>`));
+    const opts=['<option value="">— À la fin —</option>'].concat(CF_BUILTIN_CHARTS.map(b=>`<option value="${b.id}">Après : ${escapeHtml(b.label)}</option>`))
+      .concat(APP.cfFields.filter(x=>(!f||x.id!==f.id)&&x.widget&&CF_CHART_WIDGET_KINDS.includes(x.widget.kind)).map(x=>`<option value="${x.id}">Après : ${escapeHtml(x.label)}</option>`))
+      .concat(['<option value="__start__">— Au début —</option>']);
     sel.innerHTML=opts.join('');
   } else {
     sel.innerHTML='';
@@ -937,14 +1107,50 @@ window.buildTV=function(){
 const _cfOrigUpdateKPIs=window.updateKPIs;
 window.updateKPIs=function(){
   _cfOrigUpdateKPIs();
-  try{cfRenderKpiWidgets();cfApplyKpiOrder();}catch(e){console.warn('CF KPI:',e);}
+  try{cfRenderKpiWidgets();cfApplyKpiOrder();cfLayoutKpiStrip();}catch(e){console.warn('CF KPI:',e);}
 };
 
 const _cfOrigRefreshAllCharts=window.refreshAllCharts;
 window.refreshAllCharts=function(){
   _cfOrigRefreshAllCharts();
-  try{cfRenderCustomCharts();cfApplyChartOrder();}catch(e){console.warn('CF charts:',e);}
+  try{cfRenderCustomCharts();cfApplyChartOrder();cfApplyChartLayout();}catch(e){console.warn('CF charts:',e);}
 };
+
+// redrawForKey() est le point d'entrée générique utilisé par toggleBT() (case
+// BT native) pour redessiner un graphique donné à partir de sa clé. On
+// l'étend pour les clés de champs personnalisés (déjà préfixées "cf_"),
+// sans toucher au chemin natif.
+const _cfOrigRedrawForKey=window.redrawForKey;
+window.redrawForKey=function(k){
+  if(typeof k==='string'&&k.indexOf('cf_')===0){
+    const f=APP.cfFields.find(x=>x.id===k);
+    if(f&&f.widget){
+      if(f.widget.kind==='card'){
+        const el=document.getElementById('cfstatval-'+f.id);
+        if(el)el.textContent=cfKpiValueText(f);
+      } else if(CF_CHART_WIDGET_KINDS.includes(f.widget.kind)){
+        cfDrawChart(f);
+      }
+    }
+    return;
+  }
+  _cfOrigRedrawForKey(k);
+};
+
+// Boutons de période (J/SEM/MOIS/TRIM/AN/TOUT) des graphiques personnalisés :
+// délégation d'événement plutôt que bindPBtns() natif, pour ne jamais
+// re-attacher de listener sur les boutons natifs (qui gèrent déjà les leurs).
+document.addEventListener('click',function(e){
+  const btn=e.target.closest && e.target.closest('.pbtn[data-chart]');
+  if(!btn)return;
+  const c=btn.dataset.chart,p=btn.dataset.p;
+  if(!c||c.indexOf('cf_')!==0)return;
+  ST[c]=p;
+  const grp=btn.closest('.period-btns');
+  if(grp)grp.querySelectorAll('.pbtn').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  redrawForKey(c);
+});
 
 const _cfOrigRenderModifs=window.renderModifs;
 window.renderModifs=function(){
@@ -985,7 +1191,6 @@ if(typeof window._applyCloudDataDirect==='function'){
 
 // ── Amorçage ──
 function cfInit(){
-  console.log('[cfInit] démarrage');
   try{
     cfLoad();
     cfEnsureOrders();
@@ -996,8 +1201,10 @@ function cfInit(){
     cfEnsureChartsContainer();
     cfRenderKpiWidgets();
     cfApplyKpiOrder();
+    cfLayoutKpiStrip();
     cfRenderCustomCharts();
     cfApplyChartOrder();
+    cfApplyChartLayout();
     if(typeof renderTable==='function')renderTable();
     cfRenderSettings();
   }catch(e){console.error('Erreur d\'initialisation des champs personnalisés :',e);}
@@ -1005,3 +1212,13 @@ function cfInit(){
 document.addEventListener('DOMContentLoaded',function(){
   setTimeout(cfInit,120);
 });
+// Recalcule les mises en page dépendantes du nombre de cases (KPI) et de la
+// largeur d'écran (graphiques) au franchissement du seuil PC/téléphone.
+if(window.matchMedia){
+  const _cfMq=window.matchMedia('(max-width:1100px)');
+  const _cfOnBreakpointChange=function(){
+    try{ cfLayoutKpiStrip(); cfApplyChartLayout(); }catch(e){}
+  };
+  if(_cfMq.addEventListener)_cfMq.addEventListener('change',_cfOnBreakpointChange);
+  else if(_cfMq.addListener)_cfMq.addListener(_cfOnBreakpointChange);
+}
