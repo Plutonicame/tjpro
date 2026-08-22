@@ -129,16 +129,17 @@
 <div class="page active" id="page-trackrecord">
   <div class="page-title" data-editable data-tvar="--pt-trackrecord" style="color:var(--pt-trackrecord,#00e5a0)">Track Record</div>
   <div class="page-sub" data-editable data-tvar="--ps-trackrecord" style="color:var(--ps-trackrecord,#64748b)">Risk −0.5% si DD≥5% depuis sommet · Récup ou 3 gains = +0.5%</div>
+  <div style="display:flex;align-items:center;margin-bottom:4px;"><label class="bt-toggle"><input type="checkbox" id="bt-kpi" onchange="toggleBT('kpi')"> BT</label></div>
   <div class="kpi-strip">
-    <div class="kpi-card"><div class="kpi-bar" id="kb1"></div><div class="kpi-icon" data-editable>💰</div><div class="kpi-label" data-editable data-tvar="--kl-capital" style="color:var(--kl-capital,#64748b)">Capital</div><div class="kpi-value" id="k0">—</div></div>
-    <div class="kpi-card"><div class="kpi-bar" id="kb2"></div><div class="kpi-icon" data-editable>📈</div><div class="kpi-label" data-editable data-tvar="--kl-pnltotal" style="color:var(--kl-pnltotal,#64748b)">P&L Total</div><div class="kpi-value" id="k1">—</div></div>
-    <div class="kpi-card"><div class="kpi-bar" id="kb3"></div><div class="kpi-icon" data-editable>🎯</div><div class="kpi-label" data-editable data-tvar="--kl-winrate" style="color:var(--kl-winrate,#64748b)">Win Rate</div><div class="kpi-value" id="k2">—</div></div>
-    <div class="kpi-card"><div class="kpi-bar" id="kb4"></div><div class="kpi-icon" data-editable>⚖️</div><div class="kpi-label" data-editable data-tvar="--kl-rrmoyen" style="color:var(--kl-rrmoyen,#64748b)">RR Moyen</div><div class="kpi-value" id="k3">—</div></div>
-    <div class="kpi-card"><div class="kpi-bar" id="kb5"></div><div class="kpi-icon" data-editable>📊</div><div class="kpi-label" data-editable data-tvar="--kl-profitfactor" style="color:var(--kl-profitfactor,#64748b)">Profit Factor</div><div class="kpi-value" id="k4">—</div></div>
-    <div class="kpi-card"><div class="kpi-bar" id="kb6"></div><div class="kpi-icon" data-editable>💸</div><div class="kpi-label" data-editable data-tvar="--kl-payout" style="color:var(--kl-payout,#64748b)">Pay Out</div><div class="kpi-value" id="k5">—</div></div>
-    <div class="kpi-card"><div class="kpi-bar" id="kb7"></div><div class="kpi-icon" data-editable>🔢</div><div class="kpi-label" data-editable data-tvar="--kl-trades" style="color:var(--kl-trades,#64748b)">Trades</div><div class="kpi-value" id="k6">—</div></div>
-    <div class="kpi-card"><div class="kpi-bar" id="kb8"></div><div class="kpi-icon" data-editable>⚠️</div><div class="kpi-label" data-editable data-tvar="--kl-riskactuel" style="color:var(--kl-riskactuel,#64748b)">Risk Actuel</div><div class="kpi-value" id="k7">—</div></div>
-    <div class="kpi-card"><div class="kpi-bar" id="kb9"></div><div class="kpi-icon" data-editable>📉</div><div class="kpi-label" data-editable data-tvar="--kl-drawdown" style="color:var(--kl-drawdown,#64748b)">Drawdown Max</div><div class="kpi-value" id="k8">—</div></div>
+    <div class="kpi-card"><div class="kpi-bar" id="kb1"></div><div class="kpi-icon" data-editable>💰</div><div class="kpi-label" data-editable data-tvar="--kpi-label-color" style="color:var(--kpi-label-color,#64748b)">Capital</div><div class="kpi-value" id="k0">—</div></div>
+    <div class="kpi-card"><div class="kpi-bar" id="kb2"></div><div class="kpi-icon" data-editable>📈</div><div class="kpi-label" data-editable data-tvar="--kpi-label-color" style="color:var(--kpi-label-color,#64748b)">P&L Total</div><div class="kpi-value" id="k1">—</div></div>
+    <div class="kpi-card"><div class="kpi-bar" id="kb3"></div><div class="kpi-icon" data-editable>🎯</div><div class="kpi-label" data-editable data-tvar="--kpi-label-color" style="color:var(--kpi-label-color,#64748b)">Win Rate</div><div class="kpi-value" id="k2">—</div></div>
+    <div class="kpi-card"><div class="kpi-bar" id="kb4"></div><div class="kpi-icon" data-editable>⚖️</div><div class="kpi-label" data-editable data-tvar="--kpi-label-color" style="color:var(--kpi-label-color,#64748b)">RR Moyen</div><div class="kpi-value" id="k3">—</div></div>
+    <div class="kpi-card"><div class="kpi-bar" id="kb5"></div><div class="kpi-icon" data-editable>📊</div><div class="kpi-label" data-editable data-tvar="--kpi-label-color" style="color:var(--kpi-label-color,#64748b)">Profit Factor</div><div class="kpi-value" id="k4">—</div></div>
+    <div class="kpi-card"><div class="kpi-bar" id="kb6"></div><div class="kpi-icon" data-editable>💸</div><div class="kpi-label" data-editable data-tvar="--kpi-label-color" style="color:var(--kpi-label-color,#64748b)">Pay Out</div><div class="kpi-value" id="k5">—</div></div>
+    <div class="kpi-card"><div class="kpi-bar" id="kb7"></div><div class="kpi-icon" data-editable>🔢</div><div class="kpi-label" data-editable data-tvar="--kpi-label-color" style="color:var(--kpi-label-color,#64748b)">Trades</div><div class="kpi-value" id="k6">—</div></div>
+    <div class="kpi-card"><div class="kpi-bar" id="kb8"></div><div class="kpi-icon" data-editable>⚠️</div><div class="kpi-label" data-editable data-tvar="--kpi-label-color" style="color:var(--kpi-label-color,#64748b)">Risk Actuel</div><div class="kpi-value" id="k7">—</div></div>
+    <div class="kpi-card"><div class="kpi-bar" id="kb9"></div><div class="kpi-icon" data-editable>📉</div><div class="kpi-label" data-editable data-tvar="--kpi-label-color" style="color:var(--kpi-label-color,#64748b)">Drawdown Max</div><div class="kpi-value" id="k8">—</div></div>
   </div>
 
   <div class="chart-card" style="background:var(--eq-bg)">
@@ -165,7 +166,7 @@
 
   <div class="chart-card" style="background:var(--risk-bg)" id="riskCard">
     <div class="chart-header">
-      <div><div class="chart-title" data-editable data-tvar="--ct-riskmgmt" style="color:var(--ct-riskmgmt,#00e5a0)">RISK MANAGEMENT</div><div style="font-size:10px;color:var(--muted);margin-top:2px" id="riskCardSub">+0.5% / 3 gains · −0.5% si −5% capital · plafond <span id="riskMaxLabel">10</span>%</div></div>
+      <div><div class="chart-title" data-editable data-tvar="--ct-riskmgmt" style="color:var(--ct-riskmgmt,#00e5a0)">RISK MANAGEMENT</div><div style="font-size:10px;color:var(--muted);margin-top:2px" data-editable>+0.5% / 3 gains · −0.5% si −5% capital · plafond <span id="riskMaxLabel">10</span>%</div></div>
       <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;"><label class="bt-toggle"><input type="checkbox" id="bt-risk" onchange="toggleBT('risk')"> BT</label><div class="period-btns"><button class="pbtn" data-chart="risk" data-p="jour">J</button><button class="pbtn" data-chart="risk" data-p="semaine">SEM</button><button class="pbtn" data-chart="risk" data-p="mois">MOIS</button><button class="pbtn" data-chart="risk" data-p="trimestre">TRIM</button><button class="pbtn" data-chart="risk" data-p="annee">AN</button><button class="pbtn active" data-chart="risk" data-p="tout">TOUT</button></div></div>
     </div>
     <div class="chart-body" style="height:220px"><canvas id="cRisk"></canvas></div>
@@ -269,7 +270,7 @@
         <div class="fg"><label data-editable>Reprendrais-tu ?</label><select id="f-reprend"></select></div>
         <div class="fg span2"><label data-editable>Timeframes</label><div class="chip-wrap" id="tf-wrap"></div></div>
         <div class="fg spanall"><label data-editable>Confluences</label><div class="chip-wrap" id="conf-wrap"></div></div>
-        <div class="fg spanall"><label data-editable>Notes</label><textarea id="f-notes" placeholder="Setup, émotions..."></textarea></div>
+        <div class="fg spanall"><label data-editable>Notes</label><textarea id="f-notes" placeholder="Setup, émotions..." oninput="autoGrow(this)"></textarea></div>
         <div class="fg spanall"><label data-editable>Note ⭐</label>
           <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
             <div class="star-picker" id="f-stars-picker" data-val="0">
@@ -298,6 +299,7 @@
   <div class="card">
     <div class="card-header"><div class="card-title" data-editable data-tvar="--crt-historique" style="color:var(--crt-historique,#00e5a0)">HISTORIQUE DES TRADES</div>
       <div style="display:flex;gap:6px;align-items:center;">
+        <label class="bt-toggle"><input type="checkbox" id="bt-hist" checked onchange="toggleBT('hist')"> BT</label>
         <button class="btn btn-g undo-hist-btn" id="undoHistBtn" onclick="undoDeleteTrade()" title="Annuler la dernière suppression" style="font-size:11px;padding:5px 10px;align-items:center;gap:5px;">↺ Annuler suppression</button>
         <button class="btn" onclick="askDeleteAllTrades()" title="Supprimer tous les trades" style="font-size:11px;padding:5px 10px;background:var(--btn-delall-bg);color:var(--btn-delall-tx);border:1px solid var(--btn-delall-bd);border-radius:6px;cursor:pointer;"><span class="deco-emoji">🗑</span> Supprimer tous les trades</button>
       </div>
@@ -405,7 +407,7 @@
           </div>
 
           <div style="margin-bottom:10px;">
-            <label style="font-size:10px;color:var(--muted);display:block;margin-bottom:5px;" data-editable>Variation du risk</label>
+            <label style="font-size:10px;color:var(--muted);display:block;margin-bottom:5px;text-transform:uppercase;" data-editable>Augmentation du risque</label>
             <select id="rmUpVarType" style="width:100%;font-size:12px;">
               <option value="pct">En % de risk</option>
               <option value="eur">En € de risk</option>
@@ -552,7 +554,7 @@
       </div>
       <div class="fg span2"><label>Timeframes</label><div class="chip-wrap" id="e-tf-wrap"></div></div>
       <div class="fg spanall"><label>Confluences</label><div class="chip-wrap" id="e-conf-wrap"></div></div>
-      <div class="fg spanall"><label>Notes</label><textarea id="e-notes" placeholder="Setup, émotions..."></textarea></div>
+      <div class="fg spanall"><label>Notes</label><textarea id="e-notes" placeholder="Setup, émotions..." oninput="autoGrow(this)"></textarea></div>
       <div class="fg spanall"><label>Images du trade</label>
         <div id="e-images-wrap" style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:8px;"></div>
         <input type="file" id="e-img-input" accept="image/*" multiple style="display:none" onchange="addEditImage()">
@@ -602,7 +604,8 @@
   </div>
   <div class="auth-err" id="enterErr"></div>
   <div class="pin-pad" id="enterPad"></div>
-  <button class="change-pin-btn" onclick="showOverlay('overlayEmailPin')">← Changer d'email</button>
+  <button class="change-pin-btn" id="enterPinChangeEmailBtn" onclick="showOverlay('overlayEmailPin')">← Changer d'email</button>
+  <button class="change-pin-btn" id="enterPinCancelBtn" style="display:none" onclick="cancelChangePin()">← Annuler</button>
 </div>
 
 <!-- ÉTAPE 4 : Créer PIN (1ère fois) -->
@@ -631,5 +634,6 @@
 <div id="syncStatus" style="position:fixed;bottom:16px;right:16px;background:#161d2e;border:1px solid #1e2d45;border-radius:6px;padding:6px 12px;font-family:'Space Mono',monospace;font-size:10px;color:#6b7a99;z-index:1000;display:none;"></div>
 
 <script src="app-part2.js"></script>
+<script src="custom-fields.js"></script>
 </body>
 </html>
