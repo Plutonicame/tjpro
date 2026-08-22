@@ -44,16 +44,17 @@ const CF_BUILTIN_KPIS = [
 const CF_BUILTIN_CHARTS = [
   {id:'eq',label:'Évolution du capital'},{id:'pnl',label:'P&L'},{id:'risk',label:'Risk Management'},
   {id:'pie',label:'Win Rate'},{id:'mgmt',label:'Impact du management'},
-  {id:'top5',label:'Top 5 trades'},{id:'pires5',label:'Pires 5 trades'},
   {id:'conf',label:'Par confluence'},{id:'pairs',label:'Par paire / actif'},
   {id:'sessions',label:'Par session'},{id:'jours',label:'Par jour de semaine'},{id:'tf',label:'Par timeframe'}
 ];
-// Graphiques natifs à largeur FIXE de 1/2 (les autres graphiques natifs sont
-// pleine largeur ; les camemberts ont une largeur dynamique selon leur nombre)
+// Graphiques natifs à largeur FIXE de 1/2 sur PC (les autres graphiques
+// natifs sont pleine largeur ; les camemberts ont une largeur dynamique
+// selon leur nombre). En mode téléphone, tout repasse en pleine largeur,
+// Top5/Pires5 compris.
 const CF_HALF_WIDTH_NATIVE = new Set(['mgmt','top5','pires5']);
-// Top 5 / Pires 5 restent TOUJOURS côte à côte (1/2 chacun), même en mode
-// téléphone — seule exception à la règle "tout en pleine largeur sur mobile".
-const CF_ALWAYS_HALF = new Set(['top5','pires5']);
+// Top 5 / Pires 5 sont épinglés : toujours en dernière position, jamais
+// réordonnables (ni via la liste des Paramètres, ni par glisser-déposer).
+const CF_PINNED_LAST = ['top5','pires5'];
 const CF_TYPE_META = {
   stars:{label:'Note en étoiles (1 à 5)', widgets:['none','kpi','card','bar-v','bar-h','pie']},
   text:{label:'Zone de texte', widgets:['none']},
@@ -386,14 +387,16 @@ function cfApplyKpiOrder(){
   Array.from(strip.querySelectorAll('.kpi-card')).forEach(card=>{ if(card.dataset.kpiId)map[card.dataset.kpiId]=card; });
   APP.cfKpiOrder.forEach(id=>{ if(map[id])strip.appendChild(map[id]); });
 }
-// Empile les cases KPI par lignes de taille égale, ex: 15 -> 8+7, 16 -> 8+8
-// (répartition la plus équilibrée possible sur le minimum de lignes).
+// Empile les cases KPI par lignes de 14 maximum, TOUTES DE LA MÊME TAILLE :
+// contrairement à une répartition "équilibrée" (qui donnerait des cases plus
+// petites sur une ligne de 8 que sur une ligne de 7), on garde ici une seule
+// grille à 14 colonnes fixes pour toutes les lignes ; la dernière ligne
+// incomplète est complétée par des cases vides (juste le fond), exactement
+// comme en mode téléphone.
 function cfBalancedRowSizes(total,maxPerRow){
   const rows=Math.max(1,Math.ceil(total/maxPerRow));
-  const base=Math.floor(total/rows);
-  const extra=total%rows;
   const sizes=[];
-  for(let i=0;i<rows;i++)sizes.push(base+(i<extra?1:0));
+  for(let i=0;i<rows;i++)sizes.push(maxPerRow);
   return sizes;
 }
 // Réorganise le DOM des cases KPI en lignes :
@@ -455,7 +458,14 @@ function cfLayoutKpiStrip(){
       const rowEl=document.createElement('div');
       rowEl.className='cf-kpi-row';
       rowEl.style.cssText='display:grid;grid-template-columns:repeat('+size+',1fr);gap:1px;background:'+rowBg+';';
-      for(let i=0;i<size;i++){ rowEl.appendChild(cards[idx]); idx++; }
+      for(let i=0;i<size;i++){
+        if(idx<n){ rowEl.appendChild(cards[idx]); idx++; }
+        else{
+          const ph=document.createElement('div');
+          ph.className='kpi-card cf-kpi-placeholder';
+          rowEl.appendChild(ph);
+        }
+      }
       strip.appendChild(rowEl);
     });
   }
@@ -498,8 +508,8 @@ function cfEnsureChartsContainer(){
 
   if(top5Card&&worst5Card){
     const top5TwoCol=top5Card.parentElement;
-    top5Card.dataset.chartId='top5';container.appendChild(top5Card);
-    worst5Card.dataset.chartId='pires5';container.appendChild(worst5Card);
+    top5Card.dataset.chartId='top5';top5Card.setAttribute('data-nodrag','1');container.appendChild(top5Card);
+    worst5Card.dataset.chartId='pires5';worst5Card.setAttribute('data-nodrag','1');container.appendChild(worst5Card);
     if(top5TwoCol&&top5TwoCol.classList.contains('two-col')&&!top5TwoCol.children.length)top5TwoCol.remove();
   }
 
@@ -542,12 +552,30 @@ function cfEnsureChartsContainer(){
       delay:150,
       delayOnTouchOnly:true,
       touchStartThreshold:5,
-      filter:'canvas, input, button, select, textarea, .pbtn, .bt-toggle, [contenteditable="true"]',
+      filter:'canvas, input, button, select, textarea, .pbtn, .bt-toggle, [contenteditable="true"], [data-nodrag]',
       preventOnFilter:false,
+      onStart:function(){
+        // Le mode stylo intercepte le "touchend" en phase de capture sur
+        // tout élément data-editable et coupe la propagation de l'événement
+        // (nécessaire pour distinguer un tap-pour-éditer d'un tap ailleurs).
+        // Ça empêche Sortable de recevoir le relâchement qui termine le
+        // déplacement si la carte est lâchée sur/près d'un titre éditable.
+        // On retire donc temporairement data-editable pendant le glisser
+        // (juste le temps du geste), et on le restaure juste après.
+        container.querySelectorAll('[data-editable]').forEach(el=>{
+          el.setAttribute('data-cf-had-editable','1');
+          el.removeAttribute('data-editable');
+        });
+      },
       onEnd:function(){
-        const order=Array.from(container.children).map(el=>el.dataset.chartId).filter(Boolean);
+        container.querySelectorAll('[data-cf-had-editable]').forEach(el=>{
+          el.setAttribute('data-editable','');
+          el.removeAttribute('data-cf-had-editable');
+        });
+        const order=Array.from(container.children).map(el=>el.dataset.chartId).filter(Boolean).filter(id=>!CF_PINNED_LAST.includes(id));
         APP.cfChartOrder=order;
         cfPersist();
+        cfApplyChartOrder();
         cfApplyChartLayout();
       }
     });
@@ -685,6 +713,8 @@ function cfApplyChartOrder(){
   const map={};
   Array.from(container.children).forEach(card=>{ if(card.dataset.chartId)map[card.dataset.chartId]=card; });
   APP.cfChartOrder.forEach(id=>{ if(map[id])container.appendChild(map[id]); });
+  // Top5 / Pires5 sont épinglés : toujours en tout dernier, quoi qu'il arrive.
+  CF_PINNED_LAST.forEach(id=>{ if(map[id])container.appendChild(map[id]); });
 }
 function cfIsMobile(){
   return !!(window.matchMedia && window.matchMedia('(max-width:1100px)').matches);
@@ -698,7 +728,7 @@ function cfApplyChartLayout(){
   if(!container)return;
   const children=Array.from(container.children);
   if(cfIsMobile()){
-    children.forEach(el=>{el.style.gridColumn=CF_ALWAYS_HALF.has(el.dataset.chartId)?'span 3':'span 6';});
+    children.forEach(el=>{el.style.gridColumn='span 6';});
     return;
   }
   const isPieEl=(el)=>{
