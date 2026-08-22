@@ -44,13 +44,16 @@ const CF_BUILTIN_KPIS = [
 const CF_BUILTIN_CHARTS = [
   {id:'eq',label:'Évolution du capital'},{id:'pnl',label:'P&L'},{id:'risk',label:'Risk Management'},
   {id:'pie',label:'Win Rate'},{id:'mgmt',label:'Impact du management'},
-  {id:'top5',label:'Top 5 / Pires 5 trades'},
+  {id:'top5',label:'Top 5 trades'},{id:'pires5',label:'Pires 5 trades'},
   {id:'conf',label:'Par confluence'},{id:'pairs',label:'Par paire / actif'},
   {id:'sessions',label:'Par session'},{id:'jours',label:'Par jour de semaine'},{id:'tf',label:'Par timeframe'}
 ];
 // Graphiques natifs à largeur FIXE de 1/2 (les autres graphiques natifs sont
 // pleine largeur ; les camemberts ont une largeur dynamique selon leur nombre)
-const CF_HALF_WIDTH_NATIVE = new Set(['mgmt','top5']);
+const CF_HALF_WIDTH_NATIVE = new Set(['mgmt','top5','pires5']);
+// Top 5 / Pires 5 restent TOUJOURS côte à côte (1/2 chacun), même en mode
+// téléphone — seule exception à la règle "tout en pleine largeur sur mobile".
+const CF_ALWAYS_HALF = new Set(['top5','pires5']);
 const CF_TYPE_META = {
   stars:{label:'Note en étoiles (1 à 5)', widgets:['none','kpi','card','bar-v','bar-h','pie']},
   text:{label:'Zone de texte', widgets:['none']},
@@ -150,6 +153,29 @@ function cfCategoryStats(field,trades){
     map[v].total++;
   });
   return map;
+}
+// Nombre de tranches à prévoir pour un camembert (thème + dessin), selon le
+// nombre RÉEL de réponses possibles pour ce champ (pas une valeur figée) :
+// menu déroulant -> nombre d'options configurées ; étoiles -> 5 ; case à
+// cocher -> 2 (Oui/Non).
+function cfPieSliceCount(field){
+  if(field.type==='select')return Math.max(1,(field.options||[]).length);
+  if(field.type==='stars')return 5;
+  if(field.type==='toggle')return 2;
+  return 6;
+}
+// Ordre stable des catégories d'un camembert : pour un menu déroulant, on
+// respecte l'ordre des options telles que configurées (tranche 1 = 1ère
+// option, etc.) plutôt que l'ordre d'apparition dans les données, pour que
+// les couleurs choisies dans le thème restent toujours associées à la même
+// réponse.
+function cfPieCategoryOrder(field,map){
+  if(field.type==='select'&&field.options&&field.options.length){
+    const ordered=field.options.filter(o=>map[o]);
+    Object.keys(map).forEach(k=>{ if(!ordered.includes(k))ordered.push(k); });
+    return ordered;
+  }
+  return Object.keys(map);
 }
 function cfKpiValueText(field){
   if(field.type==='stars'||field.type==='number'){
@@ -328,7 +354,7 @@ function cfEnsureKpiNode(field){
     el.className='kpi-card';
     el.id='kpicf-'+field.id;
     el.dataset.kpiId=field.id;
-    el.innerHTML=`<div class="kpi-bar" id="kpicfbar-${field.id}"></div><div class="kpi-icon">🔹</div><div class="kpi-label">${escapeHtml(field.colName||field.label)}</div><div class="kpi-value" id="kpicfval-${field.id}">—</div>`;
+    el.innerHTML=`<div class="kpi-bar" id="kpicfbar-${field.id}"></div><div class="kpi-icon">🔹</div><div class="kpi-label" data-editable data-tvar="--kpi-label-color" id="cfkpilabel-${field.id}" style="color:var(--kpi-label-color,#64748b)">${escapeHtml(field.colName||field.label)}</div><div class="kpi-value" id="kpicfval-${field.id}">—</div>`;
     strip.appendChild(el);
   }
   return el;
@@ -349,6 +375,7 @@ function cfRenderKpiWidgets(){
     const id=el.id.replace('kpicf-','');
     if(!kpiFields.some(f=>f.id===id))el.remove();
   });
+  if(typeof applyPencilEdits==='function')applyPencilEdits();
 }
 function cfApplyKpiOrder(){
   const strip=document.querySelector('#page-trackrecord .kpi-strip');
@@ -450,7 +477,9 @@ function cfEnsureChartsContainer(){
   const pieCard=document.getElementById('cPie')&&document.getElementById('cPie').closest('.chart-card');
   const mgmtCard=document.getElementById('cMgmt')&&document.getElementById('cMgmt').closest('.chart-card');
   const top5El=document.getElementById('top5trades');
-  const top5Wrap=top5El&&top5El.closest('.two-col');
+  const worst5El=document.getElementById('worst5trades');
+  const top5Card=top5El&&top5El.closest('.card');
+  const worst5Card=worst5El&&worst5El.closest('.card');
   if(!eqCard||!pnlCard||!riskCard||!pieCard||!mgmtCard)return;
 
   const container=document.createElement('div');
@@ -467,11 +496,11 @@ function cfEnsureChartsContainer(){
   mgmtCard.dataset.chartId='mgmt';container.appendChild(mgmtCard);
   if(twoColWrap&&twoColWrap.classList.contains('two-col')&&!twoColWrap.children.length)twoColWrap.remove();
 
-  if(top5Wrap){
-    top5Wrap.dataset.chartId='top5';
-    top5Wrap.style.marginTop='0';
-    top5Wrap.style.marginBottom='0';
-    container.appendChild(top5Wrap);
+  if(top5Card&&worst5Card){
+    const top5TwoCol=top5Card.parentElement;
+    top5Card.dataset.chartId='top5';container.appendChild(top5Card);
+    worst5Card.dataset.chartId='pires5';container.appendChild(worst5Card);
+    if(top5TwoCol&&top5TwoCol.classList.contains('two-col')&&!top5TwoCol.children.length)top5TwoCol.remove();
   }
 
   const compDiv=document.getElementById('compCharts');
@@ -496,8 +525,33 @@ function cfEnsureChartsContainer(){
 .cf-shape-circle{max-width:200px;aspect-ratio:1/1;border-radius:50%;margin:0 auto;}
 .cf-shape-rect{max-width:360px;min-height:90px;margin:0 auto;}
 .cf-pie-body{display:flex;align-items:center;justify-content:center;}
+#chartsContainer>*{cursor:grab;}
+#chartsContainer>*.sortable-ghost{opacity:.35;}
+#chartsContainer>*.sortable-drag{cursor:grabbing;}
 `;
   document.head.appendChild(style);
+
+  // Glisser-déposer direct des graphiques (comme réarranger des applis) :
+  // on saisit une carte n'importe où et on la dépose ailleurs, les autres
+  // cartes se décalent en direct (animation intégrée de Sortable.js). Les
+  // clics sur les boutons/inputs à l'intérieur (BT, périodes, stylo...)
+  // restent normaux grâce à "filter".
+  if(window.Sortable){
+    new Sortable(container,{
+      animation:200,
+      delay:150,
+      delayOnTouchOnly:true,
+      touchStartThreshold:5,
+      filter:'canvas, input, button, select, textarea, .pbtn, .bt-toggle, [contenteditable="true"]',
+      preventOnFilter:false,
+      onEnd:function(){
+        const order=Array.from(container.children).map(el=>el.dataset.chartId).filter(Boolean);
+        APP.cfChartOrder=order;
+        cfPersist();
+        cfApplyChartLayout();
+      }
+    });
+  }
 }
 function cfChartHeaderControlsHtml(fieldId){
   return `<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
@@ -530,7 +584,7 @@ function cfEnsureChartNode(field){
     const isPie=field.widget.kind==='pie';
     const canvasStyle=isPie?' style="max-width:195px;max-height:195px;"':'';
     const bodyClass=isPie?'chart-body cf-pie-body':'chart-body';
-    card.innerHTML=`<div class="chart-header"><div class="chart-title" style="color:var(--cf-${field.id}-title,#00e5a0)">${escapeHtml((field.colName||field.label).toUpperCase())}</div>${cfChartHeaderControlsHtml(field.id)}</div>
+    card.innerHTML=`<div class="chart-header"><div class="chart-title" data-editable data-tvar="--cf-${field.id}-title" id="cftitle-${field.id}" style="color:var(--cf-${field.id}-title,#00e5a0)">${escapeHtml((field.colName||field.label).toUpperCase())}</div>${cfChartHeaderControlsHtml(field.id)}</div>
       <div class="${bodyClass}" style="height:220px"><canvas id="cfchart-${field.id}"${canvasStyle}></canvas></div>`;
     container.appendChild(card);
   }
@@ -545,7 +599,7 @@ function cfEnsureStatCardNode(field){
     card.id='cfcard-'+field.id;
     card.dataset.chartId=field.id;
     card.className='chart-card cf-stat-card cf-shape-'+((field.widget&&field.widget.shape)||'rect');
-    card.innerHTML=`<div class="cf-stat-inner"><div class="cf-stat-label">${escapeHtml(field.colName||field.label)}</div><div class="cf-stat-value" id="cfstatval-${field.id}">—</div></div>`;
+    card.innerHTML=`<div class="cf-stat-inner"><div class="cf-stat-label" data-editable id="cflabel-${field.id}">${escapeHtml(field.colName||field.label)}</div><div class="cf-stat-value" id="cfstatval-${field.id}">—</div></div>`;
     container.appendChild(card);
   }
   return card;
@@ -591,7 +645,7 @@ function cfDrawChart(field){
   }
   if(kind==='pie'){
     const map=cfCategoryStats(field,trades);
-    const ks=Object.keys(map).slice(0,8);
+    const ks=cfPieCategoryOrder(field,map).slice(0,cfPieSliceCount(field));
     if(!ks.length)return;
     const data=ks.map(k=>map[k].total);
     const fallback=['#00e5a0','#3b82f6','#f59e0b','#ef4444','#a78bfa','#f472b6','#22d3ee','#84cc16'];
@@ -622,6 +676,7 @@ function cfRenderCustomCharts(){
     const stillChart=f&&f.widget&&CF_CHART_WIDGET_KINDS.includes(f.widget.kind);
     if(!stillChart){destroy(id);el.remove();}
   });
+  if(typeof applyPencilEdits==='function')applyPencilEdits();
 }
 function cfApplyChartOrder(){
   const container=document.getElementById('chartsContainer');
@@ -643,7 +698,7 @@ function cfApplyChartLayout(){
   if(!container)return;
   const children=Array.from(container.children);
   if(cfIsMobile()){
-    children.forEach(el=>{el.style.gridColumn='span 6';});
+    children.forEach(el=>{el.style.gridColumn=CF_ALWAYS_HALF.has(el.dataset.chartId)?'span 3':'span 6';});
     return;
   }
   const isPieEl=(el)=>{
@@ -668,6 +723,9 @@ function cfApplyChartLayout(){
 // ── Intégration thème ──
 function cfBuildThemeVars(){
   const out=[];
+  APP.cfFields.filter(f=>f.type==='select').forEach(f=>{
+    out.push({v:'--mt-cf-'+f.id,l:'Titre '+(f.colName||f.label),page:'Paramètres',section:'Listes personnalisables'});
+  });
   APP.cfFields.forEach(f=>{
     const kind=f.widget&&f.widget.kind;
     if(!kind||kind==='none')return;
@@ -685,7 +743,11 @@ function cfBuildThemeVars(){
       out.push({v:'--cf-'+f.id+'-neg',l:lbl+' — négatif',page:'Track Record',section:'Champs personnalisés'});
     } else if(kind==='pie'){
       out.push({v:'--cf-'+f.id+'-title',l:lbl+' — titre',page:'Track Record',section:'Champs personnalisés'});
-      for(let i=1;i<=6;i++)out.push({v:'--cf-'+f.id+'-slice-'+i,l:lbl+' — tranche '+i,page:'Track Record',section:'Champs personnalisés'});
+      const n=cfPieSliceCount(f);
+      for(let i=1;i<=n;i++){
+        const optLabel=(f.type==='select'&&f.options&&f.options[i-1])?f.options[i-1]:('tranche '+i);
+        out.push({v:'--cf-'+f.id+'-slice-'+i,l:lbl+' — '+optLabel,page:'Track Record',section:'Champs personnalisés'});
+      }
     }
   });
   return out;
@@ -721,32 +783,63 @@ function cfRenderOptionsEditor(containerEl,arr,onChange){
     }});
   }
 }
-function cfToggleInlineOptions(id){
-  const el=document.getElementById('cfinline-'+id);
-  if(!el)return;
-  const opening=el.style.display==='none'||!el.style.display;
-  el.style.display=opening?'block':'none';
-  if(opening){
-    const f=APP.cfFields.find(x=>x.id===id);
-    if(!f)return;
+// Éditeur d'options d'un menu déroulant personnalisé, injecté directement à
+// la suite des 6 listes natives (Paires, Sessions, Confluences, Timeframes,
+// Management, Reprendrais-tu ?) dans le même groupe "Listes personnalisables"
+// — même structure, même comportement (glisser-déposer, ajout, couleur de
+// titre modifiable via le thème ou le mode stylo). Idempotent : repart des
+// blocs custom existants et les reconstruit à l'identique à chaque appel.
+function cfRenderCustomDropdownLists(){
+  const modGrid=document.getElementById('modGrid');
+  if(!modGrid)return;
+  modGrid.querySelectorAll('.mod-col[data-cf-list]').forEach(el=>el.remove());
+  const selectFields=APP.cfFields.filter(f=>f.type==='select');
+  selectFields.forEach(f=>{
     if(!f.options)f.options=[];
-    el.innerHTML=`<div class="mod-list" id="cfinlinelist-${id}" style="margin-bottom:6px;"></div><div class="mod-add"><input type="text" id="cfinlineadd-${id}" placeholder="Ajouter une option..." onkeydown="if(event.key==='Enter'){event.preventDefault();cfInlineAddOption('${id}');}"><button onclick="cfInlineAddOption('${id}')">+</button></div>`;
-    const onChange=()=>{cfPersist();cfInjectFormFields('f');cfInjectFormFields('e');};
-    cfRenderOptionsEditor(document.getElementById('cfinlinelist-'+id),f.options,onChange);
-  }
+    const cv='--mt-cf-'+f.id;
+    const html=`<div class="mod-col" data-cf-list="${f.id}">
+      <div class="mod-col-hdr"><span class="mod-col-title" data-editable id="cfmt-${f.id}" style="color:var(${cv})">${escapeHtml(f.colName||f.label)}</span><span style="font-size:9px;color:var(--muted)">${f.options.length}</span></div>
+      <div class="mod-list" id="cfml-${f.id}">${f.options.map((item,i)=>`<div class="mod-item"><span class="drag-h">⣿</span><span class="item-tx">${escapeHtml(item)}</span><button class="del-item" onclick="cfListRemoveOption('${f.id}',${i})">×</button></div>`).join('')}</div>
+      <div class="mod-add"><input type="text" id="cfma-${f.id}" placeholder="Ajouter..." onkeydown="if(event.key==='Enter')cfListAddOption('${f.id}')"><button onclick="cfListAddOption('${f.id}')">+</button></div>
+    </div>`;
+    modGrid.insertAdjacentHTML('beforeend',html);
+    const el=document.getElementById('cfml-'+f.id);
+    if(el&&window.Sortable){
+      new Sortable(el,{animation:120,handle:'.drag-h',onEnd:evt=>{
+        const[m]=f.options.splice(evt.oldIndex,1);
+        f.options.splice(evt.newIndex,0,m);
+        cfPersist();
+        cfInjectFormFields('f');
+        cfInjectFormFields('e');
+        if(typeof refreshAllCharts==='function')refreshAllCharts();
+      }});
+    }
+  });
+  if(typeof applyPencilEdits==='function')applyPencilEdits();
 }
-function cfInlineAddOption(id){
-  const f=APP.cfFields.find(x=>x.id===id);
+function cfListAddOption(fieldId){
+  const f=APP.cfFields.find(x=>x.id===fieldId);
   if(!f)return;
-  const inp=document.getElementById('cfinlineadd-'+id);
+  const inp=document.getElementById('cfma-'+fieldId);
   const v=inp.value.trim();
-  if(!v)return;
+  if(!v||(f.options||[]).includes(v))return;
   if(!f.options)f.options=[];
   f.options.push(v);
-  inp.value='';
-  const onChange=()=>{cfPersist();cfInjectFormFields('f');cfInjectFormFields('e');};
-  cfRenderOptionsEditor(document.getElementById('cfinlinelist-'+id),f.options,onChange);
-  onChange();
+  cfPersist();
+  cfInjectFormFields('f');
+  cfInjectFormFields('e');
+  cfRenderCustomDropdownLists();
+  if(typeof refreshAllCharts==='function')refreshAllCharts();
+}
+function cfListRemoveOption(fieldId,idx){
+  const f=APP.cfFields.find(x=>x.id===fieldId);
+  if(!f||!f.options)return;
+  f.options.splice(idx,1);
+  cfPersist();
+  cfInjectFormFields('f');
+  cfInjectFormFields('e');
+  cfRenderCustomDropdownLists();
+  if(typeof refreshAllCharts==='function')refreshAllCharts();
 }
 function cfEnsureCard(){
   if(document.getElementById('cfCard'))return;
@@ -757,7 +850,7 @@ function cfEnsureCard(){
   card.id='cfCard';
   card.innerHTML=`
     <div class="card-header">
-      <div class="card-title">CHAMPS PERSONNALISÉS</div>
+      <div class="card-title" data-editable id="cfCardTitleText">CHAMPS PERSONNALISÉS</div>
       <div style="display:flex;gap:7px;flex-wrap:wrap;">
         <button class="btn btn-p" onclick="cfOpenBuilder()">+ Nouveau graphique</button>
         <button class="btn btn-g" id="cfToggleBtn" onclick="cfToggleCard()">Afficher</button>
@@ -822,7 +915,7 @@ function cfRenderSettings(){
             <button class="btn" style="padding:5px 9px;font-size:9px;background:var(--btn-delall-bg);color:var(--btn-delall-tx);border:1px solid var(--btn-delall-bd);border-radius:5px;cursor:pointer;" onclick="cfDeleteField('${f.id}')">Supprimer</button>
           </div>
         </div>
-        ${f.type==='select'?`<div style="width:100%;"><button class="btn btn-g" style="padding:4px 9px;font-size:9px;margin-bottom:6px;" onclick="cfToggleInlineOptions('${f.id}')">Options du menu ▾</button><div id="cfinline-${f.id}" style="display:none;"></div></div>`:''}
+        ${f.type==='select'?`<div style="font-size:10px;color:var(--muted);width:100%;">Options modifiables dans "Listes personnalisables", plus bas.</div>`:''}
       </div>`;
     }).join('');
   }
@@ -1155,7 +1248,7 @@ document.addEventListener('click',function(e){
 const _cfOrigRenderModifs=window.renderModifs;
 window.renderModifs=function(){
   _cfOrigRenderModifs();
-  try{cfRenderSettings();}catch(e){console.warn('CF settings:',e);}
+  try{cfRenderCustomDropdownLists();cfRenderSettings();}catch(e){console.warn('CF settings:',e);}
 };
 
 if(typeof window.buildSyncPayload==='function'){
