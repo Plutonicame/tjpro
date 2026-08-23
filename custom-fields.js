@@ -49,12 +49,9 @@ const CF_BUILTIN_CHARTS = [
 ];
 // Graphiques natifs à largeur FIXE de 1/2 sur PC (les autres graphiques
 // natifs sont pleine largeur ; les camemberts ont une largeur dynamique
-// selon leur nombre). En mode téléphone, tout repasse en pleine largeur,
-// Top5/Pires5 compris.
-const CF_HALF_WIDTH_NATIVE = new Set(['mgmt','top5','pires5']);
-// Top 5 / Pires 5 sont épinglés : toujours en dernière position, jamais
-// réordonnables (ni via la liste des Paramètres, ni par glisser-déposer).
-const CF_PINNED_LAST = ['top5','pires5'];
+// selon leur nombre). Top5/Pires5 ne font plus partie de ce conteneur (voir
+// #cfBottomRow), donc pas concernés ici.
+const CF_HALF_WIDTH_NATIVE = new Set(['mgmt']);
 const CF_TYPE_META = {
   stars:{label:'Note en étoiles (1 à 5)', widgets:['none','kpi','card','bar-v','bar-h','pie']},
   text:{label:'Zone de texte', widgets:['none']},
@@ -81,9 +78,10 @@ function cfLoad(){
   APP.cfColOrder = (cfg && Array.isArray(cfg.colOrder)) ? cfg.colOrder : null;
   APP.cfKpiOrder = (cfg && Array.isArray(cfg.kpiOrder)) ? cfg.kpiOrder : null;
   APP.cfChartOrder = (cfg && Array.isArray(cfg.chartOrder)) ? cfg.chartOrder : null;
+  APP.cfPencilStyles = (cfg && cfg.pencilStyles && typeof cfg.pencilStyles==='object') ? cfg.pencilStyles : {};
 }
 function cfConfigSnapshot(){
-  return {fields:APP.cfFields, colOrder:APP.cfColOrder, kpiOrder:APP.cfKpiOrder, chartOrder:APP.cfChartOrder};
+  return {fields:APP.cfFields, colOrder:APP.cfColOrder, kpiOrder:APP.cfKpiOrder, chartOrder:APP.cfChartOrder, pencilStyles:APP.cfPencilStyles};
 }
 function cfPersist(){
   lssAcc('tj_cf_config', cfConfigSnapshot());
@@ -199,31 +197,33 @@ function cfKpiValueText(field){
 function cfInputId(prefix,field){return prefix+'-cf-'+field.id;}
 function cfFieldInputHtml(prefix,field){
   const id=cfInputId(prefix,field);
-  const label=escapeHtml(field.label);
+  const labelText=escapeHtml(field.label);
+  const labelHtml=`<label data-editable data-cf-custom-label="1" id="${cfLabelId(prefix,field)}" data-cf-field-id="${field.id}">${labelText}</label>`;
   if(field.type==='text'){
-    return `<div class="fg spanall cf-field" id="${id}-wrap"><label>${label}</label><textarea id="${id}" class="cf-input" oninput="autoGrow(this)"></textarea></div>`;
+    return `<div class="fg spanall cf-field" id="${id}-wrap">${labelHtml}<textarea id="${id}" class="cf-input" oninput="autoGrow(this)"></textarea></div>`;
   }
   if(field.type==='number'){
-    return `<div class="fg cf-field" id="${id}-wrap"><label>${label}</label><input type="number" step="any" id="${id}" class="cf-input"></div>`;
+    return `<div class="fg cf-field" id="${id}-wrap">${labelHtml}<input type="number" step="any" id="${id}" class="cf-input"></div>`;
   }
   if(field.type==='date'){
-    return `<div class="fg cf-field" id="${id}-wrap"><label>${label}</label><input type="date" id="${id}" class="cf-input"></div>`;
+    return `<div class="fg cf-field" id="${id}-wrap">${labelHtml}<input type="date" id="${id}" class="cf-input"></div>`;
   }
   if(field.type==='select'){
     const opts=(field.options||[]).map(o=>`<option>${escapeHtml(o)}</option>`).join('');
-    return `<div class="fg cf-field" id="${id}-wrap"><label>${label}</label><select id="${id}" class="cf-input"><option value="">—</option>${opts}</select></div>`;
+    return `<div class="fg cf-field" id="${id}-wrap">${labelHtml}<select id="${id}" class="cf-input"><option value="">—</option>${opts}</select></div>`;
   }
   if(field.type==='toggle'){
-    return `<div class="fg cf-field" id="${id}-wrap"><label>${label}</label><div style="display:flex;align-items:center;height:34px;"><input type="checkbox" id="${id}" class="cf-input" style="width:18px;height:18px;cursor:pointer;"></div></div>`;
+    return `<div class="fg cf-field" id="${id}-wrap">${labelHtml}<div style="display:flex;align-items:center;height:34px;"><input type="checkbox" id="${id}" class="cf-input" style="width:18px;height:18px;cursor:pointer;"></div></div>`;
   }
   if(field.type==='stars'){
-    return `<div class="fg spanall cf-field" id="${id}-wrap"><label>${label}</label>
+    return `<div class="fg spanall cf-field" id="${id}-wrap">${labelHtml}
       <div class="star-picker" id="${id}-picker" data-val="0">
         <span class="star-pick" data-v="1">★</span><span class="star-pick" data-v="2">★</span><span class="star-pick" data-v="3">★</span><span class="star-pick" data-v="4">★</span><span class="star-pick" data-v="5">★</span>
       </div><input type="hidden" id="${id}" class="cf-input" value="0"></div>`;
   }
   return '';
 }
+function cfLabelId(prefix,field){ return 'cflabel'+prefix+'-'+field.id; }
 function cfReadInput(prefix,field){
   const el=document.getElementById(cfInputId(prefix,field));
   if(!el)return undefined;
@@ -494,7 +494,7 @@ function cfEnsureChartsContainer(){
 
   const container=document.createElement('div');
   container.id='chartsContainer';
-  container.style.cssText='display:grid;grid-template-columns:repeat(6,1fr);gap:16px;grid-auto-flow:row dense;';
+  container.style.cssText='display:grid;grid-template-columns:repeat(60,1fr);gap:16px;grid-auto-flow:row dense;';
   eqCard.parentNode.insertBefore(container,eqCard);
 
   eqCard.dataset.chartId='eq';container.appendChild(eqCard);
@@ -506,13 +506,6 @@ function cfEnsureChartsContainer(){
   mgmtCard.dataset.chartId='mgmt';container.appendChild(mgmtCard);
   if(twoColWrap&&twoColWrap.classList.contains('two-col')&&!twoColWrap.children.length)twoColWrap.remove();
 
-  if(top5Card&&worst5Card){
-    const top5TwoCol=top5Card.parentElement;
-    top5Card.dataset.chartId='top5';top5Card.setAttribute('data-nodrag','1');container.appendChild(top5Card);
-    worst5Card.dataset.chartId='pires5';worst5Card.setAttribute('data-nodrag','1');container.appendChild(worst5Card);
-    if(top5TwoCol&&top5TwoCol.classList.contains('two-col')&&!top5TwoCol.children.length)top5TwoCol.remove();
-  }
-
   const compDiv=document.getElementById('compCharts');
   if(compDiv){
     const canvasMap={cConf:'conf',cPairs:'pairs',cSessions:'sessions',cJours:'jours',cTF:'tf'};
@@ -522,6 +515,27 @@ function cfEnsureChartsContainer(){
       if(cid)card.dataset.chartId=cid;
       container.appendChild(card);
     });
+  }
+
+  // Top 5 / Pires 5 : DÉLIBÉRÉMENT hors de #chartsContainer, dans une zone
+  // séparée juste en dessous. Le "grid-auto-flow:row dense" utilisé pour que
+  // les graphiques 1/2 se calent naturellement les uns à côté des autres a
+  // pour effet de bord de recaser N'IMPORTE QUEL élément (même en dernière
+  // position dans le DOM) dans un trou plus haut si sa taille le permet — il
+  // n'y a donc AUCUN moyen fiable de garder Top5/Pires5 "toujours tout en
+  // bas" s'ils font partie de cette même grille dense. D'où cette séparation
+  // stricte en dehors, qui garantit leur position par construction (et non
+  // par convention), sur PC comme sur téléphone.
+  let bottomRow=document.getElementById('cfBottomRow');
+  if(!bottomRow&&top5Card&&worst5Card){
+    bottomRow=document.createElement('div');
+    bottomRow.id='cfBottomRow';
+    bottomRow.style.cssText='display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:16px;';
+    container.parentNode.insertBefore(bottomRow,container.nextSibling);
+    const top5TwoCol=top5Card.parentElement;
+    top5Card.dataset.chartId='top5';bottomRow.appendChild(top5Card);
+    worst5Card.dataset.chartId='pires5';bottomRow.appendChild(worst5Card);
+    if(top5TwoCol&&top5TwoCol.classList.contains('two-col')&&!top5TwoCol.children.length)top5TwoCol.remove();
   }
 
   const style=document.createElement('style');
@@ -538,6 +552,7 @@ function cfEnsureChartsContainer(){
 #chartsContainer>*{cursor:grab;}
 #chartsContainer>*.sortable-ghost{opacity:.35;}
 #chartsContainer>*.sortable-drag{cursor:grabbing;}
+@media(max-width:1100px){#cfBottomRow{grid-template-columns:1fr!important;}}
 `;
   document.head.appendChild(style);
 
@@ -545,41 +560,41 @@ function cfEnsureChartsContainer(){
   // on saisit une carte n'importe où et on la dépose ailleurs, les autres
   // cartes se décalent en direct (animation intégrée de Sortable.js). Les
   // clics sur les boutons/inputs à l'intérieur (BT, périodes, stylo...)
-  // restent normaux grâce à "filter".
+  // restent normaux grâce à "filter". Fonctionne aussi bien sur les cartes
+  // pleine largeur que sur les cartes partagées, PC comme téléphone.
   if(window.Sortable){
     new Sortable(container,{
       animation:200,
       delay:150,
       delayOnTouchOnly:true,
       touchStartThreshold:5,
-      filter:'canvas, input, button, select, textarea, .pbtn, .bt-toggle, [contenteditable="true"], [data-nodrag]',
+      filter:'canvas, input, button, select, textarea, .pbtn, .bt-toggle, [contenteditable="true"]',
       preventOnFilter:false,
-      onStart:function(){
-        // Le mode stylo intercepte le "touchend" en phase de capture sur
-        // tout élément data-editable et coupe la propagation de l'événement
-        // (nécessaire pour distinguer un tap-pour-éditer d'un tap ailleurs).
-        // Ça empêche Sortable de recevoir le relâchement qui termine le
-        // déplacement si la carte est lâchée sur/près d'un titre éditable.
-        // On retire donc temporairement data-editable pendant le glisser
-        // (juste le temps du geste), et on le restaure juste après.
-        container.querySelectorAll('[data-editable]').forEach(el=>{
-          el.setAttribute('data-cf-had-editable','1');
-          el.removeAttribute('data-editable');
-        });
-      },
-      onEnd:function(){
-        container.querySelectorAll('[data-cf-had-editable]').forEach(el=>{
-          el.setAttribute('data-editable','');
-          el.removeAttribute('data-cf-had-editable');
-        });
-        const order=Array.from(container.children).map(el=>el.dataset.chartId).filter(Boolean).filter(id=>!CF_PINNED_LAST.includes(id));
-        APP.cfChartOrder=order;
-        cfPersist();
-        cfApplyChartOrder();
-        cfApplyChartLayout();
-      }
+      onStart:cfChartsSortableOnStart,
+      onEnd:cfChartsSortableOnEnd
     });
   }
+}
+// Uniformise la hauteur des graphiques d'une même rangée : les cartes de
+// #chartsContainer s'étirent déjà à la hauteur de la rangée grâce au
+// comportement par défaut de CSS Grid (align-items:stretch) — encore faut-il
+// que leur CONTENU (le corps du graphique) suive cet étirement au lieu de
+// garder une hauteur fixe en pixels. On passe donc chaque carte en colonne
+// flexible avec un corps extensible (flex:1) plutôt qu'une hauteur figée.
+function cfNormalizeChartHeights(){
+  const container=document.getElementById('chartsContainer');
+  if(!container)return;
+  Array.from(container.children).forEach(card=>{
+    card.style.height='100%';
+    card.style.display='flex';
+    card.style.flexDirection='column';
+    const body=card.querySelector('.chart-body');
+    if(body){
+      body.style.flex='1';
+      body.style.height='auto';
+      body.style.minHeight='180px';
+    }
+  });
 }
 function cfChartHeaderControlsHtml(fieldId){
   return `<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
@@ -597,6 +612,49 @@ function cfChartHeaderControlsHtml(fieldId){
 function cfEnsureChartState(fieldId){
   if(!(fieldId in BT_STATE))BT_STATE[fieldId]=false;
   if(!(fieldId in ST))ST[fieldId]='tout';
+}
+// Le mode stylo attache DEUX mécanismes de blocage sur les éléments
+// "data-editable" pendant qu'il est actif :
+//  1) un écouteur délégué sur document (phase de capture) qui coupe la
+//     propagation si la cible a l'attribut data-editable ;
+//  2) un écouteur touchend/click attaché DIRECTEMENT sur chaque élément
+//     data-editable lui-même (posé une fois par setupPencil(), référencé
+//     sur l'élément via el._ph), qui coupe aussi la propagation — et qui ne
+//     vérifie même pas l'attribut, seulement si le mode stylo est actif.
+// Retirer juste l'attribut ne suffit donc pas pour le 2) : il faut aussi
+// détacher cet écouteur précis le temps du glisser, puis le rattacher juste
+// après (sous peine de perdre définitivement l'édition au clic sur ce titre,
+// car setupPencil() ne réattache jamais un _ph déjà posé).
+function cfChartsSortableOnStart(){
+  const container=document.getElementById('chartsContainer');
+  if(!container)return;
+  container.querySelectorAll('[data-editable]').forEach(el=>{
+    el.setAttribute('data-cf-had-editable','1');
+    el.removeAttribute('data-editable');
+    if(el._ph){
+      el.removeEventListener('touchend',el._ph);
+      el.removeEventListener('click',el._ph);
+      el.dataset.cfPhDetached='1';
+    }
+  });
+}
+function cfChartsSortableOnEnd(){
+  const container=document.getElementById('chartsContainer');
+  if(!container)return;
+  container.querySelectorAll('[data-cf-had-editable]').forEach(el=>{
+    el.setAttribute('data-editable','');
+    el.removeAttribute('data-cf-had-editable');
+    if(el.dataset.cfPhDetached&&el._ph){
+      el.addEventListener('click',el._ph);
+      el.addEventListener('touchend',el._ph,{passive:false});
+      delete el.dataset.cfPhDetached;
+    }
+  });
+  const order=Array.from(container.children).map(el=>el.dataset.chartId).filter(Boolean);
+  APP.cfChartOrder=order;
+  cfPersist();
+  cfApplyChartOrder();
+  cfApplyChartLayout();
 }
 function cfEnsureChartNode(field){
   let card=document.getElementById('cfcard-'+field.id);
@@ -678,8 +736,19 @@ function cfDrawChart(field){
     const data=ks.map(k=>map[k].total);
     const fallback=['#00e5a0','#3b82f6','#f59e0b','#ef4444','#a78bfa','#f472b6','#22d3ee','#84cc16'];
     const palette=ks.map((k,i)=>gc('--cf-'+field.id+'-slice-'+(i+1))||fallback[i%fallback.length]);
-    CH[field.id]=new Chart(ctx,{type:'doughnut',data:{labels:ks,datasets:[{data,backgroundColor:palette,borderColor:'#0b0f1a',borderWidth:3,hoverOffset:5}]},
-      options:{responsive:true,maintainAspectRatio:true,cutout:'60%',plugins:{legend:{position:'bottom',labels:{color:'#94a3b8',font:{size:10},boxWidth:11,boxHeight:11}}}}});
+    const exploded=cfPieExploded[field.id];
+    const offsets=ks.map(k=>k===exploded?26:0);
+    CH[field.id]=new Chart(ctx,{type:'doughnut',data:{labels:ks,datasets:[{data,backgroundColor:palette,borderColor:'#0b0f1a',borderWidth:3,hoverOffset:5,offset:offsets}]},
+      options:{responsive:true,maintainAspectRatio:true,cutout:'60%',plugins:{legend:{position:'bottom',labels:{color:'#94a3b8',font:{size:10},boxWidth:11,boxHeight:11}}},
+        onClick:(evt,elements)=>{
+          // Uniquement en mode stylo : on "détache" la part touchée (comme
+          // un camembert éclaté) — retaper dessus la remet en place.
+          if(!pencilActive)return;
+          if(!elements||!elements.length)return;
+          const clickedLabel=ks[elements[0].index];
+          cfPieExploded[field.id]=(cfPieExploded[field.id]===clickedLabel)?null:clickedLabel;
+          cfDrawChart(field);
+        }}});
   }
 }
 function cfRenderCustomCharts(){
@@ -713,8 +782,6 @@ function cfApplyChartOrder(){
   const map={};
   Array.from(container.children).forEach(card=>{ if(card.dataset.chartId)map[card.dataset.chartId]=card; });
   APP.cfChartOrder.forEach(id=>{ if(map[id])container.appendChild(map[id]); });
-  // Top5 / Pires5 sont épinglés : toujours en tout dernier, quoi qu'il arrive.
-  CF_PINNED_LAST.forEach(id=>{ if(map[id])container.appendChild(map[id]); });
 }
 function cfIsMobile(){
   return !!(window.matchMedia && window.matchMedia('(max-width:1100px)').matches);
@@ -723,29 +790,31 @@ function cfIsMobile(){
 // 2=3 chacun, 3 ou plus=2 chacun → jamais plus de 3 camemberts par ligne).
 // En mode téléphone, tout repasse en pleine largeur (span 6, une seule
 // colonne visible de toute façon vu le CSS mobile du reste de l'appli).
+// Grille à 60 colonnes (au lieu de 6) : 60 se divise proprement par 1, 2, 3,
+// 4, 5 et 6, ce qui permet d'avoir jusqu'à 6 camemberts sur une même ligne
+// en PC (et jusqu'à 3 en téléphone) avec une largeur toujours strictement
+// égale entre eux, quel que soit leur nombre.
+const CF_GRID_COLS=60;
 function cfApplyChartLayout(){
   const container=document.getElementById('chartsContainer');
   if(!container)return;
   const children=Array.from(container.children);
-  if(cfIsMobile()){
-    children.forEach(el=>{el.style.gridColumn='span 6';});
-    return;
-  }
   const isPieEl=(el)=>{
     const id=el.dataset.chartId;
     if(id==='pie')return true;
     const f=APP.cfFields.find(x=>x.id===id);
     return !!(f&&f.widget&&f.widget.kind==='pie');
   };
+  const mobile=cfIsMobile();
   const pies=children.filter(isPieEl);
-  let pieSpan=6;
-  if(pies.length===2)pieSpan=3;
-  else if(pies.length>=3)pieSpan=2;
+  const maxPiesPerRow=mobile?3:6;
+  const pieCount=Math.max(1,Math.min(pies.length,maxPiesPerRow));
+  const pieSpan=CF_GRID_COLS/pieCount;
   children.forEach(el=>{
     const id=el.dataset.chartId;
-    let span=6;
+    let span=CF_GRID_COLS;
     if(isPieEl(el))span=pieSpan;
-    else if(CF_HALF_WIDTH_NATIVE.has(id))span=3;
+    else if(!mobile&&CF_HALF_WIDTH_NATIVE.has(id))span=CF_GRID_COLS/2;
     el.style.gridColumn='span '+span;
   });
 }
@@ -753,6 +822,7 @@ function cfApplyChartLayout(){
 // ── Intégration thème ──
 function cfBuildThemeVars(){
   const out=[];
+  out.push({v:'--history-grid-color',l:'Quadrillage (lignes/colonnes)',page:'Journal de trading',section:'Historique des trades'});
   APP.cfFields.filter(f=>f.type==='select').forEach(f=>{
     out.push({v:'--mt-cf-'+f.id,l:'Titre '+(f.colName||f.label),page:'Paramètres',section:'Listes personnalisables'});
   });
@@ -961,6 +1031,9 @@ function cfRenderSettings(){
 
 // ── Modale de création / édition d'un champ ──
 let cfEditingId=null;
+// Part de camembert actuellement "éclatée" en mode stylo (tap pour détacher,
+// re-tap pour remettre en place) — état volatile, non sauvegardé.
+let cfPieExploded={};
 let cfTempOptions=[];
 function cfEnsureModal(){
   if(document.getElementById('cfModal'))return;
@@ -1236,7 +1309,7 @@ window.updateKPIs=function(){
 const _cfOrigRefreshAllCharts=window.refreshAllCharts;
 window.refreshAllCharts=function(){
   _cfOrigRefreshAllCharts();
-  try{cfRenderCustomCharts();cfApplyChartOrder();cfApplyChartLayout();}catch(e){console.warn('CF charts:',e);}
+  try{cfRenderCustomCharts();cfApplyChartOrder();cfApplyChartLayout();cfNormalizeChartHeights();}catch(e){console.warn('CF charts:',e);}
 };
 
 // redrawForKey() est le point d'entrée générique utilisé par toggleBT() (case
@@ -1300,6 +1373,7 @@ if(typeof window._applyCloudDataDirect==='function'){
         APP.cfColOrder=Array.isArray(cfg.colOrder)?cfg.colOrder:null;
         APP.cfKpiOrder=Array.isArray(cfg.kpiOrder)?cfg.kpiOrder:null;
         APP.cfChartOrder=Array.isArray(cfg.chartOrder)?cfg.chartOrder:null;
+        APP.cfPencilStyles=(cfg.pencilStyles&&typeof cfg.pencilStyles==='object')?cfg.pencilStyles:{};
         cfEnsureOrders();
         lssAcc('tj_cf_config',cfConfigSnapshot());
         cfInjectFormFields('f');
@@ -1307,18 +1381,142 @@ if(typeof window._applyCloudDataDirect==='function'){
         renderTable();
         refreshAllCharts();
         cfRenderSettings();
+        cfApplyPencilStylesCss();
       }
     }catch(e){console.warn('CF cloud pull:',e);}
   };
 }
 
 // ── Amorçage ──
+// Quadrillage de l'historique des trades (lignes ET colonnes), couleur
+// pilotée par --history-grid-color (thème > Journal de trading). Valeur par
+// défaut = la ligne de séparation d'origine, pour ne rien changer tant que
+// l'utilisateur n'a pas choisi sa propre couleur.
+function cfEnsureHistoryGridStyle(){
+  if(document.getElementById('cfHistoryGridStyle'))return;
+  const style=document.createElement('style');
+  style.id='cfHistoryGridStyle';
+  style.textContent=`
+#page-journal table{border-collapse:collapse;}
+#page-journal table th,#page-journal table td{border:1px solid var(--history-grid-color,rgba(30,45,69,.5));}
+`;
+  document.head.appendChild(style);
+}
+
+// ── Mode stylo : police + taille indépendante PC/téléphone pour le libellé
+// des questions personnalisées (les autres éléments éditables de l'appli ne
+// sont pas concernés — le comportement natif, volontairement identique sur
+// PC et téléphone, reste inchangé partout ailleurs). ──
+const CF_PENCIL_FONTS=['Space Mono','DM Sans','Arial','Georgia','Courier New'];
+function cfEnsurePencilExtraControls(){
+  if(document.getElementById('cfPencilExtra'))return;
+  const toolbar=document.getElementById('pencilToolbar');
+  if(!toolbar)return;
+  const wrap=document.createElement('span');
+  wrap.id='cfPencilExtra';
+  wrap.style.cssText='display:none;align-items:center;gap:8px;';
+  wrap.innerHTML=`
+    <label style="font-family:var(--mono);font-size:9px;color:var(--muted)">Police :</label>
+    <select id="cfPencilFontFamily" onchange="cfApplyPencilExtra()">${CF_PENCIL_FONTS.map(f=>`<option value="${escapeHtml(f)}">${escapeHtml(f)}</option>`).join('')}</select>
+    <label style="font-family:var(--mono);font-size:9px;color:var(--muted)">Taille PC :</label>
+    <input type="number" id="cfPencilFontSizePC" min="8" max="72" style="width:52px;" oninput="cfApplyPencilExtra()">
+    <label style="font-family:var(--mono);font-size:9px;color:var(--muted)">Taille tél. :</label>
+    <input type="number" id="cfPencilFontSizeMobile" min="8" max="72" style="width:52px;" oninput="cfApplyPencilExtra()">
+  `;
+  const checkBtn=toolbar.querySelector('button.btn-g');
+  if(checkBtn)toolbar.insertBefore(wrap,checkBtn);
+  else toolbar.appendChild(wrap);
+}
+// Applique en direct (à chaque changement des contrôles ci-dessus), pour un
+// retour immédiat pendant que l'utilisateur ajuste — la sauvegarde définitive
+// se fait quand même via le bouton natif "✓" (applyPencilStyle, surchargé
+// plus bas), qui nettoie aussi la taille "générique" que le mécanisme natif
+// aurait posée en trop.
+function cfApplyPencilExtra(){
+  if(!currentEditEl||currentEditEl.dataset.cfCustomLabel!=='1')return;
+  const fieldId=currentEditEl.dataset.cfFieldId;
+  const fontFamily=document.getElementById('cfPencilFontFamily').value;
+  const fsDesktop=parseInt(document.getElementById('cfPencilFontSizePC').value,10)||14;
+  const fsMobile=parseInt(document.getElementById('cfPencilFontSizeMobile').value,10)||14;
+  if(!APP.cfPencilStyles)APP.cfPencilStyles={};
+  APP.cfPencilStyles[fieldId]={fontFamily,fsDesktop,fsMobile};
+  cfApplyPencilStylesCss();
+}
+// Régénère la feuille de style regroupant toutes les polices/tailles
+// personnalisées, avec des règles PC et téléphone séparées (impossible à
+// obtenir avec un simple style inline, qui ne connaît pas les media queries).
+function cfApplyPencilStylesCss(){
+  let style=document.getElementById('cfPencilStylesCss');
+  if(!style){
+    style=document.createElement('style');
+    style.id='cfPencilStylesCss';
+    document.head.appendChild(style);
+  }
+  const styles=APP.cfPencilStyles||{};
+  let css='';
+  Object.keys(styles).forEach(fieldId=>{
+    const st=styles[fieldId];
+    const sel='#cflabelf-'+fieldId+',#cflabele-'+fieldId;
+    if(st.fontFamily)css+=sel+'{font-family:\''+st.fontFamily+'\',sans-serif !important;}\n';
+    css+='@media(min-width:1101px){'+sel+'{font-size:'+(st.fsDesktop||14)+'px !important;}}\n';
+    css+='@media(max-width:1100px){'+sel+'{font-size:'+(st.fsMobile||14)+'px !important;}}\n';
+  });
+  style.textContent=css;
+}
+const _cfOrigPencilSyncPanelToEl=window.pencilSyncPanelToEl;
+window.pencilSyncPanelToEl=function(el){
+  _cfOrigPencilSyncPanelToEl(el);
+  try{
+    cfEnsurePencilExtraControls();
+    const extra=document.getElementById('cfPencilExtra');
+    const nativeFsInput=document.getElementById('pencilFontSize');
+    const isCustomLabel=!!(el&&el.dataset&&el.dataset.cfCustomLabel==='1');
+    if(extra)extra.style.display=isCustomLabel?'inline-flex':'none';
+    if(nativeFsInput){
+      nativeFsInput.style.display=isCustomLabel?'none':'';
+      if(nativeFsInput.previousElementSibling)nativeFsInput.previousElementSibling.style.display=isCustomLabel?'none':'';
+    }
+    if(isCustomLabel){
+      const fieldId=el.dataset.cfFieldId;
+      const st=(APP.cfPencilStyles&&APP.cfPencilStyles[fieldId])||{};
+      document.getElementById('cfPencilFontFamily').value=st.fontFamily||CF_PENCIL_FONTS[0];
+      document.getElementById('cfPencilFontSizePC').value=st.fsDesktop||14;
+      document.getElementById('cfPencilFontSizeMobile').value=st.fsMobile||14;
+    }
+  }catch(e){console.warn('CF pencil sync:',e);}
+};
+const _cfOrigApplyPencilStyle=window.applyPencilStyle;
+window.applyPencilStyle=function(){
+  _cfOrigApplyPencilStyle();
+  try{
+    if(currentEditEl&&currentEditEl.dataset&&currentEditEl.dataset.cfCustomLabel==='1'){
+      // L'appel natif ci-dessus vient de poser une taille de police unique
+      // (identique PC/téléphone) directement en style inline — on la retire
+      // pour laisser nos règles CSS séparées (voir cfApplyPencilStylesCss)
+      // faire foi, sans quoi le style inline serait toujours prioritaire.
+      currentEditEl.style.removeProperty('font-size');
+      delete currentEditEl.dataset.userFs;
+      // Idem pour la valeur déjà enregistrée par saveOneEdit() juste avant :
+      // sans ce nettoyage, applyPencilEdits() la réappliquerait sans
+      // distinction PC/téléphone au prochain chargement de page.
+      const key=getEK(currentEditEl);
+      const editsKey=accKey('tj_pencil_edits');
+      const edits=ls(editsKey,{});
+      if(edits[key]){ edits[key].fs=''; lss(editsKey,edits); }
+      cfApplyPencilExtra();
+      cfPersist();
+    }
+  }catch(e){console.warn('CF pencil style:',e);}
+};
+
 function cfInit(){
   try{
     cfLoad();
     cfEnsureOrders();
     cfEnsureModal();
     cfEnsureCard();
+    cfEnsureHistoryGridStyle();
+    cfApplyPencilStylesCss();
     cfInjectFormFields('f');
     cfInjectFormFields('e');
     cfEnsureChartsContainer();
@@ -1328,6 +1526,7 @@ function cfInit(){
     cfRenderCustomCharts();
     cfApplyChartOrder();
     cfApplyChartLayout();
+    cfNormalizeChartHeights();
     if(typeof renderTable==='function')renderTable();
     cfRenderSettings();
   }catch(e){console.error('Erreur d\'initialisation des champs personnalisés :',e);}
@@ -1340,7 +1539,7 @@ document.addEventListener('DOMContentLoaded',function(){
 if(window.matchMedia){
   const _cfMq=window.matchMedia('(max-width:1100px)');
   const _cfOnBreakpointChange=function(){
-    try{ cfLayoutKpiStrip(); cfApplyChartLayout(); }catch(e){}
+    try{ cfLayoutKpiStrip(); cfApplyChartLayout(); cfNormalizeChartHeights(); }catch(e){}
   };
   if(_cfMq.addEventListener)_cfMq.addEventListener('change',_cfOnBreakpointChange);
   else if(_cfMq.addListener)_cfMq.addListener(_cfOnBreakpointChange);
