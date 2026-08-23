@@ -494,7 +494,7 @@ function cfEnsureChartsContainer(){
 
   const container=document.createElement('div');
   container.id='chartsContainer';
-  container.style.cssText='display:grid;grid-template-columns:repeat(60,1fr);gap:16px;grid-auto-flow:row dense;';
+  container.style.cssText='display:flex;flex-wrap:wrap;gap:16px;';
   eqCard.parentNode.insertBefore(container,eqCard);
 
   eqCard.dataset.chartId='eq';container.appendChild(eqCard);
@@ -553,6 +553,16 @@ function cfEnsureChartsContainer(){
 #chartsContainer>*.sortable-ghost{opacity:.35;}
 #chartsContainer>*.sortable-drag{cursor:grabbing;}
 @media(max-width:1100px){#cfBottomRow{grid-template-columns:1fr!important;}}
+/* Largeurs MINIMUM, pas figées : flex-grow permet à un graphique seul sur sa
+   ligne de s'étirer pour occuper toute la place (management à 100% s'il est
+   seul, camemberts qui remplissent l'espace s'ils sont moins nombreux que le
+   maximum par ligne), tout en se limitant à sa taille minimum dès qu'un
+   autre graphique partage la même ligne. */
+#chartsContainer{--cf-pie-basis:16.6667%;}
+@media(max-width:1100px){#chartsContainer{--cf-pie-basis:33.3334%;}}
+.cf-flex-full{flex:1 1 100%;}
+.cf-flex-half{flex:1 1 50%;}
+.cf-flex-pie{flex:1 1 var(--cf-pie-basis,16.6667%);}
 `;
   document.head.appendChild(style);
 
@@ -781,36 +791,30 @@ function cfApplyChartOrder(){
 function cfIsMobile(){
   return !!(window.matchMedia && window.matchMedia('(max-width:1100px)').matches);
 }
-// Largeurs : pleine=span 6, demie=span 3, camembert dynamique (1 seul=6,
-// 2=3 chacun, 3 ou plus=2 chacun → jamais plus de 3 camemberts par ligne).
-// En mode téléphone, tout repasse en pleine largeur (span 6, une seule
-// colonne visible de toute façon vu le CSS mobile du reste de l'appli).
-// Grille à 60 colonnes (au lieu de 6) : 60 se divise proprement par 1, 2, 3,
-// 4, 5 et 6, ce qui permet d'avoir jusqu'à 6 camemberts sur une même ligne
-// en PC (et jusqu'à 3 en téléphone) avec une largeur toujours strictement
-// égale entre eux, quel que soit leur nombre.
-const CF_GRID_COLS=60;
+// Largeurs MINIMUM (pas figées) via flexbox : chaque carte porte une classe
+// qui fixe sa taille plancher (pleine / demie / camembert), et flex-grow
+// s'occupe tout seul de l'étirer pour remplir sa ligne quand rien d'autre ne
+// la partage — un management seul prend 100%, deux camemberts seuls entre
+// eux prennent 50% chacun, six camemberts se tassent à 1/6 chacun, etc. Plus
+// besoin de compter les camemberts ni de détecter le mode téléphone en JS :
+// la bascule PC/téléphone de --cf-pie-basis (1/6 ↔ 1/3) est gérée en pur CSS
+// via media query (voir cfEnsureChartsContainer).
 function cfApplyChartLayout(){
   const container=document.getElementById('chartsContainer');
   if(!container)return;
-  const children=Array.from(container.children);
   const isPieEl=(el)=>{
     const id=el.dataset.chartId;
     if(id==='pie')return true;
     const f=APP.cfFields.find(x=>x.id===id);
     return !!(f&&f.widget&&f.widget.kind==='pie');
   };
-  const mobile=cfIsMobile();
-  const pies=children.filter(isPieEl);
-  const maxPiesPerRow=mobile?3:6;
-  const pieCount=Math.max(1,Math.min(pies.length,maxPiesPerRow));
-  const pieSpan=CF_GRID_COLS/pieCount;
-  children.forEach(el=>{
+  Array.from(container.children).forEach(el=>{
+    el.classList.remove('cf-flex-full','cf-flex-half','cf-flex-pie');
+    el.style.removeProperty('grid-column');
     const id=el.dataset.chartId;
-    let span=CF_GRID_COLS;
-    if(isPieEl(el))span=pieSpan;
-    else if(!mobile&&CF_HALF_WIDTH_NATIVE.has(id))span=CF_GRID_COLS/2;
-    el.style.gridColumn='span '+span;
+    if(isPieEl(el))el.classList.add('cf-flex-pie');
+    else if(CF_HALF_WIDTH_NATIVE.has(id))el.classList.add('cf-flex-half');
+    else el.classList.add('cf-flex-full');
   });
 }
 
