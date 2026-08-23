@@ -581,21 +581,16 @@ function cfEnsureChartsContainer(){
 // que leur CONTENU (le corps du graphique) suive cet étirement au lieu de
 // garder une hauteur fixe en pixels. On passe donc chaque carte en colonne
 // flexible avec un corps extensible (flex:1) plutôt qu'une hauteur figée.
-function cfNormalizeChartHeights(){
-  const container=document.getElementById('chartsContainer');
-  if(!container)return;
-  Array.from(container.children).forEach(card=>{
-    card.style.height='100%';
-    card.style.display='flex';
-    card.style.flexDirection='column';
-    const body=card.querySelector('.chart-body');
-    if(body){
-      body.style.flex='1';
-      body.style.height='auto';
-      body.style.minHeight='180px';
-    }
-  });
-}
+// (Désactivée) — cette fonction rendait le corps des graphiques "extensible"
+// (flex + hauteur auto) pour égaliser les hauteurs par rangée. Problème :
+// Chart.js redimensionne son canvas selon la hauteur de son conteneur ; sans
+// hauteur de référence FIXE, ça crée une boucle (le graphique grandit → son
+// conteneur grandit → Chart.js le redessine encore plus grand → ...), d'où
+// l'agrandissement à l'infini constaté sur le Track Record. On revient donc
+// à une hauteur fixe (comme à l'origine, sûre), et cette fonction ne touche
+// plus à aucune hauteur — gardée en place uniquement pour ne pas casser les
+// appels existants ailleurs dans le fichier.
+function cfNormalizeChartHeights(){}
 function cfChartHeaderControlsHtml(fieldId){
   return `<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
     <label class="bt-toggle"><input type="checkbox" id="bt-${fieldId}" onchange="toggleBT('${fieldId}')"> BT</label>
