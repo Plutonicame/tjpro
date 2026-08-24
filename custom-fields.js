@@ -580,6 +580,7 @@ function cfEnsureChartsContainer(){
       touchStartThreshold:5,
       filter:'canvas, input, button, select, textarea, .pbtn, .bt-toggle, [contenteditable="true"]',
       preventOnFilter:false,
+      onMove:cfChartsSortableOnMove,
       onStart:cfChartsSortableOnStart,
       onEnd:cfChartsSortableOnEnd
     });
@@ -630,6 +631,48 @@ function cfEnsureChartState(fieldId){
 // détacher cet écouteur précis le temps du glisser, puis le rattacher juste
 // après (sous peine de perdre définitivement l'édition au clic sur ce titre,
 // car setupPencil() ne réattache jamais un _ph déjà posé).
+// En flexbox avec retour à la ligne, Sortable.js ne fait par défaut pas la
+// différence entre "je veux insérer à côté" et "je veux insérer EN DESSOUS,
+// sur une nouvelle ligne" — il regarde surtout l'ordre dans le DOM, donc deux
+// graphiques qui PEUVENT tenir côte à côte s'emboîtent automatiquement même
+// si l'intention était de les empiler. On corrige ça en regardant où se
+// trouve le doigt/curseur PENDANT le survol d'une carte : dans sa moitié
+// haute → comportement normal (à côté / avant-après) ; dans sa bande basse
+// (dernier ~30% de sa hauteur) → on comprend "en dessous, nouvelle ligne", et
+// on insère nous-mêmes juste après la DERNIÈRE carte de cette même ligne
+// (repérée par un haut de boîte quasi identique), pour forcer le retour à la
+// ligne plutôt qu'un simple emboîtement.
+// ⚠️ Le seuil (30%) est un réglage raisonnable mais pas testé en conditions
+// réelles (aucun navigateur disponible ici) — à ajuster si le geste est trop
+// ou pas assez sensible.
+function cfChartsSortableOnMove(evt){
+  const related=evt.related,dragged=evt.dragged;
+  if(!related||related===dragged||!evt.originalEvent)return true;
+  const oe=evt.originalEvent;
+  const clientY=(oe.touches&&oe.touches[0])?oe.touches[0].clientY:oe.clientY;
+  if(clientY==null||typeof related.getBoundingClientRect!=='function')return true;
+  const rect=related.getBoundingClientRect();
+  if(!rect||!rect.height)return true;
+  const relativeY=(clientY-rect.top)/rect.height;
+  if(relativeY<0.7)return true;
+  const container=related.parentNode;
+  if(!container)return true;
+  const siblings=Array.from(container.children).filter(el=>el!==dragged);
+  const idx=siblings.indexOf(related);
+  if(idx===-1)return true;
+  const relatedTop=Math.round(rect.top);
+  let lastSameRow=related;
+  for(let i=idx+1;i<siblings.length;i++){
+    const sRect=siblings[i].getBoundingClientRect();
+    if(Math.abs(Math.round(sRect.top)-relatedTop)<=4)lastSameRow=siblings[i];
+    else break;
+  }
+  if(lastSameRow!==related){
+    container.insertBefore(dragged,lastSameRow.nextSibling);
+    return false;
+  }
+  return true;
+}
 function cfChartsSortableOnStart(){
   const container=document.getElementById('chartsContainer');
   if(!container)return;
