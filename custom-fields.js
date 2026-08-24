@@ -786,8 +786,17 @@ function cfDrawChart(field){
     const palette=ks.map((k,i)=>gc('--cf-'+field.id+'-slice-'+(i+1))||fallback[i%fallback.length]);
     const exploded=cfPieExploded[field.id];
     const offsets=ks.map(k=>k===exploded?26:0);
+    // Avec beaucoup de catégories, la légende (en bas) a besoin de plus de
+    // lignes ; comme la hauteur totale du graphique est fixe, chaque ligne de
+    // légende en plus grignote la place du donut, qui paraît alors plus
+    // petit qu'un camembert à 2-3 catégories (ex: Win Rate). On réduit donc
+    // la légende progressivement pour limiter cet effet, sans jamais toucher
+    // à la hauteur du conteneur (voir la mésaventure avec Chart.js plus haut
+    // dans cette conversation).
+    const legendFontSize=ks.length<=3?11:ks.length<=5?9:8;
+    const legendBoxSize=ks.length<=3?13:ks.length<=5?10:9;
     CH[field.id]=new Chart(ctx,{type:'doughnut',data:{labels:ks,datasets:[{data,backgroundColor:palette,borderColor:'#0b0f1a',borderWidth:3,hoverOffset:5,offset:offsets}]},
-      options:{responsive:true,maintainAspectRatio:true,cutout:'60%',plugins:{legend:{position:'bottom',labels:{color:'#94a3b8',font:{size:10},boxWidth:11,boxHeight:11}}},
+      options:{responsive:true,maintainAspectRatio:true,cutout:'60%',plugins:{legend:{position:'bottom',align:'center',labels:{padding:ks.length<=3?16:8,color:'#94a3b8',font:{size:legendFontSize},boxWidth:legendBoxSize,boxHeight:legendBoxSize}}},
         onClick:(evt,elements)=>{
           // Uniquement en mode stylo : on "détache" la part touchée (comme
           // un camembert éclaté) — retaper dessus la remet en place.
