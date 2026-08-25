@@ -163,12 +163,14 @@ function cfPieSliceCount(field){
   if(field.type==='toggle')return 2;
   return 6;
 }
-// Ordre stable des catégories d'un camembert : pour un menu déroulant, on
-// respecte l'ordre des options telles que configurées (tranche 1 = 1ère
-// option, etc.) plutôt que l'ordre d'apparition dans les données, pour que
-// les couleurs choisies dans le thème restent toujours associées à la même
-// réponse.
-function cfPieCategoryOrder(field,map){
+// Ordre stable des catégories d'un graphique (camembert ET barres) : pour un
+// menu déroulant, on respecte l'ordre des options telles que configurées
+// (1ère option = 1ère tranche/barre, etc.) — modifiable directement dans
+// "Listes personnalisables" (glisser-déposer) — plutôt que l'ordre
+// d'apparition dans les données ou un tri par performance, pour que les
+// couleurs choisies dans le thème restent toujours associées à la même
+// réponse, et que l'ordre reste sous le contrôle direct de l'utilisateur.
+function cfCategoryOrder(field,map){
   if(field.type==='select'&&field.options&&field.options.length){
     const ordered=field.options.filter(o=>map[o]);
     Object.keys(map).forEach(k=>{ if(!ordered.includes(k))ordered.push(k); });
@@ -570,8 +572,9 @@ function cfEnsureChartsContainer(){
   // on saisit une carte n'importe où et on la dépose ailleurs, les autres
   // cartes se décalent en direct (animation intégrée de Sortable.js). Les
   // clics sur les boutons/inputs à l'intérieur (BT, périodes, stylo...)
-  // restent normaux grâce à "filter". Fonctionne aussi bien sur les cartes
-  // pleine largeur que sur les cartes partagées, PC comme téléphone.
+  // restent normaux grâce à "filter". Complémentaire à la liste "ORDRE DES
+  // GRAPHIQUES" des Paramètres (les deux écrivent dans APP.cfChartOrder,
+  // donc restent toujours cohérents entre eux).
   if(window.Sortable){
     new Sortable(container,{
       animation:200,
@@ -586,51 +589,6 @@ function cfEnsureChartsContainer(){
     });
   }
 }
-// Uniformise la hauteur des graphiques d'une même rangée : les cartes de
-// #chartsContainer s'étirent déjà à la hauteur de la rangée grâce au
-// comportement par défaut de CSS Grid (align-items:stretch) — encore faut-il
-// que leur CONTENU (le corps du graphique) suive cet étirement au lieu de
-// garder une hauteur fixe en pixels. On passe donc chaque carte en colonne
-// flexible avec un corps extensible (flex:1) plutôt qu'une hauteur figée.
-// (Désactivée) — cette fonction rendait le corps des graphiques "extensible"
-// (flex + hauteur auto) pour égaliser les hauteurs par rangée. Problème :
-// Chart.js redimensionne son canvas selon la hauteur de son conteneur ; sans
-// hauteur de référence FIXE, ça crée une boucle (le graphique grandit → son
-// conteneur grandit → Chart.js le redessine encore plus grand → ...), d'où
-// l'agrandissement à l'infini constaté sur le Track Record. On revient donc
-// à une hauteur fixe (comme à l'origine, sûre), et cette fonction ne touche
-// plus à aucune hauteur — gardée en place uniquement pour ne pas casser les
-// appels existants ailleurs dans le fichier.
-function cfNormalizeChartHeights(){}
-function cfChartHeaderControlsHtml(fieldId){
-  return `<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
-    <label class="bt-toggle"><input type="checkbox" id="bt-${fieldId}" onchange="toggleBT('${fieldId}')"> BT</label>
-    <div class="period-btns">
-      <button class="pbtn" data-chart="${fieldId}" data-p="jour">J</button>
-      <button class="pbtn" data-chart="${fieldId}" data-p="semaine">SEM</button>
-      <button class="pbtn" data-chart="${fieldId}" data-p="mois">MOIS</button>
-      <button class="pbtn" data-chart="${fieldId}" data-p="trimestre">TRIM</button>
-      <button class="pbtn" data-chart="${fieldId}" data-p="annee">AN</button>
-      <button class="pbtn active" data-chart="${fieldId}" data-p="tout">TOUT</button>
-    </div>
-  </div>`;
-}
-function cfEnsureChartState(fieldId){
-  if(!(fieldId in BT_STATE))BT_STATE[fieldId]=false;
-  if(!(fieldId in ST))ST[fieldId]='tout';
-}
-// Le mode stylo attache DEUX mécanismes de blocage sur les éléments
-// "data-editable" pendant qu'il est actif :
-//  1) un écouteur délégué sur document (phase de capture) qui coupe la
-//     propagation si la cible a l'attribut data-editable ;
-//  2) un écouteur touchend/click attaché DIRECTEMENT sur chaque élément
-//     data-editable lui-même (posé une fois par setupPencil(), référencé
-//     sur l'élément via el._ph), qui coupe aussi la propagation — et qui ne
-//     vérifie même pas l'attribut, seulement si le mode stylo est actif.
-// Retirer juste l'attribut ne suffit donc pas pour le 2) : il faut aussi
-// détacher cet écouteur précis le temps du glisser, puis le rattacher juste
-// après (sous peine de perdre définitivement l'édition au clic sur ce titre,
-// car setupPencil() ne réattache jamais un _ph déjà posé).
 // En flexbox avec retour à la ligne, Sortable.js ne fait par défaut pas la
 // différence entre "je veux insérer à côté" et "je veux insérer EN DESSOUS,
 // sur une nouvelle ligne" — il regarde surtout l'ordre dans le DOM, donc deux
@@ -644,7 +602,10 @@ function cfEnsureChartState(fieldId){
 // ligne plutôt qu'un simple emboîtement.
 // ⚠️ Le seuil (30%) est un réglage raisonnable mais pas testé en conditions
 // réelles (aucun navigateur disponible ici) — à ajuster si le geste est trop
-// ou pas assez sensible.
+// ou pas assez sensible. Si des graphiques proches (ex: les camemberts) se
+// décalent en permanence pendant l'approche et rendent le dépôt difficile à
+// cet endroit précis, déposer sur le bord haut/bas d'un graphique VOISIN
+// stable (pleine largeur) fonctionne de façon plus prévisible.
 function cfChartsSortableOnMove(evt){
   const related=evt.related,dragged=evt.dragged;
   if(!related||related===dragged||!evt.originalEvent)return true;
@@ -673,6 +634,18 @@ function cfChartsSortableOnMove(evt){
   }
   return true;
 }
+// Le mode stylo attache DEUX mécanismes de blocage sur les éléments
+// "data-editable" pendant qu'il est actif :
+//  1) un écouteur délégué sur document (phase de capture) qui coupe la
+//     propagation si la cible a l'attribut data-editable ;
+//  2) un écouteur touchend/click attaché DIRECTEMENT sur chaque élément
+//     data-editable lui-même (posé une fois par setupPencil(), référencé
+//     sur l'élément via el._ph), qui coupe aussi la propagation — et qui ne
+//     vérifie même pas l'attribut, seulement si le mode stylo est actif.
+// Retirer juste l'attribut ne suffit donc pas pour le 2) : il faut aussi
+// détacher cet écouteur précis le temps du glisser, puis le rattacher juste
+// après (sous peine de perdre définitivement l'édition au clic sur ce titre,
+// car setupPencil() ne réattache jamais un _ph déjà posé).
 function cfChartsSortableOnStart(){
   const container=document.getElementById('chartsContainer');
   if(!container)return;
@@ -703,6 +676,37 @@ function cfChartsSortableOnEnd(){
   cfPersist();
   cfApplyChartOrder();
   cfApplyChartLayout();
+}
+// comportement par défaut de CSS Grid (align-items:stretch) — encore faut-il
+// que leur CONTENU (le corps du graphique) suive cet étirement au lieu de
+// garder une hauteur fixe en pixels. On passe donc chaque carte en colonne
+// flexible avec un corps extensible (flex:1) plutôt qu'une hauteur figée.
+// (Désactivée) — cette fonction rendait le corps des graphiques "extensible"
+// (flex + hauteur auto) pour égaliser les hauteurs par rangée. Problème :
+// Chart.js redimensionne son canvas selon la hauteur de son conteneur ; sans
+// hauteur de référence FIXE, ça crée une boucle (le graphique grandit → son
+// conteneur grandit → Chart.js le redessine encore plus grand → ...), d'où
+// l'agrandissement à l'infini constaté sur le Track Record. On revient donc
+// à une hauteur fixe (comme à l'origine, sûre), et cette fonction ne touche
+// plus à aucune hauteur — gardée en place uniquement pour ne pas casser les
+// appels existants ailleurs dans le fichier.
+function cfNormalizeChartHeights(){}
+function cfChartHeaderControlsHtml(fieldId){
+  return `<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+    <label class="bt-toggle"><input type="checkbox" id="bt-${fieldId}" onchange="toggleBT('${fieldId}')"> BT</label>
+    <div class="period-btns">
+      <button class="pbtn" data-chart="${fieldId}" data-p="jour">J</button>
+      <button class="pbtn" data-chart="${fieldId}" data-p="semaine">SEM</button>
+      <button class="pbtn" data-chart="${fieldId}" data-p="mois">MOIS</button>
+      <button class="pbtn" data-chart="${fieldId}" data-p="trimestre">TRIM</button>
+      <button class="pbtn" data-chart="${fieldId}" data-p="annee">AN</button>
+      <button class="pbtn active" data-chart="${fieldId}" data-p="tout">TOUT</button>
+    </div>
+  </div>`;
+}
+function cfEnsureChartState(fieldId){
+  if(!(fieldId in BT_STATE))BT_STATE[fieldId]=false;
+  if(!(fieldId in ST))ST[fieldId]='tout';
 }
 function cfEnsureChartNode(field){
   let card=document.getElementById('cfcard-'+field.id);
@@ -764,7 +768,12 @@ function cfDrawChart(field){
   }
   if(kind==='bar-v'||kind==='bar-h'){
     const map=cfCategoryStats(field,trades);
-    const ks=Object.keys(map).sort((a,b)=>map[b].pnl-map[a].pnl).slice(0,20);
+    // Pour un menu déroulant, l'ordre suit la liste (Listes personnalisables,
+    // glisser-déposer) plutôt qu'un tri par performance — cohérent avec les
+    // camemberts, et sous le contrôle direct de l'utilisateur. Les autres
+    // types (étoiles, case à cocher) gardent le tri par performance, faute
+    // de liste à réordonner.
+    const ks=(field.type==='select'?cfCategoryOrder(field,map):Object.keys(map).sort((a,b)=>map[b].pnl-map[a].pnl)).slice(0,20);
     if(!ks.length)return;
     const data=ks.map(k=>map[k].pnl);
     const posC=gc('--cf-'+field.id+'-pos')||'rgba(0,229,160,.8)',negC=gc('--cf-'+field.id+'-neg')||'rgba(239,68,68,.8)';
@@ -779,13 +788,11 @@ function cfDrawChart(field){
   }
   if(kind==='pie'){
     const map=cfCategoryStats(field,trades);
-    const ks=cfPieCategoryOrder(field,map).slice(0,cfPieSliceCount(field));
+    const ks=cfCategoryOrder(field,map).slice(0,cfPieSliceCount(field));
     if(!ks.length)return;
     const data=ks.map(k=>map[k].total);
     const fallback=['#00e5a0','#3b82f6','#f59e0b','#ef4444','#a78bfa','#f472b6','#22d3ee','#84cc16'];
     const palette=ks.map((k,i)=>gc('--cf-'+field.id+'-slice-'+(i+1))||fallback[i%fallback.length]);
-    const exploded=cfPieExploded[field.id];
-    const offsets=ks.map(k=>k===exploded?26:0);
     // Avec beaucoup de catégories, la légende (en bas) a besoin de plus de
     // lignes ; comme la hauteur totale du graphique est fixe, chaque ligne de
     // légende en plus grignote la place du donut, qui paraît alors plus
@@ -795,17 +802,8 @@ function cfDrawChart(field){
     // dans cette conversation).
     const legendFontSize=ks.length<=3?11:ks.length<=5?9:8;
     const legendBoxSize=ks.length<=3?13:ks.length<=5?10:9;
-    CH[field.id]=new Chart(ctx,{type:'doughnut',data:{labels:ks,datasets:[{data,backgroundColor:palette,borderColor:'#0b0f1a',borderWidth:3,hoverOffset:5,offset:offsets}]},
-      options:{responsive:true,maintainAspectRatio:true,cutout:'60%',plugins:{legend:{position:'bottom',align:'center',labels:{padding:ks.length<=3?16:8,color:'#94a3b8',font:{size:legendFontSize},boxWidth:legendBoxSize,boxHeight:legendBoxSize}}},
-        onClick:(evt,elements)=>{
-          // Uniquement en mode stylo : on "détache" la part touchée (comme
-          // un camembert éclaté) — retaper dessus la remet en place.
-          if(!pencilActive)return;
-          if(!elements||!elements.length)return;
-          const clickedLabel=ks[elements[0].index];
-          cfPieExploded[field.id]=(cfPieExploded[field.id]===clickedLabel)?null:clickedLabel;
-          cfDrawChart(field);
-        }}});
+    CH[field.id]=new Chart(ctx,{type:'doughnut',data:{labels:ks,datasets:[{data,backgroundColor:palette,borderColor:'#0b0f1a',borderWidth:3,hoverOffset:5}]},
+      options:{responsive:true,maintainAspectRatio:true,cutout:'60%',plugins:{legend:{position:'bottom',align:'center',labels:{padding:ks.length<=3?16:8,color:'#94a3b8',font:{size:legendFontSize},boxWidth:legendBoxSize,boxHeight:legendBoxSize}}}}});
   }
 }
 function cfRenderCustomCharts(){
@@ -1082,9 +1080,6 @@ function cfRenderSettings(){
 
 // ── Modale de création / édition d'un champ ──
 let cfEditingId=null;
-// Part de camembert actuellement "éclatée" en mode stylo (tap pour détacher,
-// re-tap pour remettre en place) — état volatile, non sauvegardé.
-let cfPieExploded={};
 let cfTempOptions=[];
 function cfEnsureModal(){
   if(document.getElementById('cfModal'))return;
