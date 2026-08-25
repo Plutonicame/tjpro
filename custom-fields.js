@@ -163,13 +163,13 @@ function cfPieSliceCount(field){
   if(field.type==='toggle')return 2;
   return 6;
 }
-// Ordre stable des catégories d'un graphique (camembert ET barres) : pour un
-// menu déroulant, on respecte l'ordre des options telles que configurées
-// (1ère option = 1ère tranche/barre, etc.) — modifiable directement dans
-// "Listes personnalisables" (glisser-déposer) — plutôt que l'ordre
-// d'apparition dans les données ou un tri par performance, pour que les
-// couleurs choisies dans le thème restent toujours associées à la même
-// réponse, et que l'ordre reste sous le contrôle direct de l'utilisateur.
+// Ordre stable des catégories d'un CAMEMBERT uniquement (pas les barres, qui
+// restent triées par performance) : pour un menu déroulant, on respecte
+// l'ordre des options telles que configurées (1ère option = 1ère tranche,
+// etc.) — modifiable directement dans "Listes personnalisables"
+// (glisser-déposer) — plutôt que l'ordre d'apparition dans les données, pour
+// que les couleurs choisies dans le thème restent toujours associées à la
+// même réponse.
 function cfCategoryOrder(field,map){
   if(field.type==='select'&&field.options&&field.options.length){
     const ordered=field.options.filter(o=>map[o]);
@@ -591,46 +591,78 @@ function cfEnsureChartsContainer(){
 }
 // En flexbox avec retour à la ligne, Sortable.js ne fait par défaut pas la
 // différence entre "je veux insérer à côté" et "je veux insérer EN DESSOUS,
-// sur une nouvelle ligne" — il regarde surtout l'ordre dans le DOM, donc deux
-// graphiques qui PEUVENT tenir côte à côte s'emboîtent automatiquement même
-// si l'intention était de les empiler. On corrige ça en regardant où se
-// trouve le doigt/curseur PENDANT le survol d'une carte : dans sa moitié
-// haute → comportement normal (à côté / avant-après) ; dans sa bande basse
-// (dernier ~30% de sa hauteur) → on comprend "en dessous, nouvelle ligne", et
-// on insère nous-mêmes juste après la DERNIÈRE carte de cette même ligne
-// (repérée par un haut de boîte quasi identique), pour forcer le retour à la
-// ligne plutôt qu'un simple emboîtement.
-// ⚠️ Le seuil (30%) est un réglage raisonnable mais pas testé en conditions
+// sur une nouvelle ligne" — il regarde surtout l'ordre dans le DOM. On
+// découpe donc la carte survolée en 4 zones selon où se trouve le
+// doigt/curseur PENDANT le survol :
+//  - bande du HAUT (20% du haut)   → nouvelle ligne AU-DESSUS de la ligne
+//    entière de la carte survolée (avant son tout premier voisin de ligne)
+//  - bande du BAS (20% du bas)     → nouvelle ligne EN DESSOUS (après son
+//    tout dernier voisin de ligne)
+//  - bande GAUCHE (20% gauche, hors bandes haut/bas) → juste à gauche de
+//    CETTE carte précise (côte à côte), seulement si elle est "compatible"
+//    (pas une carte pleine largeur, qui ne peut rien avoir à côté d'elle)
+//  - bande DROITE (20% droite, idem) → juste à droite de cette carte
+//  - au centre → comportement normal de Sortable
+// ⚠️ Ces seuils sont un réglage raisonnable mais pas testés en conditions
 // réelles (aucun navigateur disponible ici) — à ajuster si le geste est trop
-// ou pas assez sensible. Si des graphiques proches (ex: les camemberts) se
-// décalent en permanence pendant l'approche et rendent le dépôt difficile à
-// cet endroit précis, déposer sur le bord haut/bas d'un graphique VOISIN
-// stable (pleine largeur) fonctionne de façon plus prévisible.
+// ou pas assez sensible.
 function cfChartsSortableOnMove(evt){
   const related=evt.related,dragged=evt.dragged;
   if(!related||related===dragged||!evt.originalEvent)return true;
   const oe=evt.originalEvent;
-  const clientY=(oe.touches&&oe.touches[0])?oe.touches[0].clientY:oe.clientY;
+  const pt=(oe.touches&&oe.touches[0])?oe.touches[0]:oe;
+  const clientX=pt.clientX,clientY=pt.clientY;
   if(clientY==null||typeof related.getBoundingClientRect!=='function')return true;
   const rect=related.getBoundingClientRect();
   if(!rect||!rect.height)return true;
   const relativeY=(clientY-rect.top)/rect.height;
-  if(relativeY<0.7)return true;
   const container=related.parentNode;
   if(!container)return true;
   const siblings=Array.from(container.children).filter(el=>el!==dragged);
   const idx=siblings.indexOf(related);
   if(idx===-1)return true;
   const relatedTop=Math.round(rect.top);
-  let lastSameRow=related;
-  for(let i=idx+1;i<siblings.length;i++){
-    const sRect=siblings[i].getBoundingClientRect();
-    if(Math.abs(Math.round(sRect.top)-relatedTop)<=4)lastSameRow=siblings[i];
-    else break;
+
+  if(relativeY>0.8){
+    let lastSameRow=related;
+    for(let i=idx+1;i<siblings.length;i++){
+      const sRect=siblings[i].getBoundingClientRect();
+      if(Math.abs(Math.round(sRect.top)-relatedTop)<=4)lastSameRow=siblings[i];
+      else break;
+    }
+    if(lastSameRow!==related){
+      container.insertBefore(dragged,lastSameRow.nextSibling);
+      return false;
+    }
+    return true;
   }
-  if(lastSameRow!==related){
-    container.insertBefore(dragged,lastSameRow.nextSibling);
-    return false;
+  if(relativeY<0.2){
+    let firstSameRow=related;
+    for(let i=idx-1;i>=0;i--){
+      const sRect=siblings[i].getBoundingClientRect();
+      if(Math.abs(Math.round(sRect.top)-relatedTop)<=4)firstSameRow=siblings[i];
+      else break;
+    }
+    if(firstSameRow!==related){
+      container.insertBefore(dragged,firstSameRow);
+      return false;
+    }
+    return true;
+  }
+  // Ni en haut ni en bas : on regarde si on est plutôt sur le bord gauche ou
+  // droit de CETTE carte précise, pour la glisser juste à côté d'elle — mais
+  // seulement si elle peut effectivement accueillir un voisin (pas pleine
+  // largeur).
+  if(clientX!=null&&rect.width&&!related.classList.contains('cf-flex-full')){
+    const relativeX=(clientX-rect.left)/rect.width;
+    if(relativeX<0.2){
+      container.insertBefore(dragged,related);
+      return false;
+    }
+    if(relativeX>0.8){
+      container.insertBefore(dragged,related.nextSibling);
+      return false;
+    }
   }
   return true;
 }
@@ -768,12 +800,11 @@ function cfDrawChart(field){
   }
   if(kind==='bar-v'||kind==='bar-h'){
     const map=cfCategoryStats(field,trades);
-    // Pour un menu déroulant, l'ordre suit la liste (Listes personnalisables,
-    // glisser-déposer) plutôt qu'un tri par performance — cohérent avec les
-    // camemberts, et sous le contrôle direct de l'utilisateur. Les autres
-    // types (étoiles, case à cocher) gardent le tri par performance, faute
-    // de liste à réordonner.
-    const ks=(field.type==='select'?cfCategoryOrder(field,map):Object.keys(map).sort((a,b)=>map[b].pnl-map[a].pnl)).slice(0,20);
+    // Les barres restent triées par performance (plus grand en haut, plus
+    // petit en bas), quel que soit le type de champ. Seul le camembert suit
+    // l'ordre du menu déroulant (Listes personnalisables) — voir cfDrawChart,
+    // branche "pie".
+    const ks=Object.keys(map).sort((a,b)=>map[b].pnl-map[a].pnl).slice(0,20);
     if(!ks.length)return;
     const data=ks.map(k=>map[k].pnl);
     const posC=gc('--cf-'+field.id+'-pos')||'rgba(0,229,160,.8)',negC=gc('--cf-'+field.id+'-neg')||'rgba(239,68,68,.8)';
