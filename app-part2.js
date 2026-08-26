@@ -601,6 +601,8 @@ function buildSyncPayload(trades) {
     risk_max: localStorage.getItem(accKey('tj_risk_max')),
     risk_decimal: localStorage.getItem(accKey('tj_risk_decimal')),
     theme: localStorage.getItem('tj_theme_vars'), // thème global, partagé entre tous les comptes
+    profile_pseudo: localStorage.getItem(profileKey('tjp_profile_pseudo')) || '', // profil global, lié au compte (pas à un sous-compte de trading)
+    profile_photo: localStorage.getItem(profileKey('tjp_profile_photo')) || '',
     pencil_edits: (() => {
       try {
         const edits = JSON.parse(localStorage.getItem(accKey('tj_pencil_edits')) || '{}');
@@ -816,6 +818,10 @@ function _applyCloudDataDirect(data, cloudTrades) {
   if (data.risk_decimal != null) localStorage.setItem(accKey('tj_risk_decimal'), data.risk_decimal);
   if (data.payouts) localStorage.setItem(accKey('tj_payouts'), data.payouts);
 
+  if (data.profile_pseudo != null) localStorage.setItem(profileKey('tjp_profile_pseudo'), data.profile_pseudo);
+  if (data.profile_photo != null) localStorage.setItem(profileKey('tjp_profile_photo'), data.profile_photo);
+  if (typeof renderAccountMenu === 'function') renderAccountMenu();
+
   if (data.theme) {
     localStorage.setItem('tj_theme_vars', data.theme);
     try {
@@ -1029,6 +1035,25 @@ function _tradeImagePathFromUrl(url) {
 // Upload une image déjà compressée (data URL) vers Supabase Storage et renvoie son
 // URL publique. Si l'upload échoue (pas de réseau, pas connecté...), on garde
 // l'image compressée en base64 en secours plutôt que de perdre la donnée.
+// Upload la photo de profil (même bucket que les images de trades, sous
+// {user_id}/profile_*.jpg) et renvoie son URL publique. upsert:true car une
+// seule photo de profil par compte — pas besoin d'empiler les anciennes.
+async function uploadProfilePhotoToStorage(compressedDataUrl) {
+  try {
+    if (!currentUser || !currentUser.id || !window.sb) return compressedDataUrl;
+    const res = await fetch(compressedDataUrl);
+    const blob = await res.blob();
+    const fileName = `${currentUser.id}/profile_${Date.now()}.jpg`;
+    const { error: uploadErr } = await sb.storage.from(TRADE_IMAGES_BUCKET).upload(fileName, blob, { contentType: 'image/jpeg', upsert: true });
+    if (uploadErr) { console.warn('Upload photo de profil échoué, conservation en local :', uploadErr); return compressedDataUrl; }
+    const { data: urlData } = sb.storage.from(TRADE_IMAGES_BUCKET).getPublicUrl(fileName);
+    return (urlData && urlData.publicUrl) ? urlData.publicUrl : compressedDataUrl;
+  } catch(e) {
+    console.warn('Upload photo de profil échoué (exception) :', e);
+    return compressedDataUrl;
+  }
+}
+
 async function uploadTradeImageToStorage(compressedDataUrl) {
   try {
     if (!currentUser || !currentUser.id || !window.sb) return compressedDataUrl;

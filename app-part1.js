@@ -237,6 +237,77 @@ function renameAccount(accId, newName){
   if(acc){ acc.name = newName; saveAccounts(accs); renderAccountMenu(); }
 }
 
+// ── Profil (photo + pseudo) — bande fixe au-dessus des comptes de trading,
+// représente l'identité globale (pas un compte de trading), jamais supprimable.
+function profileKey(k){ return (typeof currentUser!=='undefined' && currentUser && currentUser.id) ? `${k}__${currentUser.id}` : k; }
+function getProfile(){
+  const emailFallback = (typeof currentUser!=='undefined' && currentUser && currentUser.email) ? currentUser.email.split('@')[0] : 'Mon profil';
+  return {
+    pseudo: localStorage.getItem(profileKey('tjp_profile_pseudo')) || emailFallback,
+    photo: localStorage.getItem(profileKey('tjp_profile_photo')) || ''
+  };
+}
+function saveProfile(pseudo, photo){
+  localStorage.setItem(profileKey('tjp_profile_pseudo'), pseudo);
+  localStorage.setItem(profileKey('tjp_profile_photo'), photo || '');
+  renderAccountMenu();
+  if(typeof currentUser !== 'undefined' && currentUser && typeof schedulePush === 'function'){
+    markUserAction();
+    schedulePush(300);
+  }
+}
+function openProfileOptions(){
+  const existing = document.getElementById('accOptionsMenu');
+  if(existing) existing.remove();
+  const menu = document.createElement('div');
+  menu.id = 'accOptionsMenu';
+  menu.style.cssText = 'position:fixed;background:var(--surface);border:1px solid var(--border);border-radius:8px;z-index:4000;min-width:160px;box-shadow:0 4px 16px rgba(0,0,0,.3);';
+  // Contrairement aux comptes de trading : seulement "Modifier", jamais de suppression.
+  menu.innerHTML = `<button onclick="openProfileModal()" style="display:block;width:100%;text-align:left;padding:12px 16px;background:none;border:none;color:var(--text);font-family:var(--mono);font-size:12px;cursor:pointer;">✎ Modifier</button>`;
+  document.body.appendChild(menu);
+  const btn = event.target;
+  const rect = btn.getBoundingClientRect();
+  menu.style.top = (rect.bottom + 4) + 'px';
+  menu.style.right = (window.innerWidth - rect.right) + 'px';
+  setTimeout(() => document.addEventListener('click', function h(){ menu.remove(); document.removeEventListener('click',h); }, {once:true}), 50);
+}
+function openProfileModal(){
+  const existing = document.getElementById('accOptionsMenu');
+  if(existing) existing.remove();
+  closeAccountMenu();
+  const profile = getProfile();
+  document.getElementById('profileEditPseudoInput').value = profile.pseudo;
+  const avatarEl = document.getElementById('profileEditAvatar');
+  avatarEl.innerHTML = profile.photo ? `<img src="${profile.photo}" alt="">` : '<span>👤</span>';
+  avatarEl.dataset.photo = profile.photo || '';
+  document.getElementById('profileModal').classList.add('open');
+}
+function closeProfileModal(){
+  document.getElementById('profileModal').classList.remove('open');
+}
+async function onProfilePhotoChange(event){
+  const file = event.target.files && event.target.files[0];
+  if(!file) return;
+  const reader = new FileReader();
+  reader.onload = async e => {
+    const compressed = (typeof compressImage === 'function') ? await compressImage(e.target.result, 300, 0.8) : e.target.result;
+    const avatarEl = document.getElementById('profileEditAvatar');
+    avatarEl.innerHTML = `<img src="${compressed}" alt="">`;
+    avatarEl.dataset.photo = compressed; // aperçu immédiat, le temps de l'upload
+    if(typeof uploadProfilePhotoToStorage === 'function' && typeof currentUser !== 'undefined' && currentUser && currentUser.id){
+      const finalUrl = await uploadProfilePhotoToStorage(compressed);
+      avatarEl.dataset.photo = finalUrl;
+    }
+  };
+  reader.readAsDataURL(file);
+}
+function saveProfileModal(){
+  const pseudo = document.getElementById('profileEditPseudoInput').value.trim() || 'Mon profil';
+  const photo = document.getElementById('profileEditAvatar').dataset.photo || '';
+  saveProfile(pseudo, photo);
+  closeProfileModal();
+}
+
 // ── Variables CSS du menu comptes ──
 // --acc-menu-bg, --acc-menu-bd, --acc-menu-tx, --acc-menu-tx2
 // --acc-item-bg-N, --acc-item-bd-N (N = index 1,2,3...)
@@ -328,9 +399,14 @@ document.addEventListener('click',()=>closeAccountMenu());
 function renderAccountMenu(){
   const menu=document.getElementById('accMenu');
   if(!menu)return;
+  const profile=getProfile();
   const accs=getAccounts();
   const activeId=_currentAccId;
-  let html='';
+  let html=`<div class="acc-item" onclick="event.stopPropagation()">
+    <div class="acc-item-avatar">${profile.photo?`<img src="${profile.photo}" alt="">`:'<span>👤</span>'}</div>
+    <div class="acc-item-info"><div class="acc-item-name">${escapeHtml(profile.pseudo)}</div></div>
+    <div class="acc-item-dots" onclick="event.stopPropagation();openProfileOptions()">⋮</div>
+  </div>`;
   accs.forEach((acc,i)=>{
     const cap=getAccCapital(acc.id);
     const capStr=(cap>=0?'+':'')+cap.toLocaleString('fr-FR',{maximumFractionDigits:0})+'€';
@@ -365,7 +441,7 @@ function openAccOptions(accId){
   menu.style.cssText = 'position:fixed;background:var(--surface);border:1px solid var(--border);border-radius:8px;z-index:4000;min-width:160px;box-shadow:0 4px 16px rgba(0,0,0,.3);';
   menu.innerHTML = `
     <button onclick="startRenameAccount('${accId}')" style="display:block;width:100%;text-align:left;padding:12px 16px;background:none;border:none;color:var(--text);font-family:var(--mono);font-size:12px;cursor:pointer;">✎ Renommer</button>
-    ${accs.length>1?`<button onclick="startDeleteAccount('${accId}')" style="display:block;width:100%;text-align:left;padding:12px 16px;background:none;border:none;color:#ef4444;font-family:var(--mono);font-size:12px;cursor:pointer;border-top:1px solid var(--border);">✕ Supprimer</button>`:''}
+    ${(accs.length>1 && accs[0].id!==accId)?`<button onclick="startDeleteAccount('${accId}')" style="display:block;width:100%;text-align:left;padding:12px 16px;background:none;border:none;color:#ef4444;font-family:var(--mono);font-size:12px;cursor:pointer;border-top:1px solid var(--border);">✕ Supprimer</button>`:''}
   `;
   document.body.appendChild(menu);
 
@@ -401,7 +477,7 @@ function startDeleteAccount(accId){
   if(existing) existing.remove();
   const accs = getAccounts();
   const acc = accs.find(a=>a.id===accId);
-  if(!acc || accs.length<=1) return;
+  if(!acc || accs.length<=1 || accs[0].id===accId) return;
   // Demander PIN comme pour "Supprimer tous les trades"
   document.getElementById('deleteAllCount').textContent = `le compte "${acc.name}"`;
   document.getElementById('deleteAllModal').classList.add('open');
@@ -421,6 +497,7 @@ function startDeleteAccount(accId){
 function deleteAccount(accId){
   let accs = getAccounts();
   if(accs.length<=1){ alert('Impossible de supprimer le dernier compte.'); return; }
+  if(accs[0].id===accId){ alert('Le compte n°1 ne peut pas être supprimé.'); return; }
   // Nettoyer le localStorage de ce compte
   const keys = ['tj_trades','tj_lists','tj_nextId','tj_capital','tj_risk','tj_smart_risk',
     'tj_risk_max','tj_risk_decimal','tj_payouts','tjp_ia_config','tjp_recap_history',
@@ -1056,7 +1133,7 @@ function ensureMgmtThemeDefaults(){
 // Couleur par défaut de chaque titre individualisé (mode stylo + éditeur de thème),
 // tant que l'utilisateur ne l'a pas personnalisée lui-même.
 const TITLE_DEFAULTS={
-  '--pt-trackrecord':'#00e5a0','--pt-pointscles':'#00e5a0','--pt-journal':'#00e5a0','--pt-calendrier':'#00e5a0','--pt-modifs':'#00e5a0',
+  '--pt-trackrecord':'#00e5a0','--pt-pointscles':'#00e5a0','--pt-ami':'#00e5a0','--pt-journal':'#00e5a0','--pt-calendrier':'#00e5a0','--pt-modifs':'#00e5a0',
   '--ps-trackrecord':'#64748b',
   '--kpi-label-color':'#64748b',
   '--ct-evolution':'#00e5a0','--ct-pnl':'#00e5a0','--ct-riskmgmt':'#00e5a0','--ct-winrate':'#00e5a0','--ct-mgmtimpact':'#00e5a0',
@@ -1800,6 +1877,9 @@ function buildTV(){return [
   {v:'--acc-item-dots-color',l:'.acc-item-dots — texte',page:'Général',section:'Menu comptes'},{v:'--acc-item-dots-hover-background',l:'.acc-item-dots:hover — fond',page:'Général',section:'Menu comptes'},
   {v:'--acc-item-dots-hover-color',l:'.acc-item-dots:hover — texte',page:'Général',section:'Menu comptes'},{v:'--acc-add-btn-color',l:'.acc-add-btn — texte',page:'Général',section:'Menu comptes'},
   {v:'--acc-add-btn-hover-background',l:'.acc-add-btn:hover — fond',page:'Général',section:'Menu comptes'},
+  {v:'--acc-item-avatar-background',l:'Rond profil — fond',page:'Général',section:'Menu comptes'},{v:'--acc-item-avatar-color',l:'Rond profil — icône',page:'Général',section:'Menu comptes'},
+  {v:'--profile-edit-avatar-background',l:'Popup profil — fond photo',page:'Général',section:'Profil'},{v:'--profile-edit-avatar-border',l:'Popup profil — bordure photo',page:'Général',section:'Profil'},
+  {v:'--profile-edit-hint-color',l:'Popup profil — texte indication',page:'Général',section:'Profil'},
   // Général > Navigation
   {v:'--nav-tab-color',l:'.nav-tab — texte',page:'Général',section:'Navigation'},{v:'--nav-tab-hover-color',l:'.nav-tab:hover — texte',page:'Général',section:'Navigation'},
   {v:'--nav-tab-active-color',l:'.nav-tab.active — texte',page:'Général',section:'Navigation'},{v:'--nav-tab-active-borderbott',l:'.nav-tab.active — bordure',page:'Général',section:'Navigation'},
@@ -1922,6 +2002,7 @@ function buildTV(){return [
   {v:'--crt-riskreglages',l:'Titre — Risk Management Réglages',page:'Paramètres',section:'Risk Management (réglages)'},{v:'--crt-securite',l:'Titre — Sécurité',page:'Paramètres',section:'Sécurité'},
   {v:'--crt-sauvegarde',l:'Titre — Sauvegarde locale',page:'Paramètres',section:'Sauvegarde locale'},{v:'--crt-themestylo',l:'Titre — Thème & Mode Stylo',page:'Paramètres',section:'Thème & Mode Stylo'},
   {v:'--pt-pointscles',l:'Titre de la page',page:'Analyse IA',section:'Titre de page'},{v:'--crt-resume',l:'Titre — Résumé & Recommandations',page:'Analyse IA',section:'Points Clés'},
+  {v:'--pt-ami',l:'Titre de la page',page:'Ami',section:'Titre de page'},
   ...getAccounts().flatMap((acc,i)=>[{v:`--acc-item-bg-${i+1}`,l:`${acc.name} - fond`,page:'Général',section:'Menu comptes'},{v:`--acc-item-bd-${i+1}`,l:`${acc.name} - bordure`,page:'Général',section:'Menu comptes'}]),
 ];}
 let teVals={},teHist=[],TE_LABELS={};
