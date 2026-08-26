@@ -47,11 +47,6 @@ const CF_BUILTIN_CHARTS = [
   {id:'conf',label:'Par confluence'},{id:'pairs',label:'Par paire / actif'},
   {id:'sessions',label:'Par session'},{id:'jours',label:'Par jour de semaine'},{id:'tf',label:'Par timeframe'}
 ];
-// Graphiques natifs à largeur FIXE de 1/2 sur PC (les autres graphiques
-// natifs sont pleine largeur ; les camemberts ont une largeur dynamique
-// selon leur nombre). Top5/Pires5 ne font plus partie de ce conteneur (voir
-// #cfBottomRow), donc pas concernés ici.
-const CF_HALF_WIDTH_NATIVE = new Set(['mgmt']);
 const CF_TYPE_META = {
   stars:{label:'Note en étoiles (1 à 5)', widgets:['none','kpi','card','bar-v','bar-h','pie']},
   text:{label:'Zone de texte', widgets:['none']},
@@ -565,6 +560,7 @@ function cfEnsureChartsContainer(){
 .cf-flex-full{flex:1 1 100%;}
 .cf-flex-half{flex:1 1 50%;}
 .cf-flex-pie{flex:1 1 var(--cf-pie-basis,16.6667%);}
+.cf-row-break{flex-basis:100%;width:0;height:0;margin:0;padding:0;border:0;}
 `;
   document.head.appendChild(style);
 
@@ -618,7 +614,7 @@ function cfChartsSortableOnMove(evt){
   const relativeY=(clientY-rect.top)/rect.height;
   const container=related.parentNode;
   if(!container)return true;
-  const siblings=Array.from(container.children).filter(el=>el!==dragged);
+  const siblings=Array.from(container.children).filter(el=>el!==dragged&&!el.classList.contains('cf-row-break'));
   const idx=siblings.indexOf(related);
   if(idx===-1)return true;
   const relatedTop=Math.round(rect.top);
@@ -880,23 +876,52 @@ function cfIsMobile(){
 // besoin de compter les camemberts ni de détecter le mode téléphone en JS :
 // la bascule PC/téléphone de --cf-pie-basis (1/6 ↔ 1/3) est gérée en pur CSS
 // via media query (voir cfEnsureChartsContainer).
+// Chaque graphique appartient à un "groupe" : deux graphiques de groupes
+// différents ne doivent JAMAIS se retrouver sur la même ligne, même s'il
+// reste de la place. À l'intérieur d'un même groupe en revanche, ils
+// s'assemblent librement (plusieurs lignes si besoin, autant que le nombre
+// d'éléments l'exige — jamais un nombre de lignes figé).
+//  - "pie"        : tous les camemberts (natif Win Rate + custom)
+//  - "comparison" : Impact du management + tous les graphiques barres custom
+//  - "solo-<id>"  : chaque autre graphique (Évolution du capital, P&L, Risk
+//    Management, Confluence, Paire, Session, Jour, Timeframe...) est seul
+//    dans son propre groupe — il occupe donc toujours sa ligne à lui.
+function cfChartGroup(el){
+  const id=el.dataset.chartId;
+  if(id==='pie')return 'pie';
+  if(id==='mgmt')return 'comparison';
+  const f=APP.cfFields.find(x=>x.id===id);
+  if(f&&f.widget){
+    if(f.widget.kind==='pie')return 'pie';
+    if(f.widget.kind==='bar-v'||f.widget.kind==='bar-h')return 'comparison';
+  }
+  return 'solo-'+id;
+}
 function cfApplyChartLayout(){
   const container=document.getElementById('chartsContainer');
   if(!container)return;
-  const isPieEl=(el)=>{
-    const id=el.dataset.chartId;
-    if(id==='pie')return true;
-    const f=APP.cfFields.find(x=>x.id===id);
-    return !!(f&&f.widget&&f.widget.kind==='pie');
-  };
-  Array.from(container.children).forEach(el=>{
+  container.querySelectorAll('.cf-row-break').forEach(el=>el.remove());
+  const children=Array.from(container.children);
+  children.forEach(el=>{
     el.classList.remove('cf-flex-full','cf-flex-half','cf-flex-pie');
     el.style.removeProperty('grid-column');
-    const id=el.dataset.chartId;
-    if(isPieEl(el))el.classList.add('cf-flex-pie');
-    else if(CF_HALF_WIDTH_NATIVE.has(id))el.classList.add('cf-flex-half');
+    const group=cfChartGroup(el);
+    if(group==='pie')el.classList.add('cf-flex-pie');
+    else if(group==='comparison')el.classList.add('cf-flex-half');
     else el.classList.add('cf-flex-full');
   });
+  // Sépare deux groupes différents consécutifs par un séparateur de ligne
+  // invisible (flex-basis:100%, hauteur 0) : un élément à 100% de large
+  // force forcément un retour à la ligne juste après lui, ce qui empêche
+  // tout mélange entre groupes sans jamais limiter à un nombre fixe de
+  // lignes — il y en a exactement autant que nécessaire.
+  for(let i=children.length-1;i>=1;i--){
+    if(cfChartGroup(children[i])!==cfChartGroup(children[i-1])){
+      const spacer=document.createElement('div');
+      spacer.className='cf-row-break';
+      container.insertBefore(spacer,children[i]);
+    }
+  }
 }
 
 // ── Intégration thème ──
