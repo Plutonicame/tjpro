@@ -587,6 +587,19 @@ function cfEnsureChartsContainer(){
       filter:'canvas, input, button, select, textarea, .pbtn, .bt-toggle, [contenteditable="true"]',
       preventOnFilter:false,
       onMove:cfChartsSortableOnMove,
+      // Les zones haut/bas de cfChartsSortableOnMove déplacent la carte
+      // tenue juste avant/après la ligne entière d'une carte survolée, sans
+      // vérifier son groupe (c'est voulu : on peut déplacer une carte
+      // au-dessus/en dessous d'une ligne différente). Mais tant que le drag
+      // est en cours, les séparateurs de ligne (cf-row-break) restent à
+      // leur ancienne position : si la carte tenue n'est pas pleine largeur,
+      // rien ne force alors de retour à la ligne entre elle et une carte
+      // incompatible juste à côté → c'est ce qui recréait l'animation de
+      // fusion. onChange recalcule ces séparateurs à CHAQUE déplacement
+      // pendant le drag (pas juste à la fin), donc l'écart forcé entre
+      // groupes différents est toujours respecté, y compris en cours de
+      // glisser.
+      onChange:cfApplyChartLayout,
       onStart:cfChartsSortableOnStart,
       onEnd:cfChartsSortableOnEnd
     });
