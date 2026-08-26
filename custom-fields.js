@@ -605,6 +605,16 @@ function cfEnsureChartsContainer(){
 function cfChartsSortableOnMove(evt){
   const related=evt.related,dragged=evt.dragged;
   if(!related||related===dragged||!evt.originalEvent)return true;
+  // Deux graphiques de groupes différents (camembert / comparaison / seul,
+  // cf cfChartGroup) ne peuvent jamais partager une ligne. On bloque donc
+  // tout aperçu de fusion avec une carte d'un autre groupe : aucune
+  // animation ne doit se déclencher sur des graphiques qui ne sont pas dans
+  // la ligne de la carte déplacée. Seul le séparateur invisible entre deux
+  // groupes (cf-row-break) reste un point de dépôt valide pour changer
+  // l'ordre des groupes entre eux.
+  if(!related.classList.contains('cf-row-break')&&cfChartGroup(dragged)!==cfChartGroup(related)){
+    return false;
+  }
   const oe=evt.originalEvent;
   const pt=(oe.touches&&oe.touches[0])?oe.touches[0]:oe;
   const clientX=pt.clientX,clientY=pt.clientY;
