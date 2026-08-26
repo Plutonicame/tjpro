@@ -577,6 +577,13 @@ function cfEnsureChartsContainer(){
       delay:150,
       delayOnTouchOnly:true,
       touchStartThreshold:5,
+      // forceFallback : sans ça, Sortable utilise le drag natif HTML5
+      // (dragstart/dragover), qui empêche la molette de scroller la page
+      // tant que le drag est actif dans la plupart des navigateurs. En
+      // simulant le drag via ses propres écouteurs souris/tactile, la
+      // molette continue de fonctionner normalement pendant qu'on tient un
+      // graphique.
+      forceFallback:true,
       filter:'canvas, input, button, select, textarea, .pbtn, .bt-toggle, [contenteditable="true"]',
       preventOnFilter:false,
       onMove:cfChartsSortableOnMove,
@@ -605,16 +612,6 @@ function cfEnsureChartsContainer(){
 function cfChartsSortableOnMove(evt){
   const related=evt.related,dragged=evt.dragged;
   if(!related||related===dragged||!evt.originalEvent)return true;
-  // Deux graphiques de groupes différents (camembert / comparaison / seul,
-  // cf cfChartGroup) ne peuvent jamais partager une ligne. On bloque donc
-  // tout aperçu de fusion avec une carte d'un autre groupe : aucune
-  // animation ne doit se déclencher sur des graphiques qui ne sont pas dans
-  // la ligne de la carte déplacée. Seul le séparateur invisible entre deux
-  // groupes (cf-row-break) reste un point de dépôt valide pour changer
-  // l'ordre des groupes entre eux.
-  if(!related.classList.contains('cf-row-break')&&cfChartGroup(dragged)!==cfChartGroup(related)){
-    return false;
-  }
   const oe=evt.originalEvent;
   const pt=(oe.touches&&oe.touches[0])?oe.touches[0]:oe;
   const clientX=pt.clientX,clientY=pt.clientY;
@@ -655,11 +652,17 @@ function cfChartsSortableOnMove(evt){
     }
     return true;
   }
-  // Ni en haut ni en bas : on regarde si on est plutôt sur le bord gauche ou
-  // droit de CETTE carte précise, pour la glisser juste à côté d'elle — mais
-  // seulement si elle peut effectivement accueillir un voisin (pas pleine
-  // largeur).
-  if(clientX!=null&&rect.width&&!related.classList.contains('cf-flex-full')){
+  // Ni en haut ni en bas : on insérerait la carte tenue À CÔTÉ de CETTE
+  // carte précise, donc DANS sa ligne. Une carte pleine largeur force de
+  // toute façon son propre retour à la ligne (CSS), aucun risque de mélange
+  // — mais une carte camembert/comparaison PEUT partager sa ligne, et
+  // seulement avec des graphiques du même groupe (cf cfChartGroup) : si le
+  // graphique tenu est d'un groupe différent, on bloque tout aperçu ici, pour
+  // qu'aucune animation ne se déclenche sur des graphiques qui ne peuvent de
+  // toute façon pas l'accueillir sur leur ligne.
+  const relatedIsFull=related.classList.contains('cf-flex-full');
+  if(!relatedIsFull&&cfChartGroup(dragged)!==cfChartGroup(related))return false;
+  if(clientX!=null&&rect.width&&!relatedIsFull){
     const relativeX=(clientX-rect.left)/rect.width;
     if(relativeX<0.2){
       container.insertBefore(dragged,related);
