@@ -275,12 +275,18 @@ function openProfileModal(){
   const existing = document.getElementById('accOptionsMenu');
   if(existing) existing.remove();
   closeAccountMenu();
-  const profile = getProfile();
-  document.getElementById('profileEditPseudoInput').value = profile.pseudo;
+  const modalEl = document.getElementById('profileModal');
+  const pseudoInput = document.getElementById('profileEditPseudoInput');
   const avatarEl = document.getElementById('profileEditAvatar');
+  if(!modalEl || !pseudoInput || !avatarEl){
+    alert('Fenêtre de modification du profil introuvable : vérifie que index.html a bien été remplacé par la dernière version (bloc #profileModal).');
+    return;
+  }
+  const profile = getProfile();
+  pseudoInput.value = profile.pseudo;
   avatarEl.innerHTML = profile.photo ? `<img src="${profile.photo}" alt="">` : '<span>👤</span>';
   avatarEl.dataset.photo = profile.photo || '';
-  document.getElementById('profileModal').classList.add('open');
+  modalEl.classList.add('open');
 }
 function closeProfileModal(){
   document.getElementById('profileModal').classList.remove('open');
