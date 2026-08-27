@@ -263,12 +263,12 @@ function openProfileOptions(e){
   menu.id = 'accOptionsMenu';
   menu.style.cssText = 'position:fixed;background:var(--surface);border:1px solid var(--border);border-radius:8px;z-index:4000;min-width:160px;box-shadow:0 4px 16px rgba(0,0,0,.3);';
   // Contrairement aux comptes de trading : seulement "Modifier", jamais de suppression.
-  menu.innerHTML = `<button onclick="openProfileModal()" style="display:block;width:100%;text-align:left;padding:12px 16px;background:none;border:none;color:var(--text);font-family:var(--mono);font-size:12px;cursor:pointer;">✎ Modifier</button>`;
+  menu.innerHTML = `<button class="acc-opt-btn" onclick="openProfileModal()">✎ Modifier</button>`;
   document.body.appendChild(menu);
   const btn = e.target;
   const rect = btn.getBoundingClientRect();
   menu.style.top = (rect.bottom + 4) + 'px';
-  menu.style.right = (window.innerWidth - rect.right) + 'px';
+  menu.style.left = (rect.right + 6) + 'px';
   setTimeout(() => document.addEventListener('click', function h(){ menu.remove(); document.removeEventListener('click',h); }, {once:true}), 50);
 }
 function openProfileModal(){
@@ -446,16 +446,16 @@ function openAccOptions(accId, e){
   menu.dataset.forAcc = accId;
   menu.style.cssText = 'position:fixed;background:var(--surface);border:1px solid var(--border);border-radius:8px;z-index:4000;min-width:160px;box-shadow:0 4px 16px rgba(0,0,0,.3);';
   menu.innerHTML = `
-    <button onclick="startRenameAccount('${accId}')" style="display:block;width:100%;text-align:left;padding:12px 16px;background:none;border:none;color:var(--text);font-family:var(--mono);font-size:12px;cursor:pointer;">✎ Renommer</button>
-    ${(accs.length>1 && accs[0].id!==accId)?`<button onclick="startDeleteAccount('${accId}')" style="display:block;width:100%;text-align:left;padding:12px 16px;background:none;border:none;color:#ef4444;font-family:var(--mono);font-size:12px;cursor:pointer;border-top:1px solid var(--border);">✕ Supprimer</button>`:''}
+    <button class="acc-opt-btn" onclick="startRenameAccount('${accId}')">✎ Renommer</button>
+    ${(accs.length>1 && accs[0].id!==accId)?`<button class="acc-opt-btn acc-opt-btn-danger" onclick="startDeleteAccount('${accId}')">✕ Supprimer</button>`:''}
   `;
   document.body.appendChild(menu);
 
-  // Positionner près du bouton ⋮
+  // Positionner à droite du bouton ⋮ (pas par-dessus le menu comptes)
   const btn = e.target;
   const rect = btn.getBoundingClientRect();
   menu.style.top = (rect.bottom + 4) + 'px';
-  menu.style.right = (window.innerWidth - rect.right) + 'px';
+  menu.style.left = (rect.right + 6) + 'px';
 
   // Fermer en cliquant ailleurs
   setTimeout(() => document.addEventListener('click', function h(){ menu.remove(); document.removeEventListener('click',h); }, {once:true}), 50);
