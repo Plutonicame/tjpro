@@ -256,7 +256,7 @@ function saveProfile(pseudo, photo){
     schedulePush(300);
   }
 }
-function openProfileOptions(){
+function openProfileOptions(e){
   const existing = document.getElementById('accOptionsMenu');
   if(existing) existing.remove();
   const menu = document.createElement('div');
@@ -265,7 +265,7 @@ function openProfileOptions(){
   // Contrairement aux comptes de trading : seulement "Modifier", jamais de suppression.
   menu.innerHTML = `<button onclick="openProfileModal()" style="display:block;width:100%;text-align:left;padding:12px 16px;background:none;border:none;color:var(--text);font-family:var(--mono);font-size:12px;cursor:pointer;">✎ Modifier</button>`;
   document.body.appendChild(menu);
-  const btn = event.target;
+  const btn = e.target;
   const rect = btn.getBoundingClientRect();
   menu.style.top = (rect.bottom + 4) + 'px';
   menu.style.right = (window.innerWidth - rect.right) + 'px';
@@ -404,8 +404,8 @@ function renderAccountMenu(){
   const activeId=_currentAccId;
   let html=`<div class="acc-item" onclick="event.stopPropagation()">
     <div class="acc-item-avatar">${profile.photo?`<img src="${profile.photo}" alt="">`:'<span>👤</span>'}</div>
-    <div class="acc-item-info"><div class="acc-item-name">${escapeHtml(profile.pseudo)}</div></div>
-    <div class="acc-item-dots" onclick="event.stopPropagation();openProfileOptions()">⋮</div>
+    <div class="acc-item-info acc-item-info-center"><div class="acc-item-name">${escapeHtml(profile.pseudo)}</div></div>
+    <div class="acc-item-dots" onclick="event.stopPropagation();openProfileOptions(event)">⋮</div>
   </div>`;
   accs.forEach((acc,i)=>{
     const cap=getAccCapital(acc.id);
@@ -418,14 +418,14 @@ function renderAccountMenu(){
         <div class="acc-item-name">${escapeHtml(acc.name)}${isActive?' ✓':''}</div>
         <div class="acc-item-cap">${capStr}</div>
       </div>
-      <div class="acc-item-dots" onclick="event.stopPropagation();openAccOptions('${acc.id}')">⋮</div>
+      <div class="acc-item-dots" onclick="event.stopPropagation();openAccOptions('${acc.id}',event)">⋮</div>
     </div>`;
   });
   html+=`<button class="acc-add-btn" onclick="event.stopPropagation();addNewAccount()">＋ Ajouter un compte</button>`;
   menu.innerHTML=html;
 }
 
-function openAccOptions(accId){
+function openAccOptions(accId, e){
   // Fermer tout menu contextuel existant
   const existing = document.getElementById('accOptionsMenu');
   if(existing) existing.remove();
@@ -446,7 +446,7 @@ function openAccOptions(accId){
   document.body.appendChild(menu);
 
   // Positionner près du bouton ⋮
-  const btn = event.target;
+  const btn = e.target;
   const rect = btn.getBoundingClientRect();
   menu.style.top = (rect.bottom + 4) + 'px';
   menu.style.right = (window.innerWidth - rect.right) + 'px';
