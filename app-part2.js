@@ -194,6 +194,7 @@ async function afterPinValidated() {
 
   // Pull initial (avec tentatives), puis démarrage du temps réel + sondage périodique
   const pulled = await initialPullWithRetry();
+  pullGlobalChatData();
 
   // Supprimer écran de chargement
   const le = document.getElementById('loadingScreen');
@@ -553,7 +554,8 @@ let _isSyncing = false;       // vrai pendant qu'on applique des données reçue
 let _isPushing = false;       // vrai pendant qu'un envoi vers le cloud est en cours
 let _pushGeneration = 0;      // identifie chaque envoi pour ignorer les réponses obsolètes
 let _lastPushTimestamp = null;      // horodatage de notre dernier envoi réussi
-let _lastSeenCloudUpdatedAt = null; // horodatage le plus récent qu'on ait vu venir du cloud
+let _lastChatPushTimestamp = null;  // idem, mais pour la ligne globale des conversations IA
+let _lastSeenCloudUpdatedAt = {}; // horodatage le plus récent vu du cloud, PAR compte local (acc_id)
 let _realtimeChannel = null;
 
 // ── Retour visuel ──
@@ -592,6 +594,7 @@ function buildSyncPayload(trades) {
   const now = new Date().toISOString();
   return {
     user_id: currentUser.id,
+    acc_id: _currentAccId, // isole les trades/réglages de CE sous-compte local des autres
     trades,
     lists: APP.lists,
     next_id: APP.nextId,
@@ -622,11 +625,8 @@ function buildSyncPayload(trades) {
       down_pct: localStorage.getItem(accKey('tj_rm_down_pct')), down_var_type: localStorage.getItem(accKey('tj_rm_down_var_type')),
       down_var_val: localStorage.getItem(accKey('tj_rm_down_var_val')),
     }),
-    ia_chat_data: JSON.stringify({
-      conversations: localStorage.getItem('tjp_pc_conversations'),
-      active_conv: localStorage.getItem('tjp_pc_active_conv'),
-      history: localStorage.getItem('tjp_pc_history'),
-    }),
+    // ia_chat_data retiré d'ici : les conversations IA sont désormais globales
+    // (synchronisées séparément par pushGlobalChatData, pas liées à un acc_id).
     updated_at: now,
   };
 }
@@ -648,7 +648,7 @@ async function pushToCloud(opts) {
     if (!opts.force) {
       try {
         const { data: cloudRow, error: fetchErr } = await sb.from('journal_data')
-          .select('trades').eq('user_id', currentUser.id).maybeSingle();
+          .select('trades').eq('user_id', currentUser.id).eq('acc_id', _currentAccId).maybeSingle();
         if (!fetchErr && cloudRow && Array.isArray(cloudRow.trades) && cloudRow.trades.length) {
           const localIds = new Set(APP.trades.map(t => t.id));
           // Trades explicitement supprimés localement récemment : à exclure de la
@@ -664,7 +664,7 @@ async function pushToCloud(opts) {
     const data = buildSyncPayload(finalTrades);
     _lastPushTimestamp = data.updated_at;
 
-    const { error } = await sb.from('journal_data').upsert(data, { onConflict: 'user_id' });
+    const { error } = await sb.from('journal_data').upsert(data, { onConflict: 'user_id,acc_id' });
     if (myGen !== _pushGeneration) return;
 
     if (error) {
@@ -673,8 +673,8 @@ async function pushToCloud(opts) {
       pcShowSyncFailureWarning(error.message || 'Erreur inconnue');
     } else {
       showSync('✓ Sauvegardé', '#22c55e');
-      localStorage.setItem('tjp_last_updated_at', data.updated_at);
-      _lastSeenCloudUpdatedAt = data.updated_at;
+      localStorage.setItem(accKey('tjp_last_updated_at'), data.updated_at);
+      _lastSeenCloudUpdatedAt[_currentAccId] = data.updated_at;
       pcHideSyncFailureWarning();
       window._blockPull = false;
       // Si des trades cloud inconnus ont été réintégrés par la fusion, on les
@@ -715,18 +715,98 @@ function schedulePush(delay, opts) {
   }, delay);
 }
 
+// ── Conversations IA — globales, partagées par TOUS les sous-comptes ──
+// Contrairement aux trades/réglages (une ligne par acc_id), les conversations
+// avec l'agent IA doivent pouvoir être commencées sur un compte et continuées
+// sur un autre : elles vivent donc dans une ligne à part, avec un acc_id
+// sentinelle qui n'appartient à aucun vrai sous-compte de trading.
+const GLOBAL_SYNC_ACC_ID = '__global__';
+
+function applyIaChatData(iaChatDataStr) {
+  if (!iaChatDataStr) return;
+  try {
+    const chat = JSON.parse(iaChatDataStr);
+    if (chat.conversations != null) localStorage.setItem('tjp_pc_conversations', chat.conversations);
+    if (chat.active_conv != null) localStorage.setItem('tjp_pc_active_conv', chat.active_conv);
+    if (chat.history != null) localStorage.setItem('tjp_pc_history', chat.history);
+    // pcConversations/pcActiveConvId sont chargées UNE SEULE FOIS au tout premier
+    // chargement du script (avant que ce pull cloud, asynchrone, n'ait eu le temps
+    // d'arriver) — sans ce recalage, la conversation restaurée reste invisible à
+    // l'écran tant que la page n'est pas rechargée manuellement.
+    if (typeof pcLoadConversations === 'function') pcConversations = pcLoadConversations();
+    if (typeof pcGetActiveConvId === 'function') pcActiveConvId = pcGetActiveConvId();
+    if (typeof pcRenderConvList === 'function') pcRenderConvList();
+    if (typeof renderPcChat === 'function') renderPcChat();
+    if (typeof renderPcHistory === 'function') renderPcHistory();
+  } catch (e) { console.warn('Restauration ia_chat_data échouée :', e); }
+}
+
+async function pushGlobalChatData() {
+  if (!currentUser || !currentUser.id) return;
+  try {
+    const row = {
+      user_id: currentUser.id,
+      acc_id: GLOBAL_SYNC_ACC_ID,
+      ia_chat_data: JSON.stringify({
+        conversations: localStorage.getItem('tjp_pc_conversations'),
+        active_conv: localStorage.getItem('tjp_pc_active_conv'),
+        history: localStorage.getItem('tjp_pc_history'),
+      }),
+      updated_at: new Date().toISOString(),
+    };
+    _lastChatPushTimestamp = row.updated_at;
+    await sb.from('journal_data').upsert(row, { onConflict: 'user_id,acc_id' });
+  } catch (e) { console.warn('Sync conversations IA échouée :', e); }
+}
+
+// Regroupe les sauvegardes rapprochées (ex: plusieurs messages d'affilée)
+// en un seul envoi, comme schedulePush pour les trades.
+function scheduleGlobalChatPush() {
+  clearTimeout(window._chatPushTimer);
+  window._chatPushTimer = setTimeout(pushGlobalChatData, 800);
+}
+
+async function pullGlobalChatData() {
+  if (!currentUser || !currentUser.id) return;
+  try {
+    const { data, error } = await sb.from('journal_data')
+      .select('ia_chat_data, updated_at').eq('user_id', currentUser.id).eq('acc_id', GLOBAL_SYNC_ACC_ID)
+      .order('updated_at', { ascending: false }).limit(1);
+    if (!error && data && data.length) applyIaChatData(data[0].ia_chat_data);
+    else pushGlobalChatData(); // rien encore côté cloud : on y met l'état local actuel
+  } catch (e) {}
+}
+
 // ── Réception depuis le cloud ──
+// Va chercher la ligne cloud correspondant précisément à CE sous-compte local
+// (user_id + acc_id). Avant l'introduction du multi-compte cloud, il n'existait
+// qu'une ligne par user_id, sans acc_id : si rien n'est trouvé pour le compte
+// n°1 (le tout premier, celui qui existait avant cette mise à jour), on va
+// chercher cette ancienne ligne et on l'adopte pour lui — une seule fois, le
+// prochain envoi la re-taggera avec le bon acc_id.
+async function fetchCloudRowForCurrentAccount() {
+  const { data, error } = await sb.from('journal_data')
+    .select('*').eq('user_id', currentUser.id).eq('acc_id', _currentAccId)
+    .order('updated_at', { ascending: false }).limit(1);
+  if (!error && data && data.length) return data[0];
+  const accs = getAccounts();
+  if (accs[0] && accs[0].id === _currentAccId) {
+    const { data: legacy, error: legacyErr } = await sb.from('journal_data')
+      .select('*').eq('user_id', currentUser.id).is('acc_id', null)
+      .order('updated_at', { ascending: false }).limit(1);
+    if (!legacyErr && legacy && legacy.length) return legacy[0];
+  }
+  return null;
+}
+
 async function pullFromCloud() {
   if (!currentUser || !currentUser.id) return;
   try { await sb.auth.refreshSession(); } catch (e) {}
   try {
-    const { data, error } = await sb.from('journal_data')
-      .select('*').eq('user_id', currentUser.id)
-      .order('updated_at', { ascending: false }).limit(1);
-    if (error) { showSync('⚠ ' + error.message, '#ef4444'); return; }
-    if (!data || !data.length) { await pushToCloud(); return; } // premier envoi jamais fait
+    const row = await fetchCloudRowForCurrentAccount();
+    if (!row) { await pushToCloud(); return; } // premier envoi jamais fait pour ce compte
     _isSyncing = true;
-    applyCloudData(data[0]);
+    applyCloudData(row);
     setTimeout(() => _isSyncing = false, 1000);
   } catch (e) { showSync('⚠ Réseau', '#f59e0b'); }
 }
@@ -737,12 +817,10 @@ async function pullFromCloud() {
 async function initialPullWithRetry() {
   for (let attempt = 0; attempt < 3; attempt++) {
     try {
-      const { data, error } = await sb.from('journal_data')
-        .select('*').eq('user_id', currentUser.id)
-        .order('updated_at', { ascending: false }).limit(1);
-      if (!error && data && data.length) {
+      const row = await fetchCloudRowForCurrentAccount();
+      if (row) {
         _isSyncing = true;
-        applyCloudData(data[0]);
+        applyCloudData(row);
         return true;
       }
     } catch (e) {}
@@ -765,7 +843,7 @@ function applyCloudData(data, skipSafetyCheck) {
 
   if (!skipSafetyCheck && !window._intentionalBulkDelete && cloudCount < localCount) {
     const cloudTs = data.updated_at ? new Date(data.updated_at).getTime() : 0;
-    const knownTs = _lastSeenCloudUpdatedAt ? new Date(_lastSeenCloudUpdatedAt).getTime() : 0;
+    const knownTs = _lastSeenCloudUpdatedAt[_currentAccId] ? new Date(_lastSeenCloudUpdatedAt[_currentAccId]).getTime() : 0;
     if (cloudTs > knownTs) {
       // Changement récent et volontaire fait sur un autre appareil : on l'accepte,
       // le code continue plus bas normalement (pas de retour anticipé ici).
@@ -786,7 +864,7 @@ function applyCloudData(data, skipSafetyCheck) {
 // Applique réellement des données cloud à l'état local (localStorage + DOM).
 // N'est appelé qu'après que applyCloudData ait validé que c'est sûr de le faire.
 function _applyCloudDataDirect(data, cloudTrades) {
-  if (data.updated_at) _lastSeenCloudUpdatedAt = data.updated_at;
+  if (data.updated_at) _lastSeenCloudUpdatedAt[_currentAccId] = data.updated_at;
   const incomingTrades = cloudTrades || data.trades || [];
 
   // Garde-fou générique : on ne remplace jamais silencieusement des trades
@@ -873,22 +951,8 @@ function _applyCloudDataDirect(data, cloudTrades) {
     } catch (e) { console.warn('Restauration rm_config échouée :', e); }
   }
 
-  if (data.ia_chat_data) {
-    try {
-      const chat = JSON.parse(data.ia_chat_data);
-      if (chat.conversations != null) localStorage.setItem('tjp_pc_conversations', chat.conversations);
-      if (chat.active_conv != null) localStorage.setItem('tjp_pc_active_conv', chat.active_conv);
-      if (chat.history != null) localStorage.setItem('tjp_pc_history', chat.history);
-      // pcConversations/pcActiveConvId sont chargées UNE SEULE FOIS au tout premier
-      // chargement du script (avant que ce pull cloud, asynchrone, n'ait eu le temps
-      // d'arriver) — sans ce recalage, la conversation restaurée reste invisible à
-      // l'écran tant que la page n'est pas rechargée manuellement.
-      if (typeof pcLoadConversations === 'function') pcConversations = pcLoadConversations();
-      if (typeof pcGetActiveConvId === 'function') pcActiveConvId = pcGetActiveConvId();
-      if (typeof pcRenderConvList === 'function') pcRenderConvList();
-      if (typeof renderPcChat === 'function') renderPcChat();
-    } catch (e) { console.warn('Restauration ia_chat_data échouée :', e); }
-  }
+  // ia_chat_data n'est plus appliqué ici : voir applyIaChatData / pullGlobalChatData
+  // (conversations IA désormais globales, indépendantes du sous-compte actif).
 
   // Sauvegarder localement SANS déclencher un nouvel envoi (on reçoit du cloud)
   _isSyncing = true;
@@ -904,7 +968,7 @@ function _applyCloudDataDirect(data, cloudTrades) {
     applyPencilEdits();
   }, 200);
   localStorage.setItem('tjp_last_uid', currentUser.id);
-  if (data.updated_at) localStorage.setItem('tjp_last_updated_at', data.updated_at);
+  if (data.updated_at) localStorage.setItem(accKey('tjp_last_updated_at'), data.updated_at);
   setTimeout(() => { _isSyncing = false; }, 1000);
 }
 
@@ -916,6 +980,12 @@ function startRealtime() {
       event: '*', schema: 'public', table: 'journal_data', filter: 'user_id=eq.' + currentUser.id
     }, payload => {
       if (!payload.new || payload.new.user_id !== currentUser.id) return;
+      if (payload.new.acc_id === GLOBAL_SYNC_ACC_ID) {
+        if (_lastChatPushTimestamp && payload.new.updated_at === _lastChatPushTimestamp) return;
+        applyIaChatData(payload.new.ia_chat_data);
+        return;
+      }
+      if (payload.new.acc_id !== _currentAccId) return; // évènement pour un AUTRE sous-compte local : ignoré ici
       if (_lastPushTimestamp && payload.new.updated_at === _lastPushTimestamp) return; // écho de notre propre envoi
       _isSyncing = true;
       applyCloudData(payload.new);
@@ -938,10 +1008,10 @@ function startPolling() {
       const { data: rd } = await sb.auth.refreshSession();
       if (rd?.session?.user) currentUser = rd.session.user;
       const { data, error } = await sb.from('journal_data')
-        .select('*').eq('user_id', currentUser.id)
+        .select('*').eq('user_id', currentUser.id).eq('acc_id', _currentAccId)
         .order('updated_at', { ascending: false }).limit(1);
       if (!error && data && data.length) {
-        const localTs = localStorage.getItem('tjp_last_updated_at');
+        const localTs = localStorage.getItem(accKey('tjp_last_updated_at'));
         if (!localTs || data[0].updated_at > localTs) {
           _isSyncing = true;
           applyCloudData(data[0]);
@@ -1310,6 +1380,7 @@ function deletePcHistory(i) {
   history.splice(i,1);
   localStorage.setItem('tjp_pc_history', JSON.stringify(history));
   renderPcHistory();
+  if (typeof scheduleGlobalChatPush === 'function') scheduleGlobalChatPush();
 }
 
 function renderPcCards(data) {
@@ -1521,6 +1592,7 @@ async function generatePointsCles() {
   if (history.length > 10) history.pop();
   localStorage.setItem('tjp_pc_history', JSON.stringify(history));
   renderPcHistory();
+  if (typeof scheduleGlobalChatPush === 'function') scheduleGlobalChatPush();
 
   btn.disabled = false; btn.textContent = 'Analyser ma strategie';
 }
@@ -1537,12 +1609,14 @@ function pcLoadConversations(){
 }
 function pcSaveConversations(convs){
   localStorage.setItem('tjp_pc_conversations', JSON.stringify(convs));
+  if (typeof scheduleGlobalChatPush === 'function') scheduleGlobalChatPush();
 }
 function pcGetActiveConvId(){
   return localStorage.getItem('tjp_pc_active_conv') || null;
 }
 function pcSetActiveConvId(id){
   localStorage.setItem('tjp_pc_active_conv', id || '');
+  if (typeof scheduleGlobalChatPush === 'function') scheduleGlobalChatPush();
 }
 
 let pcConversations = pcLoadConversations();

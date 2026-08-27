@@ -221,6 +221,8 @@ function _doSwitchAccount(accId){
   if(document.getElementById('page-modifs')?.classList.contains('active')) renderModifs();
   closeAccountMenu();
   renderAccountMenu();
+  if(typeof currentUser !== 'undefined' && currentUser && typeof pullFromCloud === 'function') pullFromCloud();
+  if(typeof currentUser !== 'undefined' && currentUser && typeof pullGlobalChatData === 'function') pullGlobalChatData();
 }
 
 function getAccCapital(accId){
