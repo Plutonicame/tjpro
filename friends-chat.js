@@ -119,6 +119,7 @@ const FC_CSS = `
 .fc-audio-bar{flex:1;height:3px;background:var(--border);border-radius:2px;overflow:hidden;}
 .fc-audio-bar-fill{height:100%;background:var(--green);width:0%;}
 .fc-audio-duration{font-size:10px;color:var(--muted);font-family:var(--mono);flex-shrink:0;}
+.fc-bt-badge{font-size:11px;line-height:1;padding:1px 3px;background:var(--bt-bg);color:var(--bt-tx);border-radius:3px;font-family:var(--mono);display:inline-block;}
 .fc-trade-card{width:220px;max-width:100%;border:1px solid var(--border);border-radius:8px;overflow:hidden;background:var(--card);}
 .fc-trade-card-head{display:flex;justify-content:space-between;align-items:center;gap:6px;padding:7px 10px;background:var(--surface);font-family:var(--mono);font-size:11px;color:var(--text);}
 .fc-trade-card-body{padding:8px 10px;font-size:11px;color:var(--text);}
@@ -489,6 +490,21 @@ async function fcLoadMessages(friendId) {
 }
 
 // ══ Rendu des messages ══
+function fcCustomFieldHtml(cf) {
+  if (cf.type === 'text') {
+    return `<div class="fc-trade-notes"><span style="color:var(--text);font-style:normal;">${fcEsc(cf.label)} :</span> ${fcEsc(String(cf.value))}</div>`;
+  }
+  let displayVal;
+  if (cf.type === 'stars') {
+    const n = parseFloat(cf.value) || 0;
+    let s = '';
+    for (let i = 1; i <= 5; i++) s += i <= Math.round(n) ? '★' : '☆';
+    displayVal = s;
+  } else {
+    displayVal = fcEsc(String(cf.value));
+  }
+  return `<div class="fc-trade-row"><span>${fcEsc(cf.label)}</span><span>${displayVal}</span></div>`;
+}
 function fcBuildTradeCardHtml(t) {
   const res = typeof t.res === 'number' ? t.res : parseFloat(t.res) || 0;
   const resColor = res >= 0 ? 'var(--green)' : 'var(--red)';
@@ -501,7 +517,7 @@ function fcBuildTradeCardHtml(t) {
   for (let i = 1; i <= 5; i++) starsHtml += i <= Math.round(starsN) ? '★' : '☆';
   return `<div class="fc-trade-card">
     <div class="fc-trade-card-head">
-      <span>${fcEsc(t.paire || '—')}${t.dir ? ' · ' + fcEsc(t.dir) : ''}</span>
+      <span>${fcEsc(t.paire || '—')}${t.dir ? ' · ' + fcEsc(t.dir) : ''}${t.backtest ? '&nbsp;<span class="fc-bt-badge">BT</span>' : ''}</span>
       <span style="color:${resColor};font-weight:700;">${fcEsc(resTxt)}</span>
     </div>
     <div class="fc-trade-card-body">
@@ -511,6 +527,7 @@ function fcBuildTradeCardHtml(t) {
       ${t.mgmt ? `<div class="fc-trade-row"><span>Mgmt</span><span>${fcEsc(t.mgmt)}</span></div>` : ''}
       ${t.reprend ? `<div class="fc-trade-row"><span>Reprend.</span><span>${fcEsc(t.reprend)}</span></div>` : ''}
       ${starsN ? `<div class="fc-trade-row"><span>Note</span><span>${starsHtml}</span></div>` : ''}
+      ${Array.isArray(t.customFields) && t.customFields.length ? t.customFields.map(fcCustomFieldHtml).join('') : ''}
       ${tfList.length || confList.length ? `<div class="fc-trade-chips">${tfList.concat(confList).map(c => `<span class="fc-trade-chip">${fcEsc(c)}</span>`).join('')}</div>` : ''}
       ${t.notes ? `<div class="fc-trade-notes">${fcEsc(t.notes)}</div>` : ''}
       ${imgs.length ? `<div class="fc-trade-imgs">${imgs.map(src => `<img src="${fcEsc(src)}" onclick="openFullscreen(this.src)">`).join('')}</div>` : ''}
@@ -670,13 +687,23 @@ function fcRenderTradePickerList(filter) {
       const resColor = res >= 0 ? 'var(--green)' : 'var(--red)';
       return `<div class="fc-trade-pick-item" onclick="fcSendTradeMessage(${t.id})">
         <div class="fc-trade-pick-info">
-          <div class="fc-trade-pick-pair">${fcEsc(t.paire || '—')}${t.dir ? ' · ' + fcEsc(t.dir) : ''}</div>
+          <div class="fc-trade-pick-pair">${fcEsc(t.paire || '—')}${t.dir ? ' · ' + fcEsc(t.dir) : ''}${t.backtest ? '&nbsp;<span class="fc-bt-badge">BT</span>' : ''}</div>
           <div class="fc-trade-pick-meta">${fcEsc(t.date || '')}${t.heure ? ' ' + fcEsc(t.heure) : ''}</div>
         </div>
         <div style="color:${resColor};font-family:var(--mono);font-size:12px;font-weight:700;flex-shrink:0;">${res >= 0 ? '+' : ''}${res.toFixed(2)}€</div>
       </div>`;
     })
     .join('');
+}
+function fcCollectCustomFields(t) {
+  if (!Array.isArray(APP.cfFields) || !APP.cfFields.length) return [];
+  const out = [];
+  APP.cfFields.forEach(f => {
+    const val = typeof cfDisplayValue === 'function' ? cfDisplayValue(f, t) : t['cf_' + f.id];
+    if (val === undefined || val === null || val === '') return;
+    out.push({label: f.colName || f.label || f.id, type: f.type, value: val});
+  });
+  return out;
 }
 function fcSendTradeMessage(tradeId) {
   const t = (APP.trades || []).find(x => x.id === tradeId);
@@ -697,6 +724,8 @@ function fcSendTradeMessage(tradeId) {
     stars: t.stars || 0,
     tf: t.tf || '',
     conf: t.conf || '',
+    backtest: !!t.backtest,
+    customFields: fcCollectCustomFields(t),
     images: Array.isArray(t.images) ? t.images.slice(0, 6) : []
   };
   fcSendMessage({msg_type: 'trade', trade_data: payload});
@@ -733,7 +762,13 @@ async function fcStartRecording() {
     fcShowRecordingUI(true);
     fcRecordTimerHandle = setInterval(fcUpdateRecTimer, 200);
   } catch (e) {
-    if (typeof showSync === 'function') showSync('⚠ Micro inaccessible', '#ef4444');
+    console.warn('getUserMedia error:', e && e.name, e && e.message);
+    let msg = '⚠ Micro inaccessible';
+    if (e && e.name === 'NotAllowedError') msg = '⚠ Autorise le micro dans les réglages du site';
+    else if (e && e.name === 'NotFoundError') msg = '⚠ Aucun micro détecté sur cet appareil';
+    else if (e && e.name === 'NotReadableError') msg = '⚠ Micro déjà utilisé par une autre appli';
+    else if (e && e.name === 'SecurityError') msg = '⚠ Connexion non sécurisée (HTTPS requis)';
+    if (typeof showSync === 'function') showSync(msg, '#ef4444');
   }
 }
 function fcUpdateRecTimer() {
