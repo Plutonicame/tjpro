@@ -220,7 +220,7 @@ const FC_CSS = `
 .fc-input-bar{display:flex;align-items:flex-end;gap:8px;padding:10px 12px;border-top:1px solid var(--border);background:var(--surface);flex-shrink:0;}
 .fc-attach-btn,.fc-mic-btn,.fc-cancel-btn{background:none;border:none;color:var(--fc-icon-color,var(--muted));font-size:19px;cursor:pointer;flex-shrink:0;padding:4px;display:flex;align-items:center;justify-content:center;touch-action:none;user-select:none;-webkit-user-select:none;}
 .fc-attach-btn:hover,.fc-mic-btn:hover{color:var(--fc-send-color,var(--green));}
-.fc-cancel-btn{display:none;color:var(--fc-cancel-color,var(--red));transition:transform .12s,background .12s,color .12s;border-radius:50%;}
+.fc-cancel-btn{display:none;color:var(--fc-cancel-color,var(--red));transition:transform .12s,background .12s,color .12s;border-radius:50%;align-self:center;}
 .fc-cancel-btn:hover{opacity:.8;}
 .fc-cancel-btn.armed{color:#fff;background:var(--fc-cancel-color,var(--red));transform:scale(1.3);}
 .fc-mic-btn[data-mode="send"]{color:var(--fc-send-color,var(--green));}
@@ -228,7 +228,7 @@ const FC_CSS = `
 .fc-rec-indicator{display:none;align-items:center;gap:8px;width:100%;background:transparent;border:none;padding:8px 2px;box-sizing:border-box;}
 .fc-rec-wave{flex:1;display:flex;align-items:center;gap:2px;height:22px;overflow:hidden;}
 .fc-wave-bar{flex:0 0 3px;width:3px;background:var(--fc-wave-color,var(--green));border-radius:2px;height:15%;transition:height .08s linear;}
-.fc-mic-wrap{position:relative;flex-shrink:0;}
+.fc-mic-wrap{position:relative;flex-shrink:0;align-self:center;}
 .fc-rec-dot{width:9px;height:9px;border-radius:50%;background:var(--fc-rec-dot-color,var(--red));animation:fcPulse 1s infinite;flex-shrink:0;}
 .fc-rec-timer{font-family:var(--mono);font-size:12px;color:var(--text);flex-shrink:0;}
 .fc-text-input{flex:1;resize:none;max-height:96px;background:var(--card);border:1px solid var(--border);border-radius:16px;padding:8px 12px;color:var(--text);font-family:var(--sans);font-size:13px;line-height:1.35;}
@@ -1064,7 +1064,7 @@ function fcSampleAndRenderWave() {
     if (dev > maxDev) maxDev = dev;
   }
   // Courbe racine + seuil bas : une voix normale doit déjà bien faire bouger les barres.
-  const vol = Math.min(1, Math.sqrt(maxDev / 18));
+  const vol = Math.min(1, Math.sqrt(maxDev / 12));
   fcWaveSamples.shift();
   fcWaveSamples.push(vol);
   const wave = document.getElementById('fcRecWave');
@@ -1106,7 +1106,7 @@ async function fcStartRecording() {
       fcAnalyserData = new Uint8Array(fcAnalyser.fftSize);
       source.connect(fcAnalyser);
       fcInitWaveBars();
-      fcWaveIntervalHandle = setInterval(fcSampleAndRenderWave, 65);
+      fcWaveIntervalHandle = setInterval(fcSampleAndRenderWave, 33);
     } catch (e) {
       fcAnalyser = null; // pas grave : l'enregistrement marche même sans le rendu visuel
     }
