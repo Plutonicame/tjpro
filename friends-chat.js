@@ -131,16 +131,27 @@ const FC_CSS = `
 .fc-trade-imgs{display:flex;gap:4px;margin-top:6px;flex-wrap:wrap;}
 .fc-trade-imgs img{width:44px;height:34px;object-fit:cover;border-radius:4px;cursor:zoom-in;border:1px solid var(--border);}
 .fc-input-bar{display:flex;align-items:flex-end;gap:8px;padding:10px 12px;border-top:1px solid var(--border);background:var(--surface);flex-shrink:0;}
-.fc-attach-btn,.fc-mic-btn,.fc-cancel-rec{background:none;border:none;color:var(--muted);font-size:19px;cursor:pointer;flex-shrink:0;padding:4px;display:flex;align-items:center;justify-content:center;touch-action:none;}
+.fc-attach-btn,.fc-mic-btn,.fc-desktop-cancel-btn{background:none;border:none;color:var(--muted);font-size:19px;cursor:pointer;flex-shrink:0;padding:4px;display:flex;align-items:center;justify-content:center;touch-action:none;user-select:none;-webkit-user-select:none;}
 .fc-attach-btn:hover,.fc-mic-btn:hover{color:var(--green);}
+.fc-desktop-cancel-btn{display:none;color:var(--red);}
+.fc-desktop-cancel-btn:hover{opacity:.8;}
 .fc-mic-btn[data-mode="send"]{color:var(--green);}
+.fc-mic-btn.cancel-armed{color:#fff;background:var(--red);border-radius:50%;}
+.fc-input-center{flex:1;min-width:0;position:relative;display:flex;align-items:center;}
+.fc-rec-indicator{display:none;align-items:center;gap:8px;width:100%;background:var(--card);border:1px solid var(--border);border-radius:16px;padding:7px 12px;box-sizing:border-box;}
+.fc-rec-wave{flex:1;display:flex;align-items:center;gap:2px;height:22px;overflow:hidden;}
+.fc-wave-bar{flex:1;min-width:2px;max-width:4px;background:var(--green);border-radius:2px;height:15%;transition:height .08s linear;}
+.fc-mic-wrap{position:relative;flex-shrink:0;}
+.fc-rec-cancel-zone{position:absolute;right:100%;top:50%;transform:translateY(-50%);margin-right:6px;white-space:nowrap;display:flex;align-items:center;gap:6px;pointer-events:none;}
+.fc-rec-hint{font-size:11px;color:var(--muted);}
+.fc-rec-trash{display:none;width:30px;height:30px;border-radius:50%;background:var(--red);color:#fff;align-items:center;justify-content:center;font-size:15px;}
+.fc-rec-cancel-zone.armed .fc-rec-hint{display:none;}
+.fc-rec-cancel-zone.armed .fc-rec-trash{display:flex;}
+.fc-rec-dot{width:9px;height:9px;border-radius:50%;background:var(--red);animation:fcPulse 1s infinite;flex-shrink:0;}
+.fc-rec-timer{font-family:var(--mono);font-size:12px;color:var(--text);flex-shrink:0;}
 .fc-text-input{flex:1;resize:none;max-height:96px;background:var(--card);border:1px solid var(--border);border-radius:16px;padding:8px 12px;color:var(--text);font-family:var(--sans);font-size:13px;line-height:1.35;}
 .fc-text-input:focus{outline:none;border-color:var(--green);}
-.fc-recording-bar{display:flex;align-items:center;gap:10px;padding:10px 14px;border-top:1px solid var(--border);background:var(--surface);flex-shrink:0;}
-.fc-rec-dot{width:9px;height:9px;border-radius:50%;background:var(--red);animation:fcPulse 1s infinite;flex-shrink:0;}
 @keyframes fcPulse{0%,100%{opacity:1}50%{opacity:.3}}
-.fc-rec-timer{font-family:var(--mono);font-size:12px;color:var(--text);}
-.fc-rec-hint{font-size:11px;color:var(--muted);flex:1;}
 .fc-setup-notice{padding:24px;font-size:12px;color:var(--muted);line-height:1.7;text-align:center;margin:auto;}
 .fc-modal-box{width:340px;max-width:92vw;text-align:left;max-height:80vh;display:flex;flex-direction:column;}
 .fc-modal-title{font-family:var(--mono);font-size:13px;letter-spacing:1px;text-transform:uppercase;color:var(--green);margin-bottom:12px;text-align:center;}
@@ -199,15 +210,23 @@ const FC_HTML = `
       </div>
       <div class="fc-messages" id="fcMessages"></div>
       <div class="fc-input-bar" id="fcInputBarRow">
+        <button class="fc-desktop-cancel-btn" id="fcDesktopCancelBtn" title="Annuler"><span class="deco-emoji">🗑</span><span class="deco-emoji-alt">✕</span></button>
         <button class="fc-attach-btn" id="fcAttachBtn" title="Partager un trade"><span class="deco-emoji">📎</span><span class="deco-emoji-alt">+</span></button>
-        <textarea class="fc-text-input" id="fcTextInput" placeholder="Message" rows="1"></textarea>
-        <button class="fc-mic-btn" id="fcMicBtn" title="Message vocal (rester appuyé)"></button>
-      </div>
-      <div class="fc-recording-bar" id="fcRecordingBar" style="display:none;">
-        <button class="fc-cancel-rec" id="fcCancelRecBtn" title="Annuler"><span class="deco-emoji">🗑</span><span class="deco-emoji-alt">✕</span></button>
-        <span class="fc-rec-dot"></span>
-        <span class="fc-rec-timer" id="fcRecTimer">0:00</span>
-        <span class="fc-rec-hint">Relâche pour envoyer</span>
+        <div class="fc-input-center">
+          <textarea class="fc-text-input" id="fcTextInput" placeholder="Message" rows="1"></textarea>
+          <div class="fc-rec-indicator" id="fcRecIndicator" style="display:none;">
+            <span class="fc-rec-dot"></span>
+            <span class="fc-rec-timer" id="fcRecTimer">0:00</span>
+            <div class="fc-rec-wave" id="fcRecWave"></div>
+          </div>
+        </div>
+        <div class="fc-mic-wrap" id="fcMicWrap">
+          <div class="fc-rec-cancel-zone" id="fcRecCancelZone" style="display:none;">
+            <span class="fc-rec-hint">◁ Glisser pour annuler</span>
+            <span class="fc-rec-trash"><span class="deco-emoji">🗑</span><span class="deco-emoji-alt">✕</span></span>
+          </div>
+          <button class="fc-mic-btn" id="fcMicBtn" title="Message vocal (rester appuyé)"></button>
+        </div>
       </div>
     </div>
   </div>
@@ -732,12 +751,53 @@ function fcSendTradeMessage(tradeId) {
   fcCloseTradePicker();
 }
 
-// ══ Messages vocaux (rester appuyé sur le micro) ══
+// ══ Messages vocaux (rester appuyé sur le micro, glisser à gauche pour annuler) ══
+const FC_WAVE_BAR_COUNT = 27;
+const FC_CANCEL_THRESHOLD = -70; // px de glissement à gauche pour armer l'annulation
+const FC_CANCEL_MAX = -95; // butée du glissement
+
 let fcMediaRecorder = null;
 let fcRecordedChunks = [];
 let fcRecordStart = 0;
 let fcRecordTimerHandle = null;
 let fcRecordStream = null;
+let fcAudioCtx = null;
+let fcAnalyser = null;
+let fcAnalyserData = null;
+let fcWaveIntervalHandle = null;
+let fcWaveSamples = new Array(FC_WAVE_BAR_COUNT).fill(0);
+let fcDragStartX = 0;
+let fcDragArmed = false;
+
+function fcInitWaveBars() {
+  const wave = document.getElementById('fcRecWave');
+  if (!wave) return;
+  wave.innerHTML = '';
+  fcWaveSamples = new Array(FC_WAVE_BAR_COUNT).fill(0);
+  for (let i = 0; i < FC_WAVE_BAR_COUNT; i++) {
+    const bar = document.createElement('div');
+    bar.className = 'fc-wave-bar';
+    wave.appendChild(bar);
+  }
+}
+function fcSampleAndRenderWave() {
+  if (!fcAnalyser || !fcAnalyserData) return;
+  fcAnalyser.getByteTimeDomainData(fcAnalyserData);
+  let maxDev = 0;
+  for (let i = 0; i < fcAnalyserData.length; i++) {
+    const dev = Math.abs(fcAnalyserData[i] - 128);
+    if (dev > maxDev) maxDev = dev;
+  }
+  const vol = Math.min(1, maxDev / 100);
+  fcWaveSamples.shift();
+  fcWaveSamples.push(vol);
+  const wave = document.getElementById('fcRecWave');
+  if (!wave) return;
+  const bars = wave.children;
+  for (let i = 0; i < bars.length; i++) {
+    bars[i].style.height = (15 + fcWaveSamples[i] * 85) + '%';
+  }
+}
 
 async function fcStartRecording() {
   if (fcMediaRecorder || !fcActiveFriendId) return;
@@ -761,6 +821,19 @@ async function fcStartRecording() {
     fcRecordStart = Date.now();
     fcShowRecordingUI(true);
     fcRecordTimerHandle = setInterval(fcUpdateRecTimer, 200);
+    try {
+      fcAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      if (fcAudioCtx.state === 'suspended') fcAudioCtx.resume().catch(() => {});
+      const source = fcAudioCtx.createMediaStreamSource(stream);
+      fcAnalyser = fcAudioCtx.createAnalyser();
+      fcAnalyser.fftSize = 64;
+      fcAnalyserData = new Uint8Array(fcAnalyser.fftSize);
+      source.connect(fcAnalyser);
+      fcInitWaveBars();
+      fcWaveIntervalHandle = setInterval(fcSampleAndRenderWave, 90);
+    } catch (e) {
+      fcAnalyser = null; // pas grave : l'enregistrement marche même sans le rendu visuel
+    }
   } catch (e) {
     console.warn('getUserMedia error:', e && e.name, e && e.message);
     let msg = '⚠ Micro inaccessible';
@@ -776,14 +849,39 @@ function fcUpdateRecTimer() {
   if (el) el.textContent = fcFmtDuration((Date.now() - fcRecordStart) / 1000);
 }
 function fcShowRecordingUI(on) {
-  const bar = document.getElementById('fcRecordingBar');
-  const inputBar = document.getElementById('fcInputBarRow');
-  if (bar) bar.style.display = on ? 'flex' : 'none';
-  if (inputBar) inputBar.style.display = on ? 'none' : 'flex';
+  const indicator = document.getElementById('fcRecIndicator');
+  const input = document.getElementById('fcTextInput');
+  const zone = document.getElementById('fcRecCancelZone');
+  const attachBtn = document.getElementById('fcAttachBtn');
+  const desktopCancelBtn = document.getElementById('fcDesktopCancelBtn');
+  const micBtn = document.getElementById('fcMicBtn');
+  const mobile = typeof isMobileView === 'function' ? isMobileView() : window.innerWidth <= 1100;
+  if (indicator) indicator.style.display = on ? 'flex' : 'none';
+  if (input) input.style.display = on ? 'none' : 'block';
+  if (attachBtn) attachBtn.style.display = on ? 'none' : 'flex';
+  if (zone) zone.style.display = on && mobile ? 'flex' : 'none';
+  if (desktopCancelBtn) desktopCancelBtn.style.display = on && !mobile ? 'flex' : 'none';
+  if (micBtn) {
+    if (on && !mobile) {
+      micBtn.dataset.mode = 'recording-send';
+      micBtn.innerHTML = '<span class="deco-emoji">➤</span><span class="deco-emoji-alt">→</span>';
+    } else if (!on) {
+      fcUpdateMicSendBtn();
+    }
+  }
 }
 function fcStopRecording(shouldSend) {
   if (!fcMediaRecorder) return;
   clearInterval(fcRecordTimerHandle);
+  clearInterval(fcWaveIntervalHandle);
+  if (fcAudioCtx) {
+    try {
+      fcAudioCtx.close();
+    } catch (e) {}
+    fcAudioCtx = null;
+  }
+  fcAnalyser = null;
+  fcAnalyserData = null;
   const recorder = fcMediaRecorder;
   const stream = fcRecordStream;
   const startedAt = fcRecordStart;
@@ -807,8 +905,62 @@ function fcStopRecording(shouldSend) {
     console.warn('fcStopRecording:', e);
   }
 }
-function fcCancelRecording() {
-  fcStopRecording(false);
+
+// ── Téléphone : glisser le micro vers la gauche pour annuler (comme WhatsApp mobile) ──
+function fcOnMicPointerDown(e) {
+  const micBtn = document.getElementById('fcMicBtn');
+  if (!micBtn || !isMobileView() || micBtn.dataset.mode !== 'mic') return;
+  e.preventDefault();
+  fcDragStartX = e.clientX;
+  fcDragArmed = false;
+  try {
+    micBtn.setPointerCapture(e.pointerId);
+  } catch (err) {}
+  micBtn.style.transition = 'none';
+  fcStartRecording();
+}
+function fcOnMicPointerMove(e) {
+  if (!isMobileView() || !fcMediaRecorder) return;
+  const micBtn = document.getElementById('fcMicBtn');
+  const zone = document.getElementById('fcRecCancelZone');
+  if (!micBtn) return;
+  let dx = Math.min(0, e.clientX - fcDragStartX);
+  dx = Math.max(dx, FC_CANCEL_MAX);
+  micBtn.style.transform = 'translateX(' + dx + 'px)';
+  const armed = dx <= FC_CANCEL_THRESHOLD;
+  if (armed !== fcDragArmed) {
+    fcDragArmed = armed;
+    if (zone) zone.classList.toggle('armed', armed);
+    micBtn.classList.toggle('cancel-armed', armed);
+  }
+}
+function fcOnMicPointerUp() {
+  if (!isMobileView()) return;
+  const micBtn = document.getElementById('fcMicBtn');
+  if (micBtn) {
+    micBtn.style.transition = '';
+    micBtn.style.transform = '';
+    micBtn.classList.remove('cancel-armed');
+  }
+  const zone = document.getElementById('fcRecCancelZone');
+  if (zone) zone.classList.remove('armed');
+  if (micBtn && micBtn.dataset.mode === 'mic' && fcMediaRecorder) {
+    fcStopRecording(!fcDragArmed);
+  }
+  fcDragArmed = false;
+}
+// ── PC : clic pour démarrer, clic sur ➤ pour envoyer, clic sur 🗑 pour annuler ──
+function fcOnMicClick() {
+  const micBtn = document.getElementById('fcMicBtn');
+  if (!micBtn) return;
+  const mode = micBtn.dataset.mode;
+  if (mode === 'send') {
+    fcSendTextMessage();
+  } else if (mode === 'recording-send') {
+    fcStopRecording(true);
+  } else if (mode === 'mic' && !isMobileView()) {
+    fcStartRecording();
+  }
 }
 async function fcUploadAndSendAudio(blob, duration) {
   if (!currentUser || !fcActiveFriendId || typeof sb === 'undefined') return;
@@ -850,7 +1002,7 @@ function fcBindInputBarEvents() {
   const input = document.getElementById('fcTextInput');
   const micBtn = document.getElementById('fcMicBtn');
   const attachBtn = document.getElementById('fcAttachBtn');
-  const cancelBtn = document.getElementById('fcCancelRecBtn');
+  const desktopCancelBtn = document.getElementById('fcDesktopCancelBtn');
   if (input) {
     input.addEventListener('input', () => {
       if (typeof autoGrow === 'function') autoGrow(input);
@@ -864,21 +1016,12 @@ function fcBindInputBarEvents() {
     });
   }
   if (attachBtn) attachBtn.addEventListener('click', fcOpenTradePicker);
-  if (cancelBtn) cancelBtn.addEventListener('click', fcCancelRecording);
+  if (desktopCancelBtn) desktopCancelBtn.addEventListener('click', () => fcStopRecording(false));
   if (micBtn) {
-    micBtn.addEventListener('click', () => {
-      if (micBtn.dataset.mode === 'send') fcSendTextMessage();
-    });
-    micBtn.addEventListener('pointerdown', e => {
-      if (micBtn.dataset.mode === 'send') return;
-      e.preventDefault();
-      fcStartRecording();
-    });
-    ['pointerup', 'pointercancel', 'pointerleave'].forEach(evt =>
-      micBtn.addEventListener(evt, () => {
-        if (micBtn.dataset.mode === 'mic' && fcMediaRecorder) fcStopRecording(true);
-      })
-    );
+    micBtn.addEventListener('click', fcOnMicClick);
+    micBtn.addEventListener('pointerdown', fcOnMicPointerDown);
+    micBtn.addEventListener('pointermove', fcOnMicPointerMove);
+    ['pointerup', 'pointercancel'].forEach(evt => micBtn.addEventListener(evt, fcOnMicPointerUp));
   }
   fcUpdateMicSendBtn();
 }
