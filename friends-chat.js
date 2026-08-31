@@ -11,9 +11,12 @@
 // Fonctionnalités :
 //  - Liste d'amis (ajout par pseudo), format WhatsApp : colonne de gauche
 //    avec les contacts, conversation à droite.
-//  - Messages texte, messages vocaux (rester appuyé sur le micro), et
-//    partage de la fiche technique complète d'un trade (infos + notes +
-//    images), pas seulement une image isolée.
+//  - Messages texte, messages vocaux (rester appuyé sur le micro sur
+//    téléphone, clic simple sur PC), et partage de la fiche technique
+//    complète d'un trade (infos + notes + images + réponses aux graphiques
+//    personnalisés), pas seulement une image isolée.
+//  - Réactions emoji sur les messages (un seul emoji par personne et par
+//    message, façon WhatsApp).
 //  - Sur PC : contacts affichés avec pseudo + photo. Sur téléphone :
 //    uniquement la photo (grille compacte), conversation en plein écran
 //    avec bouton retour.
@@ -23,14 +26,31 @@
 //
 // Nécessite la migration SQL "migration_chat.sql" (tables tjp_profiles /
 // tjp_contacts / tjp_messages + policies RLS + bucket de stockage
-// "chat-audio"). Tant qu'elle n'est pas appliquée, la page affiche un
-// message explicite au lieu de planter.
+// "chat-audio") ET la migration "migration_chat_reactions.sql" (table
+// tjp_message_reactions) pour les réactions emoji. Tant qu'une migration
+// n'est pas appliquée, la fonctionnalité correspondante se dégrade
+// proprement (message explicite ou réactions simplement indisponibles)
+// au lieu de planter.
 // ══════════════════════════════════════════════════════════════════════════
 
 const FC_PROFILES_TABLE = 'tjp_profiles';
 const FC_CONTACTS_TABLE = 'tjp_contacts';
 const FC_MESSAGES_TABLE = 'tjp_messages';
+const FC_REACTIONS_TABLE = 'tjp_message_reactions';
 const FC_AUDIO_BUCKET = 'chat-audio';
+const FC_REACT_EMOJIS = ['👍', '❤️', '😂', '😮', '😢', '🙏'];
+
+// Icônes vectorielles simples (currentColor : suivent la couleur du bouton),
+// pour éviter le rendu incohérent des emoji selon les appareils (ex: 🎤 qui
+// s'affiche en simple point sur certains claviers/polices Android).
+const FC_ICON_MIC =
+  '<svg viewBox="0 0 24 24" width="19" height="19" fill="currentColor"><path d="M12 15a3.5 3.5 0 0 0 3.5-3.5v-5a3.5 3.5 0 0 0-7 0v5A3.5 3.5 0 0 0 12 15z"/><path d="M18 11.5a1 1 0 0 0-2 0 4 4 0 0 1-8 0 1 1 0 0 0-2 0 6 6 0 0 0 5 5.92V19h-1.5a1 1 0 0 0 0 2h5a1 1 0 0 0 0-2H13v-1.58a6 6 0 0 0 5-5.92z"/></svg>';
+const FC_ICON_SEND =
+  '<svg viewBox="0 0 24 24" width="19" height="19" fill="currentColor"><path d="M3.4 20.6l17.45-8.3a1 1 0 0 0 0-1.8L3.4 2.2a1 1 0 0 0-1.4 1.1l1.9 7L15 12 3.9 13.7l-1.9 7a1 1 0 0 0 1.4 1.1z"/></svg>';
+const FC_ICON_TRASH =
+  '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16"/><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/><path d="M6 7l1 13a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-13"/><path d="M10 11v6M14 11v6"/></svg>';
+const FC_ICON_ATTACH =
+  '<svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M17 7l-7.5 7.5a3 3 0 0 0 4.24 4.24L21 12.4a5 5 0 0 0-7.07-7.07L6.5 12.7a2 2 0 0 0 2.83 2.83L16 9"/></svg>';
 
 // ── État ──
 let fcContacts = []; // [{friendId, pseudo, photo}]
@@ -42,6 +62,8 @@ let fcInitDone = false;
 let fcSetupNoticeShown = false;
 let fcSearchDebounce = null;
 let fcAudioPlayingId = null;
+let fcReactionsMap = {}; // messageId -> [{user_id, emoji}]
+let fcReactPickerTargetId = null;
 
 // ── Utilitaires ──
 function fcEsc(s) {
@@ -107,14 +129,27 @@ const FC_CSS = `
 .fc-back-btn{display:none;background:none;border:none;color:var(--text);font-size:19px;cursor:pointer;padding:2px 6px 2px 0;line-height:1;}
 .fc-chat-pseudo{font-size:14px;font-weight:600;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
 .fc-messages{flex:1;overflow-y:auto;padding:14px;display:flex;flex-direction:column;gap:8px;}
-.fc-msg-row{display:flex;}
+.fc-msg-row{display:flex;align-items:center;gap:3px;}
 .fc-msg-row.mine{justify-content:flex-end;}
-.fc-bubble{max-width:72%;padding:8px 11px;border-radius:12px;font-size:13px;line-height:1.4;}
+.fc-bubble-wrap{position:relative;max-width:72%;min-width:0;}
+.fc-bubble{padding:8px 11px;border-radius:12px;font-size:13px;line-height:1.4;}
 .fc-msg-row.mine .fc-bubble{background:color-mix(in srgb, var(--green) 20%, var(--card));border-bottom-right-radius:3px;}
 .fc-msg-row:not(.mine) .fc-bubble{background:var(--surface);border:1px solid var(--border);border-bottom-left-radius:3px;}
 .fc-bubble-text{white-space:pre-wrap;word-break:break-word;color:var(--text);}
 .fc-bubble-time{font-size:9px;color:var(--muted);margin-top:3px;text-align:right;font-family:var(--mono);}
-.fc-audio-msg{display:flex;align-items:center;gap:8px;min-width:170px;}
+.fc-react-trigger{opacity:0;transition:opacity .15s;flex-shrink:0;width:22px;height:22px;border-radius:50%;background:var(--surface);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:11px;cursor:pointer;position:relative;color:var(--muted);padding:0;}
+.fc-msg-row:hover .fc-react-trigger,.fc-msg-row.show-react .fc-react-trigger{opacity:1;}
+.fc-react-face{filter:grayscale(1);opacity:.85;}
+.fc-react-plus{position:absolute;bottom:-2px;right:-2px;background:var(--card);border-radius:50%;font-size:8px;line-height:1;width:11px;height:11px;display:flex;align-items:center;justify-content:center;color:var(--text);border:1px solid var(--border);}
+.fc-react-badges{position:absolute;bottom:-9px;display:flex;gap:2px;background:var(--card);border:1px solid var(--border);border-radius:9px;padding:1px 4px;font-size:11px;box-shadow:0 1px 3px rgba(0,0,0,.35);}
+.fc-msg-row.mine .fc-react-badges{right:8px;}
+.fc-msg-row:not(.mine) .fc-react-badges{left:8px;}
+.fc-react-picker{position:fixed;display:none;gap:4px;background:var(--card);border:1px solid var(--border);border-radius:20px;padding:6px 8px;box-shadow:0 4px 16px rgba(0,0,0,.4);z-index:5000;}
+.fc-react-opt{font-size:20px;cursor:pointer;transition:transform .1s;line-height:1;padding:2px;}
+.fc-react-opt:hover{transform:scale(1.25);}
+.fc-audio-msg{display:flex;align-items:center;gap:8px;min-width:236px;}
+.fc-audio-avatar{width:28px;height:28px;border-radius:50%;overflow:hidden;flex-shrink:0;background:var(--surface);border:1px solid var(--border);}
+.fc-audio-avatar img{width:100%;height:100%;object-fit:cover;display:block;}
 .fc-audio-play{width:28px;height:28px;border-radius:50%;border:none;background:var(--green);color:var(--bg);font-size:11px;cursor:pointer;flex-shrink:0;display:flex;align-items:center;justify-content:center;}
 .fc-audio-bar{flex:1;height:3px;background:var(--border);border-radius:2px;overflow:hidden;}
 .fc-audio-bar-fill{height:100%;background:var(--green);width:0%;}
@@ -131,22 +166,17 @@ const FC_CSS = `
 .fc-trade-imgs{display:flex;gap:4px;margin-top:6px;flex-wrap:wrap;}
 .fc-trade-imgs img{width:44px;height:34px;object-fit:cover;border-radius:4px;cursor:zoom-in;border:1px solid var(--border);}
 .fc-input-bar{display:flex;align-items:flex-end;gap:8px;padding:10px 12px;border-top:1px solid var(--border);background:var(--surface);flex-shrink:0;}
-.fc-attach-btn,.fc-mic-btn,.fc-desktop-cancel-btn{background:none;border:none;color:var(--muted);font-size:19px;cursor:pointer;flex-shrink:0;padding:4px;display:flex;align-items:center;justify-content:center;touch-action:none;user-select:none;-webkit-user-select:none;}
+.fc-attach-btn,.fc-mic-btn,.fc-cancel-btn{background:none;border:none;color:var(--muted);font-size:19px;cursor:pointer;flex-shrink:0;padding:4px;display:flex;align-items:center;justify-content:center;touch-action:none;user-select:none;-webkit-user-select:none;}
 .fc-attach-btn:hover,.fc-mic-btn:hover{color:var(--green);}
-.fc-desktop-cancel-btn{display:none;color:var(--red);}
-.fc-desktop-cancel-btn:hover{opacity:.8;}
+.fc-cancel-btn{display:none;color:var(--red);transition:transform .12s,background .12s,color .12s;border-radius:50%;}
+.fc-cancel-btn:hover{opacity:.8;}
+.fc-cancel-btn.armed{color:#fff;background:var(--red);transform:scale(1.3);}
 .fc-mic-btn[data-mode="send"]{color:var(--green);}
-.fc-mic-btn.cancel-armed{color:#fff;background:var(--red);border-radius:50%;}
 .fc-input-center{flex:1;min-width:0;position:relative;display:flex;align-items:center;}
-.fc-rec-indicator{display:none;align-items:center;gap:8px;width:100%;background:var(--card);border:1px solid var(--border);border-radius:16px;padding:7px 12px;box-sizing:border-box;}
+.fc-rec-indicator{display:none;align-items:center;gap:8px;width:100%;background:transparent;border:none;padding:8px 2px;box-sizing:border-box;}
 .fc-rec-wave{flex:1;display:flex;align-items:center;gap:2px;height:22px;overflow:hidden;}
 .fc-wave-bar{flex:1;min-width:2px;max-width:4px;background:var(--green);border-radius:2px;height:15%;transition:height .08s linear;}
 .fc-mic-wrap{position:relative;flex-shrink:0;}
-.fc-rec-cancel-zone{position:absolute;right:100%;top:50%;transform:translateY(-50%);margin-right:6px;white-space:nowrap;display:flex;align-items:center;gap:6px;pointer-events:none;}
-.fc-rec-hint{font-size:11px;color:var(--muted);}
-.fc-rec-trash{display:none;width:30px;height:30px;border-radius:50%;background:var(--red);color:#fff;align-items:center;justify-content:center;font-size:15px;}
-.fc-rec-cancel-zone.armed .fc-rec-hint{display:none;}
-.fc-rec-cancel-zone.armed .fc-rec-trash{display:flex;}
 .fc-rec-dot{width:9px;height:9px;border-radius:50%;background:var(--red);animation:fcPulse 1s infinite;flex-shrink:0;}
 .fc-rec-timer{font-family:var(--mono);font-size:12px;color:var(--text);flex-shrink:0;}
 .fc-text-input{flex:1;resize:none;max-height:96px;background:var(--card);border:1px solid var(--border);border-radius:16px;padding:8px 12px;color:var(--text);font-family:var(--sans);font-size:13px;line-height:1.35;}
@@ -178,7 +208,7 @@ const FC_CSS = `
   .fc-contact-item{flex-direction:column;gap:5px;padding:4px;border-bottom:none;text-align:center;}
   .fc-contact-name{display:none;}
   .fc-avatar{width:56px;height:56px;font-size:19px;margin:0 auto;}
-  .fc-bubble{max-width:82%;}
+  .fc-bubble-wrap{max-width:82%;}
 }
 `;
 
@@ -210,8 +240,8 @@ const FC_HTML = `
       </div>
       <div class="fc-messages" id="fcMessages"></div>
       <div class="fc-input-bar" id="fcInputBarRow">
-        <button class="fc-desktop-cancel-btn" id="fcDesktopCancelBtn" title="Annuler"><span class="deco-emoji">🗑</span><span class="deco-emoji-alt">✕</span></button>
-        <button class="fc-attach-btn" id="fcAttachBtn" title="Partager un trade"><span class="deco-emoji">📎</span><span class="deco-emoji-alt">+</span></button>
+        <button class="fc-cancel-btn" id="fcCancelBtn" title="Annuler">${FC_ICON_TRASH}</button>
+        <button class="fc-attach-btn" id="fcAttachBtn" title="Partager un trade">${FC_ICON_ATTACH}</button>
         <div class="fc-input-center">
           <textarea class="fc-text-input" id="fcTextInput" placeholder="Message" rows="1"></textarea>
           <div class="fc-rec-indicator" id="fcRecIndicator" style="display:none;">
@@ -221,11 +251,7 @@ const FC_HTML = `
           </div>
         </div>
         <div class="fc-mic-wrap" id="fcMicWrap">
-          <div class="fc-rec-cancel-zone" id="fcRecCancelZone" style="display:none;">
-            <span class="fc-rec-hint">◁ Glisser pour annuler</span>
-            <span class="fc-rec-trash"><span class="deco-emoji">🗑</span><span class="deco-emoji-alt">✕</span></span>
-          </div>
-          <button class="fc-mic-btn" id="fcMicBtn" title="Message vocal (rester appuyé)"></button>
+          <button class="fc-mic-btn" id="fcMicBtn" title="Message vocal (rester appuyé)">${FC_ICON_MIC}</button>
         </div>
       </div>
     </div>
@@ -502,6 +528,7 @@ async function fcLoadMessages(friendId) {
       return;
     }
     fcMessages = data || [];
+    await fcLoadReactionsFor(fcMessages.map(m => m.id));
     fcRenderMessages();
   } catch (e) {
     console.warn('fcLoadMessages:', e);
@@ -553,18 +580,46 @@ function fcBuildTradeCardHtml(t) {
     </div>
   </div>`;
 }
-function fcAudioBubbleHtml(m) {
+function fcAudioBubbleHtml(m, avatarUrl) {
   return `<div class="fc-audio-msg" data-msg-id="${m.id}">
+    <div class="fc-audio-avatar">${avatarUrl ? `<img src="${fcEsc(avatarUrl)}" alt="">` : ''}</div>
     <button class="fc-audio-play" onclick="fcToggleAudioPlay(${m.id}, '${fcEsc(m.audio_url)}')">▶</button>
     <div class="fc-audio-bar"><div class="fc-audio-bar-fill"></div></div>
     <span class="fc-audio-duration">${fcFmtDuration(m.audio_duration)}</span>
   </div>`;
 }
-function fcRenderBubbleContent(m) {
-  if (m.msg_type === 'audio') return fcAudioBubbleHtml(m);
+function fcRenderBubbleContent(m, mine) {
+  if (m.msg_type === 'audio') {
+    const myProfile = typeof getProfile === 'function' ? getProfile() : null;
+    const avatarUrl = mine
+      ? (myProfile && myProfile.photo) || ''
+      : ((fcContacts.find(c => c.friendId === m.sender_id) || {}).photo || '');
+    return fcAudioBubbleHtml(m, avatarUrl);
+  }
   if (m.msg_type === 'trade' && m.trade_data) return fcBuildTradeCardHtml(m.trade_data);
   const text = fcEsc(m.content || '').replace(/\n/g, '<br>');
   return `<div class="fc-bubble-text">${text}</div>`;
+}
+function fcRenderMessageRow(m, me) {
+  const mine = m.sender_id === me;
+  const reactions = fcReactionsMap[m.id] || [];
+  const triggerHtml = `<button class="fc-react-trigger" onclick="event.stopPropagation();fcOpenReactionPicker(${m.id}, this)" title="Réagir"><span class="fc-react-face">🙂</span><span class="fc-react-plus">+</span></button>`;
+  const badgesHtml = reactions.length
+    ? `<div class="fc-react-badges">${reactions.map(r => `<span class="fc-react-badge">${fcEsc(r.emoji)}</span>`).join('')}</div>`
+    : '';
+  const bubbleHtml = `<div class="fc-bubble-wrap">
+      <div class="fc-bubble">${fcRenderBubbleContent(m, mine)}<div class="fc-bubble-time">${fcFmtTime(m.created_at)}</div></div>
+      ${badgesHtml}
+    </div>`;
+  const inner = mine ? triggerHtml + bubbleHtml : bubbleHtml + triggerHtml;
+  return `<div class="fc-msg-row${mine ? ' mine' : ''}" onclick="fcOnMessageRowClick(event,this)">${inner}</div>`;
+}
+function fcOnMessageRowClick(e, rowEl) {
+  if (e.target.closest('.fc-react-trigger, .fc-audio-play, .fc-trade-imgs img')) return;
+  document.querySelectorAll('.fc-msg-row.show-react').forEach(r => {
+    if (r !== rowEl) r.classList.remove('show-react');
+  });
+  rowEl.classList.toggle('show-react');
 }
 function fcRenderMessages() {
   const box = document.getElementById('fcMessages');
@@ -574,15 +629,108 @@ function fcRenderMessages() {
     box.innerHTML = '<div class="fc-empty-hint">Aucun message pour le moment.</div>';
     return;
   }
-  box.innerHTML = fcMessages
-    .map(m => {
-      const mine = m.sender_id === me;
-      return `<div class="fc-msg-row${mine ? ' mine' : ''}">
-      <div class="fc-bubble">${fcRenderBubbleContent(m)}<div class="fc-bubble-time">${fcFmtTime(m.created_at)}</div></div>
-    </div>`;
-    })
-    .join('');
+  box.innerHTML = fcMessages.map(m => fcRenderMessageRow(m, me)).join('');
   box.scrollTop = box.scrollHeight;
+}
+
+// ══ Réactions emoji (un seul emoji par personne et par message) ══
+function fcInjectReactPicker() {
+  if (document.getElementById('fcReactPicker')) return;
+  const el = document.createElement('div');
+  el.id = 'fcReactPicker';
+  el.className = 'fc-react-picker';
+  el.innerHTML = FC_REACT_EMOJIS.map(em => `<span class="fc-react-opt" data-emoji="${em}">${em}</span>`).join('');
+  document.body.appendChild(el);
+  el.addEventListener('click', e => {
+    const opt = e.target.closest('.fc-react-opt');
+    if (opt && fcReactPickerTargetId != null) fcSetReaction(fcReactPickerTargetId, opt.dataset.emoji);
+  });
+}
+function fcOpenReactionPicker(messageId, triggerEl) {
+  const picker = document.getElementById('fcReactPicker');
+  if (!picker) return;
+  fcReactPickerTargetId = messageId;
+  const rect = triggerEl.getBoundingClientRect();
+  picker.style.display = 'flex';
+  const pickerHeight = 40;
+  let top = rect.top - pickerHeight - 6;
+  if (top < 4) top = rect.bottom + 6;
+  let left = rect.left - 90;
+  left = Math.max(6, Math.min(left, window.innerWidth - 220));
+  picker.style.top = top + 'px';
+  picker.style.left = left + 'px';
+  setTimeout(() => document.addEventListener('click', fcOnDocClickClosePicker, {once: true}), 0);
+}
+function fcCloseReactionPicker() {
+  const picker = document.getElementById('fcReactPicker');
+  if (picker) picker.style.display = 'none';
+  fcReactPickerTargetId = null;
+}
+function fcOnDocClickClosePicker() {
+  fcCloseReactionPicker();
+}
+async function fcSetReaction(messageId, emoji) {
+  fcCloseReactionPicker();
+  if (!currentUser || typeof sb === 'undefined') return;
+  const me = currentUser.id;
+  const list = fcReactionsMap[messageId] || [];
+  const mine = list.find(r => r.user_id === me);
+  try {
+    if (mine && mine.emoji === emoji) {
+      const {error} = await sb.from(FC_REACTIONS_TABLE).delete().eq('message_id', messageId).eq('user_id', me);
+      if (error) {
+        if (!fcIsMissingTableError(error) && typeof showSync === 'function') showSync('⚠ Réaction impossible', '#ef4444');
+        return;
+      }
+      fcReactionsMap[messageId] = list.filter(r => r.user_id !== me);
+    } else {
+      const {error} = await sb
+        .from(FC_REACTIONS_TABLE)
+        .upsert({message_id: messageId, user_id: me, emoji}, {onConflict: 'message_id,user_id'});
+      if (error) {
+        if (fcIsMissingTableError(error)) {
+          if (typeof showSync === 'function') showSync('⚠ Réactions pas encore configurées (migration SQL)', '#f59e0b');
+        } else if (typeof showSync === 'function') showSync('⚠ Réaction impossible', '#ef4444');
+        return;
+      }
+      const idx = list.findIndex(r => r.user_id === me);
+      if (idx >= 0) list[idx] = {user_id: me, emoji};
+      else list.push({user_id: me, emoji});
+      fcReactionsMap[messageId] = list;
+    }
+    fcRenderMessages();
+  } catch (e) {
+    console.warn('fcSetReaction:', e);
+  }
+}
+async function fcLoadReactionsFor(ids) {
+  fcReactionsMap = {};
+  if (!ids.length || !currentUser || typeof sb === 'undefined') return;
+  try {
+    const {data, error} = await sb.from(FC_REACTIONS_TABLE).select('message_id,user_id,emoji').in('message_id', ids);
+    if (error) return; // dégradation silencieuse : le chat marche sans réactions si la migration n'est pas encore faite
+    (data || []).forEach(r => {
+      if (!fcReactionsMap[r.message_id]) fcReactionsMap[r.message_id] = [];
+      fcReactionsMap[r.message_id].push({user_id: r.user_id, emoji: r.emoji});
+    });
+  } catch (e) {
+    console.warn('fcLoadReactionsFor:', e);
+  }
+}
+function fcHandleReactionChange(payload) {
+  const row = payload.new && Object.keys(payload.new).length ? payload.new : payload.old;
+  if (!row || row.message_id == null) return;
+  const mid = row.message_id;
+  let list = fcReactionsMap[mid] || [];
+  if (payload.eventType === 'DELETE') {
+    list = list.filter(r => r.user_id !== row.user_id);
+  } else {
+    const idx = list.findIndex(r => r.user_id === row.user_id);
+    if (idx >= 0) list[idx] = {user_id: row.user_id, emoji: row.emoji};
+    else list.push({user_id: row.user_id, emoji: row.emoji});
+  }
+  fcReactionsMap[mid] = list;
+  if (fcMessages.some(m => m.id === mid)) fcRenderMessages();
 }
 
 // ══ Audio : lecture ══
@@ -752,9 +900,10 @@ function fcSendTradeMessage(tradeId) {
 }
 
 // ══ Messages vocaux (rester appuyé sur le micro, glisser à gauche pour annuler) ══
-const FC_WAVE_BAR_COUNT = 27;
-const FC_CANCEL_THRESHOLD = -70; // px de glissement à gauche pour armer l'annulation
-const FC_CANCEL_MAX = -95; // butée du glissement
+const FC_WAVE_BAR_COUNT = 46;
+let fcDragStartX = 0;
+let fcDragArmed = false;
+let fcDragMaxPx = -240;
 
 let fcMediaRecorder = null;
 let fcRecordedChunks = [];
@@ -766,8 +915,6 @@ let fcAnalyser = null;
 let fcAnalyserData = null;
 let fcWaveIntervalHandle = null;
 let fcWaveSamples = new Array(FC_WAVE_BAR_COUNT).fill(0);
-let fcDragStartX = 0;
-let fcDragArmed = false;
 
 function fcInitWaveBars() {
   const wave = document.getElementById('fcRecWave');
@@ -788,7 +935,8 @@ function fcSampleAndRenderWave() {
     const dev = Math.abs(fcAnalyserData[i] - 128);
     if (dev > maxDev) maxDev = dev;
   }
-  const vol = Math.min(1, maxDev / 100);
+  // Courbe racine + seuil bas : une voix normale doit déjà bien faire bouger les barres.
+  const vol = Math.min(1, Math.sqrt(maxDev / 18));
   fcWaveSamples.shift();
   fcWaveSamples.push(vol);
   const wave = document.getElementById('fcRecWave');
@@ -830,7 +978,7 @@ async function fcStartRecording() {
       fcAnalyserData = new Uint8Array(fcAnalyser.fftSize);
       source.connect(fcAnalyser);
       fcInitWaveBars();
-      fcWaveIntervalHandle = setInterval(fcSampleAndRenderWave, 90);
+      fcWaveIntervalHandle = setInterval(fcSampleAndRenderWave, 65);
     } catch (e) {
       fcAnalyser = null; // pas grave : l'enregistrement marche même sans le rendu visuel
     }
@@ -851,20 +999,18 @@ function fcUpdateRecTimer() {
 function fcShowRecordingUI(on) {
   const indicator = document.getElementById('fcRecIndicator');
   const input = document.getElementById('fcTextInput');
-  const zone = document.getElementById('fcRecCancelZone');
   const attachBtn = document.getElementById('fcAttachBtn');
-  const desktopCancelBtn = document.getElementById('fcDesktopCancelBtn');
+  const cancelBtn = document.getElementById('fcCancelBtn');
   const micBtn = document.getElementById('fcMicBtn');
   const mobile = typeof isMobileView === 'function' ? isMobileView() : window.innerWidth <= 1100;
   if (indicator) indicator.style.display = on ? 'flex' : 'none';
   if (input) input.style.display = on ? 'none' : 'block';
   if (attachBtn) attachBtn.style.display = on ? 'none' : 'flex';
-  if (zone) zone.style.display = on && mobile ? 'flex' : 'none';
-  if (desktopCancelBtn) desktopCancelBtn.style.display = on && !mobile ? 'flex' : 'none';
+  if (cancelBtn) cancelBtn.style.display = on ? 'flex' : 'none';
   if (micBtn) {
     if (on && !mobile) {
       micBtn.dataset.mode = 'recording-send';
-      micBtn.innerHTML = '<span class="deco-emoji">➤</span><span class="deco-emoji-alt">→</span>';
+      micBtn.innerHTML = FC_ICON_SEND;
     } else if (!on) {
       fcUpdateMicSendBtn();
     }
@@ -913,6 +1059,17 @@ function fcOnMicPointerDown(e) {
   e.preventDefault();
   fcDragStartX = e.clientX;
   fcDragArmed = false;
+  const bar = document.getElementById('fcInputBarRow');
+  const micRect = micBtn.getBoundingClientRect();
+  if (bar) {
+    const barRect = bar.getBoundingClientRect();
+    // Il faut amener le micro jusqu'à l'extrémité gauche de la barre
+    // (même emplacement que le bouton corbeille), pas juste de quelques px.
+    fcDragMaxPx = -(micRect.left - barRect.left - 26);
+    if (fcDragMaxPx > -90) fcDragMaxPx = -90; // garde-fou sur très petits écrans
+  } else {
+    fcDragMaxPx = -240;
+  }
   try {
     micBtn.setPointerCapture(e.pointerId);
   } catch (err) {}
@@ -922,16 +1079,15 @@ function fcOnMicPointerDown(e) {
 function fcOnMicPointerMove(e) {
   if (!isMobileView() || !fcMediaRecorder) return;
   const micBtn = document.getElementById('fcMicBtn');
-  const zone = document.getElementById('fcRecCancelZone');
   if (!micBtn) return;
   let dx = Math.min(0, e.clientX - fcDragStartX);
-  dx = Math.max(dx, FC_CANCEL_MAX);
+  dx = Math.max(dx, fcDragMaxPx);
   micBtn.style.transform = 'translateX(' + dx + 'px)';
-  const armed = dx <= FC_CANCEL_THRESHOLD;
+  const armed = dx <= fcDragMaxPx * 0.92;
   if (armed !== fcDragArmed) {
     fcDragArmed = armed;
-    if (zone) zone.classList.toggle('armed', armed);
-    micBtn.classList.toggle('cancel-armed', armed);
+    const cancelBtn = document.getElementById('fcCancelBtn');
+    if (cancelBtn) cancelBtn.classList.toggle('armed', armed);
   }
 }
 function fcOnMicPointerUp() {
@@ -940,16 +1096,15 @@ function fcOnMicPointerUp() {
   if (micBtn) {
     micBtn.style.transition = '';
     micBtn.style.transform = '';
-    micBtn.classList.remove('cancel-armed');
   }
-  const zone = document.getElementById('fcRecCancelZone');
-  if (zone) zone.classList.remove('armed');
+  const cancelBtn = document.getElementById('fcCancelBtn');
+  if (cancelBtn) cancelBtn.classList.remove('armed');
   if (micBtn && micBtn.dataset.mode === 'mic' && fcMediaRecorder) {
     fcStopRecording(!fcDragArmed);
   }
   fcDragArmed = false;
 }
-// ── PC : clic pour démarrer, clic sur ➤ pour envoyer, clic sur 🗑 pour annuler ──
+// ── PC : clic pour démarrer, clic sur l'avion pour envoyer, clic sur la corbeille pour annuler ──
 function fcOnMicClick() {
   const micBtn = document.getElementById('fcMicBtn');
   if (!micBtn) return;
@@ -994,15 +1149,13 @@ function fcUpdateMicSendBtn() {
   if (!input || !btn) return;
   const hasText = input.value.trim().length > 0;
   btn.dataset.mode = hasText ? 'send' : 'mic';
-  btn.innerHTML = hasText
-    ? '<span class="deco-emoji">➤</span><span class="deco-emoji-alt">→</span>'
-    : '<span class="deco-emoji">🎤</span><span class="deco-emoji-alt">●</span>';
+  btn.innerHTML = hasText ? FC_ICON_SEND : FC_ICON_MIC;
 }
 function fcBindInputBarEvents() {
   const input = document.getElementById('fcTextInput');
   const micBtn = document.getElementById('fcMicBtn');
   const attachBtn = document.getElementById('fcAttachBtn');
-  const desktopCancelBtn = document.getElementById('fcDesktopCancelBtn');
+  const cancelBtn = document.getElementById('fcCancelBtn');
   if (input) {
     input.addEventListener('input', () => {
       if (typeof autoGrow === 'function') autoGrow(input);
@@ -1016,7 +1169,7 @@ function fcBindInputBarEvents() {
     });
   }
   if (attachBtn) attachBtn.addEventListener('click', fcOpenTradePicker);
-  if (desktopCancelBtn) desktopCancelBtn.addEventListener('click', () => fcStopRecording(false));
+  if (cancelBtn) cancelBtn.addEventListener('click', () => fcStopRecording(false));
   if (micBtn) {
     micBtn.addEventListener('click', fcOnMicClick);
     micBtn.addEventListener('pointerdown', fcOnMicPointerDown);
@@ -1052,6 +1205,9 @@ function fcStartRealtime() {
       {event: 'INSERT', schema: 'public', table: FC_CONTACTS_TABLE, filter: 'user_id=eq.' + me},
       () => fcLoadContacts()
     )
+    .on('postgres_changes', {event: '*', schema: 'public', table: FC_REACTIONS_TABLE}, payload =>
+      fcHandleReactionChange(payload)
+    )
     .subscribe();
 }
 function fcStopRealtime() {
@@ -1080,6 +1236,7 @@ function fcInit() {
   fcInjectStyles();
   fcInjectMarkup();
   fcInjectModals();
+  fcInjectReactPicker();
   fcPublishProfile();
   fcLoadContacts();
   fcStartRealtime();
@@ -1091,10 +1248,12 @@ function fcReset() {
   fcMessages = [];
   fcActiveFriendId = null;
   fcActivityMap = {};
+  fcReactionsMap = {};
+  fcReactPickerTargetId = null;
   fcSetupNoticeShown = false;
   const wrap = document.getElementById('fcWrap');
   if (wrap) wrap.remove();
-  ['fcAddModal', 'fcTradeModal'].forEach(id => {
+  ['fcAddModal', 'fcTradeModal', 'fcReactPicker'].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.remove();
   });
