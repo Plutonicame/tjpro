@@ -39,6 +39,48 @@ const FC_MESSAGES_TABLE = 'tjp_messages';
 const FC_REACTIONS_TABLE = 'tjp_message_reactions';
 const FC_AUDIO_BUCKET = 'chat-audio';
 const FC_REACT_EMOJIS = ['👍', '❤️', '😂', '😮', '😢', '🙏'];
+const FC_EMOJI_CATEGORIES = [
+  {
+    icon: '😀',
+    name: 'Smileys',
+    emojis: ['😀','😃','😄','😁','😆','😅','🤣','😂','🙂','🙃','😉','😊','😇','🥰','😍','🤩','😘','😗','😚','😙','😋','😛','😜','🤪','😝','🤑','🤗','🤭','🤫','🤔','🤐','🤨','😐','😑','😶','😏','😒','🙄','😬','🤥','😌','😔','😪','🤤','😴','😷','🤒','🤕','🤢','🤮','🤧','🥵','🥶','🥴','😵','🤯','🤠','🥳','😎','🤓','🧐','😕','😟','🙁','☹️','😮','😯','😲','😳','🥺','😦','😧','😨','😰','😥','😢','😭','😱','😖','😣','😞','😓','😩','😫','🥱','😤','😡','😠','🤬','😈','👿','💀','☠️','💩','🤡']
+  },
+  {
+    icon: '👍',
+    name: 'Gestes',
+    emojis: ['👍','👎','👌','🤌','🤏','✌️','🤞','🤟','🤘','🤙','👈','👉','👆','🖕','👇','☝️','👋','🤚','🖐️','✋','🖖','👏','🙌','🤝','🙏','✍️','💪','🦾','👂','👃','👀','👁️','👅','👄']
+  },
+  {
+    icon: '❤️',
+    name: 'Cœurs',
+    emojis: ['❤️','🧡','💛','💚','💙','💜','🖤','🤍','🤎','💔','❣️','💕','💞','💓','💗','💖','💘','💝','💟','♥️','💯','💢','💥','💫','💦','💨']
+  },
+  {
+    icon: '🐶',
+    name: 'Animaux',
+    emojis: ['🐶','🐱','🐭','🐹','🐰','🦊','🐻','🐼','🐨','🐯','🦁','🐮','🐷','🐽','🐸','🐵','🙈','🙉','🙊','🐔','🐧','🐦','🐤','🦆','🦅','🦉','🦇','🐺','🐗','🐴','🦄','🐝','🐛','🦋','🐌','🐞','🐜','🐢','🐍','🦎','🐙','🦑','🦀','🐡','🐠','🐟','🐬','🐳','🐋','🦈','🐊','🐅','🦓','🦍','🐘','🦛','🦏','🐪','🦒','🐃','🐄','🐎','🐖','🐑','🐐','🦌','🐕','🐈','🐓','🦃','🦚','🦜','🐇','🐿️']
+  },
+  {
+    icon: '🍔',
+    name: 'Nourriture',
+    emojis: ['🍏','🍎','🍐','🍊','🍋','🍌','🍉','🍇','🍓','🫐','🍈','🍒','🍑','🥭','🍍','🥥','🥝','🍅','🍆','🥑','🥦','🥬','🥒','🌶️','🌽','🥕','🧄','🧅','🥔','🍠','🥐','🥯','🍞','🥖','🧀','🥚','🍳','🥞','🥓','🥩','🍗','🍖','🌭','🍔','🍟','🍕','🥪','🌮','🌯','🥗','🍝','🍜','🍲','🍛','🍣','🍱','🥟','🍤','🍙','🍚','🍘','🍥','🍧','🍨','🍦','🥧','🧁','🍰','🎂','🍮','🍭','🍬','🍫','🍿','🍩','🍪','🥜','🍯','🥛','☕','🍵','🥤','🍺','🍻','🥂','🍷','🥃','🍸','🍹','🍾']
+  },
+  {
+    icon: '⚽',
+    name: 'Activités',
+    emojis: ['⚽','🏀','🏈','⚾','🥎','🎾','🏐','🏉','🥏','🎱','🏓','🏸','🏒','🏑','🏏','🥅','⛳','🏹','🎣','🤿','🥊','🥋','🎽','🛹','⛸️','🎿','⛷️','🏂','🏋️','🤼','🤸','🤺','🏇','🧘','🏄','🏊','🚣','🚵','🚴','🏆','🥇','🥈','🥉','🏅','🎖️','🎗️','🎫','🎪','🤹','🎭','🎨','🎬','🎤','🎧','🎼','🎹','🥁','🎷','🎺','🎸','🎻','🎲','🎯','🎳','🎮','🎰','🧩']
+  },
+  {
+    icon: '💡',
+    name: 'Objets',
+    emojis: ['⌚','📱','💻','⌨️','🖥️','🖨️','🖱️','💽','💾','💿','📷','📸','🎥','📞','☎️','📺','📻','🧭','⏱️','⏰','🕰️','⌛','⏳','🔋','🔌','💡','🔦','🕯️','💸','💵','💰','💳','🧾','💎','🔧','🔨','⚙️','🔩','🔫','💣','🧨','🔪','🗡️','⚔️','🛡️','🔮','📿','🔭','🔬','💊','💉','🩸','🚪','🪞','🛏️','🛋️','🪑','🚽','🚿','🛁','🧴','🧹','🧺','🧻','🧼','🧽','🛒']
+  },
+  {
+    icon: '🔣',
+    name: 'Symboles',
+    emojis: ['✅','❌','❎','➕','➖','➗','✖️','♻️','⚠️','🚫','❗','❓','❕','❔','‼️','⁉️','💤','🔔','🔕','🔊','🔇','📢','📣','💬','💭','♠️','♥️','♦️','♣️','🃏','🔴','🟠','🟡','🟢','🔵','🟣','🟤','⚫','⚪','🔶','🔷','🔸','🔹','🔺','🔻','💠','🔘','🏁','🚩','🎌','🏳️','🏳️‍🌈']
+  }
+];
 
 // Icônes vectorielles simples (currentColor : suivent la couleur du bouton),
 // pour éviter le rendu incohérent des emoji selon les appareils (ex: 🎤 qui
@@ -108,16 +150,16 @@ function fcShowSetupNotice() {
 // ══ CSS injecté (aucune modification de style.css) ══
 const FC_CSS = `
 .fc-wrap{display:flex;height:clamp(420px,calc(100vh - 190px),760px);border:1px solid var(--border);border-radius:8px;overflow:hidden;background:var(--card);}
-.fc-sidebar{width:280px;flex-shrink:0;display:flex;flex-direction:column;border-right:1px solid var(--border);background:var(--surface);}
+.fc-sidebar{width:280px;flex-shrink:0;display:flex;flex-direction:column;border-right:1px solid var(--border);background:var(--fc-sidebar-bg,var(--surface));}
 .fc-sidebar-header{display:flex;align-items:center;justify-content:space-between;padding:12px 14px;border-bottom:1px solid var(--border);flex-shrink:0;}
 .fc-sidebar-title{font-family:var(--mono);font-size:11px;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted);}
-.fc-add-btn{width:26px;height:26px;border-radius:50%;border:1px solid var(--border);background:var(--card);color:var(--green);font-size:16px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
-.fc-add-btn:hover{border-color:var(--green);}
+.fc-add-btn{width:26px;height:26px;border-radius:50%;border:1px solid var(--border);background:var(--card);color:var(--fc-add-btn-color,var(--green));font-size:16px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+.fc-add-btn:hover{border-color:var(--fc-add-btn-color,var(--green));}
 .fc-contact-list{flex:1;overflow-y:auto;}
 .fc-contact-empty{padding:24px 14px;font-size:12px;color:var(--muted);text-align:center;line-height:1.6;}
 .fc-contact-item{display:flex;align-items:center;gap:10px;padding:10px 14px;cursor:pointer;border-bottom:1px solid var(--border);transition:background .15s;}
 .fc-contact-item:hover{background:rgba(255,255,255,.04);}
-.fc-contact-item.active{background:color-mix(in srgb, var(--green) 10%, transparent);}
+.fc-contact-item.active{background:var(--fc-contact-active-bg,color-mix(in srgb, var(--green) 10%, transparent));}
 .fc-avatar{width:40px;height:40px;border-radius:50%;overflow:hidden;flex-shrink:0;display:flex;align-items:center;justify-content:center;background:var(--surface);border:1px solid var(--border);font-size:15px;color:var(--muted);font-family:var(--mono);}
 .fc-avatar img{width:100%;height:100%;object-fit:cover;display:block;}
 .fc-contact-name{font-size:13px;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
@@ -133,51 +175,61 @@ const FC_CSS = `
 .fc-msg-row.mine{justify-content:flex-end;}
 .fc-bubble-wrap{position:relative;max-width:72%;min-width:0;}
 .fc-bubble{padding:8px 11px;border-radius:12px;font-size:13px;line-height:1.4;}
-.fc-msg-row.mine .fc-bubble{background:color-mix(in srgb, var(--green) 20%, var(--card));border-bottom-right-radius:3px;}
-.fc-msg-row:not(.mine) .fc-bubble{background:var(--surface);border:1px solid var(--border);border-bottom-left-radius:3px;}
-.fc-bubble-text{white-space:pre-wrap;word-break:break-word;color:var(--text);}
-.fc-bubble-time{font-size:9px;color:var(--muted);margin-top:3px;text-align:right;font-family:var(--mono);}
-.fc-react-trigger{opacity:0;transition:opacity .15s;flex-shrink:0;width:22px;height:22px;border-radius:50%;background:var(--surface);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:11px;cursor:pointer;position:relative;color:var(--muted);padding:0;}
+.fc-msg-row.mine .fc-bubble{background:var(--fc-bubble-mine-bg,color-mix(in srgb, var(--green) 20%, var(--card)));border-bottom-right-radius:3px;}
+.fc-msg-row:not(.mine) .fc-bubble{background:var(--fc-bubble-theirs-bg,var(--surface));border:1px solid var(--fc-bubble-theirs-border,var(--border));border-bottom-left-radius:3px;}
+.fc-bubble-text{white-space:pre-wrap;word-break:break-word;color:var(--fc-bubble-text,var(--text));}
+.fc-bubble-time{font-size:9px;color:var(--fc-time-color,var(--muted));margin-top:3px;text-align:right;font-family:var(--mono);}
+.fc-react-trigger{opacity:0;transition:opacity .15s;flex-shrink:0;width:22px;height:22px;border-radius:50%;background:var(--fc-react-trigger-bg,var(--surface));border:1px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:11px;cursor:pointer;position:relative;color:var(--muted);padding:0;}
 .fc-msg-row:hover .fc-react-trigger,.fc-msg-row.show-react .fc-react-trigger{opacity:1;}
 .fc-react-face{filter:grayscale(1);opacity:.85;}
 .fc-react-plus{position:absolute;bottom:-2px;right:-2px;background:var(--card);border-radius:50%;font-size:8px;line-height:1;width:11px;height:11px;display:flex;align-items:center;justify-content:center;color:var(--text);border:1px solid var(--border);}
-.fc-react-badges{position:absolute;bottom:-9px;display:flex;gap:2px;background:var(--card);border:1px solid var(--border);border-radius:9px;padding:1px 4px;font-size:11px;box-shadow:0 1px 3px rgba(0,0,0,.35);}
+.fc-react-badges{position:absolute;bottom:-9px;display:flex;gap:2px;background:var(--fc-react-badge-bg,var(--card));border:1px solid var(--border);border-radius:9px;padding:1px 4px;font-size:11px;box-shadow:0 1px 3px rgba(0,0,0,.35);}
 .fc-msg-row.mine .fc-react-badges{right:8px;}
 .fc-msg-row:not(.mine) .fc-react-badges{left:8px;}
-.fc-react-picker{position:fixed;display:none;gap:4px;background:var(--card);border:1px solid var(--border);border-radius:20px;padding:6px 8px;box-shadow:0 4px 16px rgba(0,0,0,.4);z-index:5000;}
+.fc-react-picker{position:fixed;display:none;background:var(--card);border:1px solid var(--border);border-radius:14px;padding:8px;box-shadow:0 4px 16px rgba(0,0,0,.4);z-index:5000;}
+.fc-react-quick{display:flex;gap:4px;align-items:center;}
 .fc-react-opt{font-size:20px;cursor:pointer;transition:transform .1s;line-height:1;padding:2px;}
 .fc-react-opt:hover{transform:scale(1.25);}
+.fc-react-more-btn{width:26px;height:26px;border-radius:50%;border:1px solid var(--border);background:var(--surface);color:var(--muted);font-size:15px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-left:2px;}
+.fc-react-more-btn:hover{color:var(--green);border-color:var(--green);}
+.fc-react-full{display:none;flex-direction:column;width:300px;max-width:80vw;}
+.fc-react-tabs{display:flex;gap:2px;overflow-x:auto;border-bottom:1px solid var(--border);padding-bottom:6px;margin-bottom:6px;}
+.fc-react-tab{font-size:17px;padding:3px 6px;border-radius:6px;cursor:pointer;flex-shrink:0;opacity:.55;}
+.fc-react-tab.active{opacity:1;background:var(--surface);}
+.fc-react-grid{display:grid;grid-template-columns:repeat(8,1fr);gap:2px;max-height:190px;overflow-y:auto;}
+.fc-react-grid-emoji{font-size:19px;text-align:center;cursor:pointer;padding:3px 0;border-radius:5px;line-height:1.3;}
+.fc-react-grid-emoji:hover{background:var(--surface);}
 .fc-audio-msg{display:flex;align-items:center;gap:8px;min-width:236px;}
 .fc-audio-avatar{width:28px;height:28px;border-radius:50%;overflow:hidden;flex-shrink:0;background:var(--surface);border:1px solid var(--border);}
 .fc-audio-avatar img{width:100%;height:100%;object-fit:cover;display:block;}
-.fc-audio-play{width:28px;height:28px;border-radius:50%;border:none;background:var(--green);color:var(--bg);font-size:11px;cursor:pointer;flex-shrink:0;display:flex;align-items:center;justify-content:center;}
+.fc-audio-play{width:28px;height:28px;border-radius:50%;border:none;background:var(--fc-audio-play-bg,var(--green));color:var(--bg);font-size:11px;cursor:pointer;flex-shrink:0;display:flex;align-items:center;justify-content:center;}
 .fc-audio-bar{flex:1;height:3px;background:var(--border);border-radius:2px;overflow:hidden;}
-.fc-audio-bar-fill{height:100%;background:var(--green);width:0%;}
+.fc-audio-bar-fill{height:100%;background:var(--fc-audio-fill-color,var(--green));width:0%;}
 .fc-audio-duration{font-size:10px;color:var(--muted);font-family:var(--mono);flex-shrink:0;}
 .fc-bt-badge{font-size:11px;line-height:1;padding:1px 3px;background:var(--bt-bg);color:var(--bt-tx);border-radius:3px;font-family:var(--mono);display:inline-block;}
 .fc-trade-card{width:220px;max-width:100%;border:1px solid var(--border);border-radius:8px;overflow:hidden;background:var(--card);}
-.fc-trade-card-head{display:flex;justify-content:space-between;align-items:center;gap:6px;padding:7px 10px;background:var(--surface);font-family:var(--mono);font-size:11px;color:var(--text);}
+.fc-trade-card-head{display:flex;justify-content:space-between;align-items:center;gap:6px;padding:7px 10px;background:var(--fc-trade-head-bg,var(--surface));font-family:var(--mono);font-size:11px;color:var(--text);}
 .fc-trade-card-body{padding:8px 10px;font-size:11px;color:var(--text);}
 .fc-trade-row{display:flex;justify-content:space-between;gap:8px;margin-bottom:3px;}
 .fc-trade-row span:first-child{color:var(--muted);}
 .fc-trade-chips{display:flex;flex-wrap:wrap;gap:3px;margin-top:5px;}
-.fc-trade-chip{font-size:9px;padding:2px 6px;border-radius:3px;background:var(--surface);border:1px solid var(--border);color:var(--muted);}
+.fc-trade-chip{font-size:9px;padding:2px 6px;border-radius:3px;background:var(--fc-trade-chip-bg,var(--surface));border:1px solid var(--border);color:var(--muted);}
 .fc-trade-notes{margin-top:6px;font-size:10px;color:var(--muted);font-style:italic;white-space:pre-wrap;}
 .fc-trade-imgs{display:flex;gap:4px;margin-top:6px;flex-wrap:wrap;}
 .fc-trade-imgs img{width:44px;height:34px;object-fit:cover;border-radius:4px;cursor:zoom-in;border:1px solid var(--border);}
 .fc-input-bar{display:flex;align-items:flex-end;gap:8px;padding:10px 12px;border-top:1px solid var(--border);background:var(--surface);flex-shrink:0;}
-.fc-attach-btn,.fc-mic-btn,.fc-cancel-btn{background:none;border:none;color:var(--muted);font-size:19px;cursor:pointer;flex-shrink:0;padding:4px;display:flex;align-items:center;justify-content:center;touch-action:none;user-select:none;-webkit-user-select:none;}
-.fc-attach-btn:hover,.fc-mic-btn:hover{color:var(--green);}
-.fc-cancel-btn{display:none;color:var(--red);transition:transform .12s,background .12s,color .12s;border-radius:50%;}
+.fc-attach-btn,.fc-mic-btn,.fc-cancel-btn{background:none;border:none;color:var(--fc-icon-color,var(--muted));font-size:19px;cursor:pointer;flex-shrink:0;padding:4px;display:flex;align-items:center;justify-content:center;touch-action:none;user-select:none;-webkit-user-select:none;}
+.fc-attach-btn:hover,.fc-mic-btn:hover{color:var(--fc-send-color,var(--green));}
+.fc-cancel-btn{display:none;color:var(--fc-cancel-color,var(--red));transition:transform .12s,background .12s,color .12s;border-radius:50%;}
 .fc-cancel-btn:hover{opacity:.8;}
-.fc-cancel-btn.armed{color:#fff;background:var(--red);transform:scale(1.3);}
-.fc-mic-btn[data-mode="send"]{color:var(--green);}
+.fc-cancel-btn.armed{color:#fff;background:var(--fc-cancel-color,var(--red));transform:scale(1.3);}
+.fc-mic-btn[data-mode="send"]{color:var(--fc-send-color,var(--green));}
 .fc-input-center{flex:1;min-width:0;position:relative;display:flex;align-items:center;}
 .fc-rec-indicator{display:none;align-items:center;gap:8px;width:100%;background:transparent;border:none;padding:8px 2px;box-sizing:border-box;}
 .fc-rec-wave{flex:1;display:flex;align-items:center;gap:2px;height:22px;overflow:hidden;}
-.fc-wave-bar{flex:1;min-width:2px;max-width:4px;background:var(--green);border-radius:2px;height:15%;transition:height .08s linear;}
+.fc-wave-bar{flex:1;background:var(--fc-wave-color,var(--green));border-radius:2px;height:15%;transition:height .08s linear;}
 .fc-mic-wrap{position:relative;flex-shrink:0;}
-.fc-rec-dot{width:9px;height:9px;border-radius:50%;background:var(--red);animation:fcPulse 1s infinite;flex-shrink:0;}
+.fc-rec-dot{width:9px;height:9px;border-radius:50%;background:var(--fc-rec-dot-color,var(--red));animation:fcPulse 1s infinite;flex-shrink:0;}
 .fc-rec-timer{font-family:var(--mono);font-size:12px;color:var(--text);flex-shrink:0;}
 .fc-text-input{flex:1;resize:none;max-height:96px;background:var(--card);border:1px solid var(--border);border-radius:16px;padding:8px 12px;color:var(--text);font-family:var(--sans);font-size:13px;line-height:1.35;}
 .fc-text-input:focus{outline:none;border-color:var(--green);}
@@ -553,7 +605,7 @@ function fcCustomFieldHtml(cf) {
 }
 function fcBuildTradeCardHtml(t) {
   const res = typeof t.res === 'number' ? t.res : parseFloat(t.res) || 0;
-  const resColor = res >= 0 ? 'var(--green)' : 'var(--red)';
+  const resColor = res >= 0 ? 'var(--fc-trade-pos-color,var(--green))' : 'var(--fc-trade-neg-color,var(--red))';
   const resTxt = (res >= 0 ? '+' : '') + res.toFixed(2) + ' €';
   const tfList = (t.tf || '').split('|').filter(Boolean);
   const confList = (t.conf || '').split('|').filter(Boolean);
@@ -639,34 +691,102 @@ function fcInjectReactPicker() {
   const el = document.createElement('div');
   el.id = 'fcReactPicker';
   el.className = 'fc-react-picker';
-  el.innerHTML = FC_REACT_EMOJIS.map(em => `<span class="fc-react-opt" data-emoji="${em}">${em}</span>`).join('');
+  el.innerHTML = `
+    <div class="fc-react-quick">
+      ${FC_REACT_EMOJIS.map(em => `<span class="fc-react-opt" data-emoji="${em}">${em}</span>`).join('')}
+      <button class="fc-react-more-btn" title="Plus d'emoji">+</button>
+    </div>
+    <div class="fc-react-full">
+      <div class="fc-react-tabs"></div>
+      <div class="fc-react-grid"></div>
+    </div>
+  `;
   document.body.appendChild(el);
   el.addEventListener('click', e => {
-    const opt = e.target.closest('.fc-react-opt');
+    if (e.target.closest('.fc-react-more-btn')) {
+      fcExpandReactionPicker();
+      return;
+    }
+    const opt = e.target.closest('.fc-react-opt, .fc-react-grid-emoji');
     if (opt && fcReactPickerTargetId != null) fcSetReaction(fcReactPickerTargetId, opt.dataset.emoji);
   });
 }
+function fcBuildFullEmojiPicker() {
+  const el = document.getElementById('fcReactPicker');
+  const tabs = el && el.querySelector('.fc-react-tabs');
+  if (!tabs || tabs.dataset.built) return;
+  tabs.dataset.built = '1';
+  tabs.innerHTML = FC_EMOJI_CATEGORIES.map(
+    (cat, i) => `<span class="fc-react-tab${i === 0 ? ' active' : ''}" data-cat="${i}" title="${fcEsc(cat.name)}">${cat.icon}</span>`
+  ).join('');
+  fcRenderEmojiGrid(0);
+  tabs.addEventListener('click', e => {
+    const tab = e.target.closest('.fc-react-tab');
+    if (!tab) return;
+    tabs.querySelectorAll('.fc-react-tab').forEach(t => t.classList.remove('active'));
+    tab.classList.add('active');
+    fcRenderEmojiGrid(parseInt(tab.dataset.cat, 10));
+  });
+}
+function fcRenderEmojiGrid(catIndex) {
+  const grid = document.querySelector('#fcReactPicker .fc-react-grid');
+  const cat = FC_EMOJI_CATEGORIES[catIndex];
+  if (!grid || !cat) return;
+  grid.innerHTML = cat.emojis.map(em => `<span class="fc-react-grid-emoji" data-emoji="${em}">${em}</span>`).join('');
+  grid.scrollTop = 0;
+}
+function fcExpandReactionPicker() {
+  const el = document.getElementById('fcReactPicker');
+  if (!el) return;
+  const quick = el.querySelector('.fc-react-quick');
+  const full = el.querySelector('.fc-react-full');
+  if (quick) quick.style.display = 'none';
+  if (full) full.style.display = 'flex';
+  fcBuildFullEmojiPicker();
+  fcPositionReactPicker();
+}
+function fcPositionReactPicker() {
+  const picker = document.getElementById('fcReactPicker');
+  const triggerEl = fcReactPickerTriggerEl;
+  if (!picker || !triggerEl) return;
+  const rect = triggerEl.getBoundingClientRect();
+  const pRect = picker.getBoundingClientRect();
+  let top = rect.top - pRect.height - 8;
+  if (top < 4) top = rect.bottom + 8;
+  if (top + pRect.height > window.innerHeight - 4) top = Math.max(4, window.innerHeight - pRect.height - 4);
+  let left = rect.left - pRect.width / 2 + rect.width / 2;
+  left = Math.max(6, Math.min(left, window.innerWidth - pRect.width - 6));
+  picker.style.top = top + 'px';
+  picker.style.left = left + 'px';
+}
+let fcReactPickerTriggerEl = null;
 function fcOpenReactionPicker(messageId, triggerEl) {
   const picker = document.getElementById('fcReactPicker');
   if (!picker) return;
   fcReactPickerTargetId = messageId;
-  const rect = triggerEl.getBoundingClientRect();
-  picker.style.display = 'flex';
-  const pickerHeight = 40;
-  let top = rect.top - pickerHeight - 6;
-  if (top < 4) top = rect.bottom + 6;
-  let left = rect.left - 90;
-  left = Math.max(6, Math.min(left, window.innerWidth - 220));
-  picker.style.top = top + 'px';
-  picker.style.left = left + 'px';
+  fcReactPickerTriggerEl = triggerEl;
+  const quick = picker.querySelector('.fc-react-quick');
+  const full = picker.querySelector('.fc-react-full');
+  if (quick) quick.style.display = 'flex';
+  if (full) full.style.display = 'none';
+  picker.style.display = 'block';
+  fcPositionReactPicker();
   setTimeout(() => document.addEventListener('click', fcOnDocClickClosePicker, {once: true}), 0);
 }
 function fcCloseReactionPicker() {
   const picker = document.getElementById('fcReactPicker');
   if (picker) picker.style.display = 'none';
   fcReactPickerTargetId = null;
+  fcReactPickerTriggerEl = null;
 }
-function fcOnDocClickClosePicker() {
+function fcOnDocClickClosePicker(e) {
+  const picker = document.getElementById('fcReactPicker');
+  if (picker && picker.contains(e.target)) {
+    // Clic à l'intérieur (onglet, bouton +, emoji) : on ne ferme pas,
+    // mais il faut réarmer l'écoute pour le prochain clic réellement extérieur.
+    document.addEventListener('click', fcOnDocClickClosePicker, {once: true});
+    return;
+  }
   fcCloseReactionPicker();
 }
 async function fcSetReaction(messageId, emoji) {
@@ -851,7 +971,7 @@ function fcRenderTradePickerList(filter) {
   list.innerHTML = trades
     .map(t => {
       const res = typeof t.res === 'number' ? t.res : parseFloat(t.res) || 0;
-      const resColor = res >= 0 ? 'var(--green)' : 'var(--red)';
+      const resColor = res >= 0 ? 'var(--fc-trade-pos-color,var(--green))' : 'var(--fc-trade-neg-color,var(--red))';
       return `<div class="fc-trade-pick-item" onclick="fcSendTradeMessage(${t.id})">
         <div class="fc-trade-pick-info">
           <div class="fc-trade-pick-pair">${fcEsc(t.paire || '—')}${t.dir ? ' · ' + fcEsc(t.dir) : ''}${t.backtest ? '&nbsp;<span class="fc-bt-badge">BT</span>' : ''}</div>
@@ -1257,6 +1377,76 @@ function fcReset() {
     const el = document.getElementById(id);
     if (el) el.remove();
   });
+}
+
+// ══ Intégration à l'éditeur de thème existant (page Paramètres) ══
+// Mêmes valeurs que celles utilisées par défaut ci-dessus (color-mix résolu
+// en hexadécimal statique) : la fenêtre garde exactement son apparence
+// actuelle tant que rien n'est personnalisé.
+const FC_THEME_DEFAULTS = {
+  '--fc-bubble-mine-bg': '#14332d',
+  '--fc-bubble-theirs-bg': '#111827',
+  '--fc-bubble-theirs-border': '#1e2d45',
+  '--fc-bubble-text': '#e2e8f0',
+  '--fc-time-color': '#64748b',
+  '--fc-sidebar-bg': '#111827',
+  '--fc-contact-active-bg': '#123d38',
+  '--fc-add-btn-color': '#00e5a0',
+  '--fc-icon-color': '#64748b',
+  '--fc-send-color': '#00e5a0',
+  '--fc-wave-color': '#00e5a0',
+  '--fc-rec-dot-color': '#ef4444',
+  '--fc-cancel-color': '#ef4444',
+  '--fc-audio-play-bg': '#00e5a0',
+  '--fc-audio-fill-color': '#00e5a0',
+  '--fc-trade-head-bg': '#111827',
+  '--fc-trade-pos-color': '#00e5a0',
+  '--fc-trade-neg-color': '#ef4444',
+  '--fc-trade-chip-bg': '#111827',
+  '--fc-react-trigger-bg': '#111827',
+  '--fc-react-badge-bg': '#161d2e'
+};
+function fcEnsureThemeDefaults() {
+  Object.entries(FC_THEME_DEFAULTS).forEach(([vn, def]) => {
+    if (
+      (typeof teVals !== 'undefined' ? teVals[vn] : undefined) === undefined &&
+      !document.documentElement.style.getPropertyValue(vn)
+    ) {
+      document.documentElement.style.setProperty(vn, def);
+    }
+  });
+}
+function fcBuildThemeVars() {
+  return [
+    {v: '--fc-bubble-mine-bg', l: 'Bulle envoyée — fond', page: 'Ami', section: 'Bulles de message'},
+    {v: '--fc-bubble-theirs-bg', l: 'Bulle reçue — fond', page: 'Ami', section: 'Bulles de message'},
+    {v: '--fc-bubble-theirs-border', l: 'Bulle reçue — bordure', page: 'Ami', section: 'Bulles de message'},
+    {v: '--fc-bubble-text', l: 'Texte des messages', page: 'Ami', section: 'Bulles de message'},
+    {v: '--fc-time-color', l: 'Heure des messages', page: 'Ami', section: 'Bulles de message'},
+    {v: '--fc-sidebar-bg', l: 'Fond de la liste de contacts', page: 'Ami', section: 'Contacts & interface'},
+    {v: '--fc-contact-active-bg', l: 'Contact sélectionné', page: 'Ami', section: 'Contacts & interface'},
+    {v: '--fc-add-btn-color', l: 'Bouton "+" ajouter un ami', page: 'Ami', section: 'Contacts & interface'},
+    {v: '--fc-icon-color', l: 'Icônes (trombone, micro...)', page: 'Ami', section: 'Contacts & interface'},
+    {v: '--fc-wave-color', l: "Barres de l'onde vocale", page: 'Ami', section: 'Micro & vocal'},
+    {v: '--fc-rec-dot-color', l: "Point d'enregistrement", page: 'Ami', section: 'Micro & vocal'},
+    {v: '--fc-cancel-color', l: 'Bouton annuler (corbeille)', page: 'Ami', section: 'Micro & vocal'},
+    {v: '--fc-send-color', l: 'Icône envoyer / micro actif', page: 'Ami', section: 'Micro & vocal'},
+    {v: '--fc-audio-play-bg', l: 'Bouton lecture des vocaux', page: 'Ami', section: 'Micro & vocal'},
+    {v: '--fc-audio-fill-color', l: 'Progression des vocaux', page: 'Ami', section: 'Micro & vocal'},
+    {v: '--fc-trade-head-bg', l: "En-tête de la fiche", page: 'Ami', section: 'Fiche de trade partagée'},
+    {v: '--fc-trade-pos-color', l: 'Résultat positif', page: 'Ami', section: 'Fiche de trade partagée'},
+    {v: '--fc-trade-neg-color', l: 'Résultat négatif', page: 'Ami', section: 'Fiche de trade partagée'},
+    {v: '--fc-trade-chip-bg', l: 'Étiquettes (TF / confluences)', page: 'Ami', section: 'Fiche de trade partagée'},
+    {v: '--fc-react-trigger-bg', l: 'Bouton réagir', page: 'Ami', section: 'Réactions'},
+    {v: '--fc-react-badge-bg', l: 'Pastille de réaction', page: 'Ami', section: 'Réactions'}
+  ];
+}
+if (typeof window.buildTV === 'function') {
+  const _fcOrigBuildTV = window.buildTV;
+  window.buildTV = function () {
+    fcEnsureThemeDefaults();
+    return _fcOrigBuildTV().concat(fcBuildThemeVars());
+  };
 }
 
 // ══ Surcharges (wrapping) — n'édite aucune fonction existante ══
