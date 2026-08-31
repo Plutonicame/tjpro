@@ -227,7 +227,7 @@ const FC_CSS = `
 .fc-input-center{flex:1;min-width:0;position:relative;display:flex;align-items:center;}
 .fc-rec-indicator{display:none;align-items:center;gap:8px;width:100%;background:transparent;border:none;padding:8px 2px;box-sizing:border-box;}
 .fc-rec-wave{flex:1;display:flex;align-items:center;gap:2px;height:22px;overflow:hidden;}
-.fc-wave-bar{flex:1;background:var(--fc-wave-color,var(--green));border-radius:2px;height:15%;transition:height .08s linear;}
+.fc-wave-bar{flex:0 0 3px;width:3px;background:var(--fc-wave-color,var(--green));border-radius:2px;height:15%;transition:height .08s linear;}
 .fc-mic-wrap{position:relative;flex-shrink:0;}
 .fc-rec-dot{width:9px;height:9px;border-radius:50%;background:var(--fc-rec-dot-color,var(--red));animation:fcPulse 1s infinite;flex-shrink:0;}
 .fc-rec-timer{font-family:var(--mono);font-size:12px;color:var(--text);flex-shrink:0;}
@@ -1020,7 +1020,8 @@ function fcSendTradeMessage(tradeId) {
 }
 
 // ══ Messages vocaux (rester appuyé sur le micro, glisser à gauche pour annuler) ══
-const FC_WAVE_BAR_COUNT = 46;
+const FC_WAVE_BAR_WIDTH = 3; // px — barres fines et verticales, comme avant
+const FC_WAVE_BAR_GAP = 2; // px
 let fcDragStartX = 0;
 let fcDragArmed = false;
 let fcDragMaxPx = -240;
@@ -1034,14 +1035,21 @@ let fcAudioCtx = null;
 let fcAnalyser = null;
 let fcAnalyserData = null;
 let fcWaveIntervalHandle = null;
-let fcWaveSamples = new Array(FC_WAVE_BAR_COUNT).fill(0);
+let fcWaveSamples = [];
 
 function fcInitWaveBars() {
   const wave = document.getElementById('fcRecWave');
   if (!wave) return;
+  // Le nombre de barres est recalculé à chaque enregistrement à partir de la
+  // largeur réellement disponible (téléphone ou PC) : les barres restent
+  // fines à taille fixe, c'est leur NOMBRE qui s'adapte à l'écran pour aller
+  // pile jusqu'au bout, au lieu de les étirer.
+  const containerWidth = wave.getBoundingClientRect().width;
+  let count = Math.floor((containerWidth + FC_WAVE_BAR_GAP) / (FC_WAVE_BAR_WIDTH + FC_WAVE_BAR_GAP));
+  if (!count || count < 15) count = 15; // garde-fou si mesuré avant mise en page
   wave.innerHTML = '';
-  fcWaveSamples = new Array(FC_WAVE_BAR_COUNT).fill(0);
-  for (let i = 0; i < FC_WAVE_BAR_COUNT; i++) {
+  fcWaveSamples = new Array(count).fill(0);
+  for (let i = 0; i < count; i++) {
     const bar = document.createElement('div');
     bar.className = 'fc-wave-bar';
     wave.appendChild(bar);
