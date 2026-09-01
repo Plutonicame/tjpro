@@ -43,8 +43,11 @@ const FC_REACT_EMOJIS = ['👍', '❤️', '😂', '😮', '😢', '🙏'];
 // fichier) : vraies données Unicode officielles, pas un tableau tapé à la main.
 if (typeof FC_EMOJI_CATEGORIES === 'undefined') {
   // Repli minimal si emoji-data.js n'est pas chargé (le bouton "+" du picker
-  // de réactions n'affichera alors que ce petit jeu, sans planter).
-  var FC_EMOJI_CATEGORIES = [{icon: '🙂', name: 'Emoji', emojis: FC_REACT_EMOJIS}];
+  // de réactions n'affichera alors que ce petit jeu, sans planter). Une
+  // affectation sur window (et non "var") : "var" entrerait en conflit avec
+  // le "const" du même nom déclaré dans emoji-data.js quand les deux
+  // fichiers sont chargés ensemble, et casserait tout ce script.
+  window.FC_EMOJI_CATEGORIES = [{icon: '🙂', name: 'Emoji', emojis: FC_REACT_EMOJIS}];
 }
 
 // Icônes vectorielles simples (currentColor : suivent la couleur du bouton),
