@@ -68,12 +68,14 @@ let fcActiveFriendId = null;
 let fcMessages = [];
 let fcChannel = null;
 let fcActivityMap = {}; // friendId -> dernier created_at (tri de la liste)
+let fcUnreadSet = new Set(); // friendId -> a un message non lu
 let fcInitDone = false;
 let fcSetupNoticeShown = false;
 let fcSearchDebounce = null;
 let fcAudioPlayingId = null;
 let fcReactionsMap = {}; // messageId -> [{user_id, emoji}]
 let fcReactPickerTargetId = null;
+let fcRecentEmojis = FC_REACT_EMOJIS.slice();
 let fcResizeHandlersBound = false;
 
 // ── Utilitaires ──
@@ -139,6 +141,9 @@ const FC_CSS = `
 .fc-avatar{width:40px;height:40px;border-radius:50%;overflow:hidden;flex-shrink:0;display:flex;align-items:center;justify-content:center;background:var(--surface);border:1px solid var(--border);font-size:15px;color:var(--muted);font-family:var(--mono);}
 .fc-avatar img{width:100%;height:100%;object-fit:cover;display:block;}
 .fc-contact-name{font-size:13px;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.fc-contact-avatar-wrap{position:relative;flex-shrink:0;}
+.fc-contact-unread-dot{position:absolute;top:-2px;right:-2px;width:10px;height:10px;border-radius:50%;background:var(--fc-unread-dot-color,var(--red));border:2px solid var(--fc-sidebar-bg,var(--surface));}
+.fc-nav-badge{display:none;position:absolute;top:4px;right:2px;width:8px;height:8px;border-radius:50%;background:var(--fc-unread-dot-color,var(--red));box-shadow:0 0 0 2px var(--nav-bg,var(--bg));}
 .fc-chat{flex:1;display:flex;flex-direction:column;min-width:0;}
 .fc-chat-empty{flex:1;display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:13px;padding:20px;text-align:center;}
 .fc-chat-active{flex:1;display:flex;flex-direction:column;min-height:0;}
@@ -382,6 +387,47 @@ async function fcLoadContacts() {
   }
 }
 
+function fcLastReadKey(friendId) {
+  return 'tjp_chat_lastread__' + (currentUser ? currentUser.id : '?') + '__' + friendId;
+}
+function fcGetLastRead(friendId) {
+  try {
+    return localStorage.getItem(fcLastReadKey(friendId));
+  } catch (e) {
+    return null;
+  }
+}
+function fcSetLastRead(friendId, iso) {
+  try {
+    localStorage.setItem(fcLastReadKey(friendId), iso);
+  } catch (e) {}
+}
+function fcMarkRead(friendId) {
+  fcSetLastRead(friendId, new Date().toISOString());
+  if (fcUnreadSet.has(friendId)) {
+    fcUnreadSet.delete(friendId);
+    fcRenderContactList();
+  }
+  fcUpdateNavBadge();
+}
+function fcInjectNavBadges() {
+  document.querySelectorAll('.nav-tab').forEach(btn => {
+    const oc = btn.getAttribute('onclick') || '';
+    if (oc.indexOf("showPage('ami'") === -1 || btn.querySelector('.fc-nav-badge')) return;
+    btn.style.position = 'relative';
+    const dot = document.createElement('span');
+    dot.className = 'fc-nav-badge';
+    btn.appendChild(dot);
+  });
+  fcUpdateNavBadge();
+}
+function fcUpdateNavBadge() {
+  const show = fcUnreadSet.size > 0;
+  document.querySelectorAll('.fc-nav-badge').forEach(dot => {
+    dot.style.display = show ? 'block' : 'none';
+  });
+}
+
 async function fcRefreshActivityOrder() {
   if (!currentUser || typeof sb === 'undefined') {
     fcRenderContactList();
@@ -397,10 +443,19 @@ async function fcRefreshActivityOrder() {
       .limit(400);
     if (!error && data) {
       fcActivityMap = {};
+      const lastFromFriend = {};
       data.forEach(m => {
         const other = m.sender_id === me ? m.receiver_id : m.sender_id;
         if (!fcActivityMap[other]) fcActivityMap[other] = m.created_at;
+        if (m.sender_id === other && !lastFromFriend[other]) lastFromFriend[other] = m.created_at;
       });
+      fcUnreadSet = new Set();
+      Object.keys(lastFromFriend).forEach(fid => {
+        if (fid === fcActiveFriendId) return; // conversation ouverte : jamais "non lu"
+        const lastRead = fcGetLastRead(fid);
+        if (!lastRead || lastFromFriend[fid] > lastRead) fcUnreadSet.add(fid);
+      });
+      fcUpdateNavBadge();
     }
   } catch (e) {}
   fcContacts.sort((a, b) => {
@@ -423,12 +478,16 @@ function fcRenderContactList() {
     return;
   }
   list.innerHTML = fcContacts
-    .map(
-      c => `<div class="fc-contact-item${c.friendId === fcActiveFriendId ? ' active' : ''}" data-friend-id="${fcEsc(c.friendId)}" onclick="fcOpenConversation('${fcEsc(c.friendId)}')">
-      ${fcAvatarHtml(c.photo, c.pseudo)}
+    .map(c => {
+      const unread = fcUnreadSet.has(c.friendId);
+      return `<div class="fc-contact-item${c.friendId === fcActiveFriendId ? ' active' : ''}" data-friend-id="${fcEsc(c.friendId)}" onclick="fcOpenConversation('${fcEsc(c.friendId)}')">
+      <div class="fc-contact-avatar-wrap">
+        ${fcAvatarHtml(c.photo, c.pseudo)}
+        ${unread ? '<span class="fc-contact-unread-dot"></span>' : ''}
+      </div>
       <div class="fc-contact-name">${fcEsc(c.pseudo)}</div>
-    </div>`
-    )
+    </div>`;
+    })
     .join('');
 }
 
@@ -536,6 +595,7 @@ async function fcOpenConversation(friendId) {
   const input = document.getElementById('fcTextInput');
   if (input) input.value = '';
   fcUpdateMicSendBtn();
+  fcMarkRead(friendId);
   await fcLoadMessages(friendId);
 }
 function fcBackToContacts() {
@@ -753,6 +813,7 @@ function fcOpenReactionPicker(messageId, triggerEl) {
   if (!picker) return;
   fcReactPickerTargetId = messageId;
   fcReactPickerTriggerEl = triggerEl;
+  fcRenderQuickReactRow();
   const quick = picker.querySelector('.fc-react-quick');
   const full = picker.querySelector('.fc-react-full');
   if (quick) quick.style.display = 'flex';
@@ -804,28 +865,73 @@ async function fcSetReaction(messageId, emoji) {
         return;
       }
       const idx = list.findIndex(r => r.user_id === me);
-      if (idx >= 0) list[idx] = {user_id: me, emoji};
-      else list.push({user_id: me, emoji});
+      const entry = {user_id: me, emoji, created_at: new Date().toISOString()};
+      if (idx >= 0) list[idx] = entry;
+      else list.push(entry);
       fcReactionsMap[messageId] = list;
     }
     fcRenderMessages();
+    fcComputeRecentEmojis();
   } catch (e) {
     console.warn('fcSetReaction:', e);
   }
 }
 async function fcLoadReactionsFor(ids) {
   fcReactionsMap = {};
-  if (!ids.length || !currentUser || typeof sb === 'undefined') return;
+  if (!ids.length || !currentUser || typeof sb === 'undefined') {
+    fcComputeRecentEmojis();
+    return;
+  }
   try {
-    const {data, error} = await sb.from(FC_REACTIONS_TABLE).select('message_id,user_id,emoji').in('message_id', ids);
+    const {data, error} = await sb
+      .from(FC_REACTIONS_TABLE)
+      .select('message_id,user_id,emoji,created_at')
+      .in('message_id', ids);
     if (error) return; // dégradation silencieuse : le chat marche sans réactions si la migration n'est pas encore faite
     (data || []).forEach(r => {
       if (!fcReactionsMap[r.message_id]) fcReactionsMap[r.message_id] = [];
-      fcReactionsMap[r.message_id].push({user_id: r.user_id, emoji: r.emoji});
+      fcReactionsMap[r.message_id].push({user_id: r.user_id, emoji: r.emoji, created_at: r.created_at});
     });
   } catch (e) {
     console.warn('fcLoadReactionsFor:', e);
+  } finally {
+    fcComputeRecentEmojis();
   }
+}
+// Les 6 emoji rapides = les derniers utilisés dans CETTE conversation (par
+// n'importe lequel des deux participants), complétés par le jeu par défaut
+// s'il n'y a pas encore assez d'historique.
+function fcComputeRecentEmojis() {
+  const entries = [];
+  Object.keys(fcReactionsMap).forEach(mid => {
+    (fcReactionsMap[mid] || []).forEach(r => {
+      if (r.created_at) entries.push(r);
+    });
+  });
+  entries.sort((a, b) => (b.created_at || '').localeCompare(a.created_at || ''));
+  const seen = new Set();
+  const recent = [];
+  entries.forEach(r => {
+    if (!seen.has(r.emoji)) {
+      seen.add(r.emoji);
+      recent.push(r.emoji);
+    }
+  });
+  FC_REACT_EMOJIS.forEach(em => {
+    if (recent.length < 6 && !seen.has(em)) {
+      seen.add(em);
+      recent.push(em);
+    }
+  });
+  fcRecentEmojis = recent.slice(0, 6);
+  fcRenderQuickReactRow();
+}
+function fcRenderQuickReactRow() {
+  const quick = document.querySelector('#fcReactPicker .fc-react-quick');
+  if (!quick) return;
+  quick.innerHTML =
+    fcRecentEmojis.map(em => `<span class="fc-react-opt" data-emoji="${em}">${em}</span>`).join('') +
+    '<button class="fc-react-more-btn" title="Plus d\'emoji">+</button>';
 }
 function fcHandleReactionChange(payload) {
   const row = payload.new && Object.keys(payload.new).length ? payload.new : payload.old;
@@ -836,11 +942,15 @@ function fcHandleReactionChange(payload) {
     list = list.filter(r => r.user_id !== row.user_id);
   } else {
     const idx = list.findIndex(r => r.user_id === row.user_id);
-    if (idx >= 0) list[idx] = {user_id: row.user_id, emoji: row.emoji};
-    else list.push({user_id: row.user_id, emoji: row.emoji});
+    const entry = {user_id: row.user_id, emoji: row.emoji, created_at: row.created_at};
+    if (idx >= 0) list[idx] = entry;
+    else list.push(entry);
   }
   fcReactionsMap[mid] = list;
-  if (fcMessages.some(m => m.id === mid)) fcRenderMessages();
+  if (fcMessages.some(m => m.id === mid)) {
+    fcRenderMessages();
+    fcComputeRecentEmojis();
+  }
 }
 
 // ══ Audio : lecture ══
@@ -1341,6 +1451,7 @@ function fcHandleIncomingMessage(m) {
   if (fcActiveFriendId === other && !fcMessages.some(x => x.id === m.id)) {
     fcMessages.push(m);
     fcRenderMessages();
+    if (m.sender_id === other) fcMarkRead(other); // vue en direct : reste marqué comme lu
   }
   fcActivityMap[other] = m.created_at;
   if (fcContacts.some(c => c.friendId === other)) fcRefreshActivityOrder();
@@ -1385,6 +1496,7 @@ function fcInit() {
   fcInjectMarkup();
   fcInjectModals();
   fcInjectReactPicker();
+  fcInjectNavBadges();
   fcBindResizeHandlers();
   fcResizeWrap();
   fcPublishProfile();
@@ -1398,6 +1510,7 @@ function fcReset() {
   fcMessages = [];
   fcActiveFriendId = null;
   fcActivityMap = {};
+  fcUnreadSet = new Set();
   fcReactionsMap = {};
   fcReactPickerTargetId = null;
   fcSetupNoticeShown = false;
@@ -1407,6 +1520,7 @@ function fcReset() {
     const el = document.getElementById(id);
     if (el) el.remove();
   });
+  document.querySelectorAll('.fc-nav-badge').forEach(el => el.remove());
 }
 
 // ══ Intégration à l'éditeur de thème existant (page Paramètres) ══
@@ -1434,7 +1548,8 @@ const FC_THEME_DEFAULTS = {
   '--fc-trade-neg-color': '#ef4444',
   '--fc-trade-chip-bg': '#111827',
   '--fc-react-trigger-bg': '#111827',
-  '--fc-react-badge-bg': '#161d2e'
+  '--fc-react-badge-bg': '#161d2e',
+  '--fc-unread-dot-color': '#ef4444'
 };
 function fcEnsureThemeDefaults() {
   Object.entries(FC_THEME_DEFAULTS).forEach(([vn, def]) => {
@@ -1468,7 +1583,8 @@ function fcBuildThemeVars() {
     {v: '--fc-trade-neg-color', l: 'Résultat négatif', page: 'Ami', section: 'Fiche de trade partagée'},
     {v: '--fc-trade-chip-bg', l: 'Étiquettes (TF / confluences)', page: 'Ami', section: 'Fiche de trade partagée'},
     {v: '--fc-react-trigger-bg', l: 'Bouton réagir', page: 'Ami', section: 'Réactions'},
-    {v: '--fc-react-badge-bg', l: 'Pastille de réaction', page: 'Ami', section: 'Réactions'}
+    {v: '--fc-react-badge-bg', l: 'Pastille de réaction', page: 'Ami', section: 'Réactions'},
+    {v: '--fc-unread-dot-color', l: 'Point de notification (message non lu)', page: 'Ami', section: 'Contacts & interface'}
   ];
 }
 if (typeof window.buildTV === 'function') {
