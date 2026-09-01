@@ -419,9 +419,12 @@ function fcInjectNavBadges() {
     dot.className = 'fc-nav-badge';
     btn.appendChild(dot);
   });
-  fcUpdateNavBadge();
 }
 function fcUpdateNavBadge() {
+  // Réinjecte le point s'il a disparu (ex: bouton d'onglet re-rendu entre-
+  // temps) avant de basculer sa visibilité — sinon la notification ne
+  // remonte qu'au rechargement de la page au lieu d'apparaître en direct.
+  fcInjectNavBadges();
   const show = fcUnreadSet.size > 0;
   document.querySelectorAll('.fc-nav-badge').forEach(dot => {
     dot.style.display = show ? 'block' : 'none';
@@ -1496,7 +1499,7 @@ function fcInit() {
   fcInjectMarkup();
   fcInjectModals();
   fcInjectReactPicker();
-  fcInjectNavBadges();
+  fcUpdateNavBadge();
   fcBindResizeHandlers();
   fcResizeWrap();
   fcPublishProfile();
