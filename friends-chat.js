@@ -106,6 +106,7 @@ let fcSearchDebounce = null;
 let fcAudioPlayingId = null;
 let fcReactionsMap = {}; // messageId -> [{user_id, emoji}]
 let fcReactPickerTargetId = null;
+let fcResizeHandlersBound = false;
 
 // ── Utilitaires ──
 function fcEsc(s) {
@@ -250,7 +251,7 @@ const FC_CSS = `
 .fc-trade-pick-meta{font-size:10px;color:var(--muted);}
 .fc-empty-hint{font-size:11px;color:var(--muted);text-align:center;padding:14px 6px;}
 @media (max-width:1100px){
-  .fc-wrap{height:calc(100dvh - 150px);min-height:400px;border-radius:6px;}
+  .fc-wrap{height:calc(100dvh - 150px);min-height:280px;border-radius:6px;}
   .fc-sidebar{width:100%;border-right:none;}
   .fc-chat{display:none;}
   .fc-wrap.fc-chat-open .fc-sidebar{display:none;}
@@ -1358,6 +1359,36 @@ function fcHandleIncomingMessage(m) {
 }
 
 // ══ Initialisation / nettoyage ══
+// ══ Le cadre du chat va toujours pile jusqu'en bas de l'écran (jamais plus,
+// jamais moins), quel que soit l'appareil : seules les listes internes
+// (contacts / conversation) défilent, jamais la page elle-même. ══
+function fcResizeWrap() {
+  const wrap = document.getElementById('fcWrap');
+  const page = document.getElementById('page-ami');
+  if (!wrap || !page || !page.classList.contains('active')) return;
+  const top = wrap.getBoundingClientRect().top;
+  const vh = window.visualViewport ? window.visualViewport.height : window.innerHeight;
+  const pagePB = parseFloat(getComputedStyle(page).paddingBottom) || 0;
+  let h = vh - top - pagePB - 8; // petite marge de sécurité anti-arrondi
+  if (h < 260) h = 260;
+  wrap.style.height = h + 'px';
+}
+function fcBindResizeHandlers() {
+  if (fcResizeHandlersBound) return;
+  fcResizeHandlersBound = true;
+  window.addEventListener('resize', fcResizeWrap);
+  window.addEventListener('orientationchange', () => setTimeout(fcResizeWrap, 60));
+  if (window.visualViewport) window.visualViewport.addEventListener('resize', fcResizeWrap);
+  if (typeof window.showPage === 'function') {
+    const _fcOrigShowPage = window.showPage;
+    window.showPage = function (id, btn) {
+      const r = _fcOrigShowPage.apply(this, arguments);
+      if (id === 'ami') requestAnimationFrame(fcResizeWrap);
+      return r;
+    };
+  }
+}
+
 function fcInit() {
   if (!currentUser || fcInitDone) return;
   fcInitDone = true;
@@ -1365,6 +1396,8 @@ function fcInit() {
   fcInjectMarkup();
   fcInjectModals();
   fcInjectReactPicker();
+  fcBindResizeHandlers();
+  fcResizeWrap();
   fcPublishProfile();
   fcLoadContacts();
   fcStartRealtime();
