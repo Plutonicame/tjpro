@@ -102,7 +102,14 @@ function fcAvatarHtml(photoUrl, pseudo) {
 }
 function fcIsMissingTableError(error) {
   if (!error) return false;
-  return error.code === '42P01' || /relation .* does not exist/i.test(error.message || '');
+  if (error.code === '42P01' || error.code === 'PGRST205' || error.code === 'PGRST202') return true;
+  const msg = ((error.message || '') + ' ' + (error.hint || '') + ' ' + (error.details || '')).toLowerCase();
+  return (
+    msg.includes('does not exist') ||
+    msg.includes('could not find the table') ||
+    msg.includes('could not find the function') ||
+    msg.includes('schema cache')
+  );
 }
 function fcShowSetupNotice() {
   if (fcSetupNoticeShown) return;
@@ -140,16 +147,17 @@ const FC_CSS = `
 .fc-back-btn{display:none;background:none;border:none;color:var(--text);font-size:19px;cursor:pointer;padding:2px 6px 2px 0;line-height:1;}
 .fc-chat-pseudo{font-size:14px;font-weight:600;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
 .fc-messages{flex:1;overflow-y:auto;padding:14px;display:flex;flex-direction:column;gap:8px;}
-.fc-msg-row{display:flex;align-items:center;gap:3px;}
+.fc-msg-row{display:flex;}
 .fc-msg-row.mine{justify-content:flex-end;}
-.fc-bubble-wrap{position:relative;max-width:72%;min-width:0;}
+.fc-msg-inner{display:flex;align-items:center;gap:3px;max-width:72%;min-width:0;}
+.fc-bubble-wrap{position:relative;min-width:0;}
 .fc-bubble{padding:8px 11px;border-radius:12px;font-size:13px;line-height:1.4;}
 .fc-msg-row.mine .fc-bubble{background:var(--fc-bubble-mine-bg,color-mix(in srgb, var(--green) 20%, var(--card)));border-bottom-right-radius:3px;}
 .fc-msg-row:not(.mine) .fc-bubble{background:var(--fc-bubble-theirs-bg,var(--surface));border:1px solid var(--fc-bubble-theirs-border,var(--border));border-bottom-left-radius:3px;}
 .fc-bubble-text{white-space:pre-wrap;word-break:break-word;color:var(--fc-bubble-text,var(--text));}
 .fc-bubble-time{font-size:9px;color:var(--fc-time-color,var(--muted));margin-top:3px;text-align:right;font-family:var(--mono);}
 .fc-react-trigger{opacity:0;transition:opacity .15s;flex-shrink:0;width:22px;height:22px;border-radius:50%;background:var(--fc-react-trigger-bg,var(--surface));border:1px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:11px;cursor:pointer;position:relative;color:var(--muted);padding:0;}
-.fc-msg-row:hover .fc-react-trigger,.fc-msg-row.show-react .fc-react-trigger{opacity:1;}
+.fc-msg-inner:hover .fc-react-trigger,.fc-msg-row.show-react .fc-react-trigger{opacity:1;}
 .fc-react-face{filter:grayscale(1);opacity:.85;}
 .fc-react-plus{position:absolute;bottom:-2px;right:-2px;background:var(--card);border-radius:50%;font-size:8px;line-height:1;width:11px;height:11px;display:flex;align-items:center;justify-content:center;color:var(--text);border:1px solid var(--border);}
 .fc-react-badges{position:absolute;bottom:-9px;display:flex;gap:2px;background:var(--fc-react-badge-bg,var(--card));border:1px solid var(--border);border-radius:9px;padding:1px 4px;font-size:11px;box-shadow:0 1px 3px rgba(0,0,0,.35);}
@@ -165,7 +173,10 @@ const FC_CSS = `
 .fc-react-tabs{display:flex;gap:2px;overflow-x:auto;border-bottom:1px solid var(--border);padding-bottom:6px;margin-bottom:6px;}
 .fc-react-tab{font-size:17px;padding:3px 6px;border-radius:6px;cursor:pointer;flex-shrink:0;opacity:.55;}
 .fc-react-tab.active{opacity:1;background:var(--surface);}
-.fc-react-grid{display:grid;grid-template-columns:repeat(8,1fr);gap:2px;max-height:190px;overflow-y:auto;}
+.fc-react-grid-scroll{max-height:230px;overflow-y:auto;position:relative;}
+.fc-react-cat-section{margin-bottom:2px;}
+.fc-react-cat-label{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;padding:5px 2px 3px;position:sticky;top:0;background:var(--card);z-index:1;}
+.fc-react-cat-grid{display:grid;grid-template-columns:repeat(8,1fr);gap:2px;}
 .fc-react-grid-emoji{font-size:19px;text-align:center;cursor:pointer;padding:3px 0;border-radius:5px;line-height:1.3;}
 .fc-react-grid-emoji:hover{background:var(--surface);}
 .fc-audio-msg{display:flex;align-items:center;gap:8px;min-width:236px;}
@@ -229,7 +240,7 @@ const FC_CSS = `
   .fc-contact-item{flex-direction:column;gap:5px;padding:4px;border-bottom:none;text-align:center;}
   .fc-contact-name{display:none;}
   .fc-avatar{width:56px;height:56px;font-size:19px;margin:0 auto;}
-  .fc-bubble-wrap{max-width:82%;}
+  .fc-msg-inner{max-width:82%;}
 }
 `;
 
@@ -633,7 +644,7 @@ function fcRenderMessageRow(m, me) {
       ${badgesHtml}
     </div>`;
   const inner = mine ? triggerHtml + bubbleHtml : bubbleHtml + triggerHtml;
-  return `<div class="fc-msg-row${mine ? ' mine' : ''}" onclick="fcOnMessageRowClick(event,this)">${inner}</div>`;
+  return `<div class="fc-msg-row${mine ? ' mine' : ''}" onclick="fcOnMessageRowClick(event,this)"><div class="fc-msg-inner">${inner}</div></div>`;
 }
 function fcOnMessageRowClick(e, rowEl) {
   if (e.target.closest('.fc-react-trigger, .fc-audio-play, .fc-trade-imgs img')) return;
@@ -667,7 +678,7 @@ function fcInjectReactPicker() {
     </div>
     <div class="fc-react-full">
       <div class="fc-react-tabs"></div>
-      <div class="fc-react-grid"></div>
+      <div class="fc-react-grid-scroll"></div>
     </div>
   `;
   document.body.appendChild(el);
@@ -683,26 +694,34 @@ function fcInjectReactPicker() {
 function fcBuildFullEmojiPicker() {
   const el = document.getElementById('fcReactPicker');
   const tabs = el && el.querySelector('.fc-react-tabs');
-  if (!tabs || tabs.dataset.built) return;
+  const scroll = el && el.querySelector('.fc-react-grid-scroll');
+  if (!tabs || !scroll || tabs.dataset.built) return;
   tabs.dataset.built = '1';
   tabs.innerHTML = FC_EMOJI_CATEGORIES.map(
     (cat, i) => `<span class="fc-react-tab${i === 0 ? ' active' : ''}" data-cat="${i}" title="${fcEsc(cat.name)}">${cat.icon}</span>`
   ).join('');
-  fcRenderEmojiGrid(0);
+  scroll.innerHTML = FC_EMOJI_CATEGORIES.map(
+    (cat, i) => `<div class="fc-react-cat-section" id="fcCatSection${i}">
+      <div class="fc-react-cat-label">${fcEsc(cat.name)}</div>
+      <div class="fc-react-cat-grid">${cat.emojis.map(em => `<span class="fc-react-grid-emoji" data-emoji="${em}">${em}</span>`).join('')}</div>
+    </div>`
+  ).join('');
   tabs.addEventListener('click', e => {
     const tab = e.target.closest('.fc-react-tab');
     if (!tab) return;
-    tabs.querySelectorAll('.fc-react-tab').forEach(t => t.classList.remove('active'));
-    tab.classList.add('active');
-    fcRenderEmojiGrid(parseInt(tab.dataset.cat, 10));
+    const target = document.getElementById('fcCatSection' + tab.dataset.cat);
+    if (target) target.scrollIntoView({block: 'start', behavior: 'smooth'});
   });
+  scroll.addEventListener('scroll', () => fcUpdateActiveReactTab(scroll, tabs));
 }
-function fcRenderEmojiGrid(catIndex) {
-  const grid = document.querySelector('#fcReactPicker .fc-react-grid');
-  const cat = FC_EMOJI_CATEGORIES[catIndex];
-  if (!grid || !cat) return;
-  grid.innerHTML = cat.emojis.map(em => `<span class="fc-react-grid-emoji" data-emoji="${em}">${em}</span>`).join('');
-  grid.scrollTop = 0;
+function fcUpdateActiveReactTab(scroll, tabs) {
+  const scrollTop = scroll.getBoundingClientRect().top;
+  const sections = scroll.querySelectorAll('.fc-react-cat-section');
+  let activeIdx = 0;
+  sections.forEach((sec, i) => {
+    if (sec.getBoundingClientRect().top - scrollTop <= 30) activeIdx = i;
+  });
+  tabs.querySelectorAll('.fc-react-tab').forEach((t, i) => t.classList.toggle('active', i === activeIdx));
 }
 function fcExpandReactionPicker() {
   const el = document.getElementById('fcReactPicker');
@@ -768,6 +787,7 @@ async function fcSetReaction(messageId, emoji) {
     if (mine && mine.emoji === emoji) {
       const {error} = await sb.from(FC_REACTIONS_TABLE).delete().eq('message_id', messageId).eq('user_id', me);
       if (error) {
+        console.warn('fcSetReaction (delete):', error);
         if (!fcIsMissingTableError(error) && typeof showSync === 'function') showSync('⚠ Réaction impossible', '#ef4444');
         return;
       }
@@ -777,6 +797,7 @@ async function fcSetReaction(messageId, emoji) {
         .from(FC_REACTIONS_TABLE)
         .upsert({message_id: messageId, user_id: me, emoji}, {onConflict: 'message_id,user_id'});
       if (error) {
+        console.warn('fcSetReaction (upsert):', error);
         if (fcIsMissingTableError(error)) {
           if (typeof showSync === 'function') showSync('⚠ Réactions pas encore configurées (migration SQL)', '#f59e0b');
         } else if (typeof showSync === 'function') showSync('⚠ Réaction impossible', '#ef4444');
