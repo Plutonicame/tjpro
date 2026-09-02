@@ -472,7 +472,7 @@ function cfEnsureKpiNode(field) {
     el.className = 'kpi-card';
     el.id = 'kpicf-' + field.id;
     el.dataset.kpiId = field.id;
-    el.innerHTML = `<div class="kpi-bar" id="kpicfbar-${field.id}"></div><div class="kpi-icon">🔹</div><div class="kpi-label" data-editable data-tvar="--kpi-label-color" id="cfkpilabel-${field.id}" style="color:var(--kpi-label-color,#64748b)">${escapeHtml(field.colName || field.label)}</div><div class="kpi-value" id="kpicfval-${field.id}">—</div>`;
+    el.innerHTML = `<div class="kpi-bar" id="kpicfbar-${field.id}"></div><div class="kpi-icon" data-editable id="cfkpiicon-${field.id}">🔹</div><div class="kpi-label" data-editable data-tvar="--kpi-label-color" id="cfkpilabel-${field.id}" style="color:var(--kpi-label-color,#64748b)">${escapeHtml(field.colName || field.label)}</div><div class="kpi-value" id="kpicfval-${field.id}">—</div>`;
     strip.appendChild(el);
   }
   return el;
