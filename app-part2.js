@@ -314,6 +314,7 @@ function exportLocalBackup() {
         riskDecimal: localStorage.getItem(k('tj_risk_decimal')),
         payouts: localStorage.getItem(k('tj_payouts')),
         pencilEdits: localStorage.getItem(k('tj_pencil_edits')),
+        cfConfig: localStorage.getItem(k('tj_cf_config')),
         rmConfig: {
           upTrigger: localStorage.getItem(k('tj_rm_up_trigger')),
           upTrades: localStorage.getItem(k('tj_rm_up_trades')),
@@ -329,7 +330,7 @@ function exportLocalBackup() {
       };
     });
     const backup = {
-      version: 2,
+      version: 3, // v3 : ajout de cfConfig (champs personnalisés) par compte
       exportedAt: new Date().toISOString(),
       activeAccId: _currentAccId,
       accounts: exportAccounts,
@@ -384,6 +385,7 @@ async function importLocalBackup(event) {
       if (acc.riskDecimal) localStorage.setItem(k('tj_risk_decimal'), acc.riskDecimal);
       if (acc.payouts) localStorage.setItem(k('tj_payouts'), acc.payouts);
       if (acc.pencilEdits) localStorage.setItem(k('tj_pencil_edits'), acc.pencilEdits);
+      if (acc.cfConfig) localStorage.setItem(k('tj_cf_config'), acc.cfConfig);
       if (acc.rmConfig) {
         const rm = acc.rmConfig,
           kk = key => k('tj_' + key);
@@ -742,6 +744,7 @@ function buildSyncPayload(trades) {
     ia_config: localStorage.getItem('tjp_ia_config'),
     recap_history: localStorage.getItem('tjp_recap_history'),
     payouts: localStorage.getItem(accKey('tj_payouts')),
+    cf_config: localStorage.getItem(accKey('tj_cf_config')), // config des champs personnalisés (custom-fields.js)
     rm_config: JSON.stringify({
       up_trigger: localStorage.getItem(accKey('tj_rm_up_trigger')),
       up_trades: localStorage.getItem(accKey('tj_rm_up_trades')),
@@ -760,14 +763,15 @@ function buildSyncPayload(trades) {
   };
 }
 
-// Détecte l'erreur Postgres "colonne inexistante" (42703) spécifiquement pour
-// profile_pseudo/profile_photo : ces deux colonnes dépendent d'une migration
-// Supabase à part, qui peut ne pas avoir encore été appliquée sur ce projet.
+// Détecte l'erreur Postgres "colonne inexistante" (42703) pour les colonnes
+// ajoutées par des migrations Supabase à part (profile_pseudo/profile_photo,
+// cf_config), qui peuvent ne pas avoir encore été appliquées sur ce projet.
 function isMissingProfileColumnError(error) {
   if (!error) return false;
   const msg = ((error.message || '') + ' ' + (error.details || '')).toLowerCase();
   return (
-    error.code === '42703' && (msg.includes('profile_pseudo') || msg.includes('profile_photo'))
+    error.code === '42703' &&
+    (msg.includes('profile_pseudo') || msg.includes('profile_photo') || msg.includes('cf_config'))
   );
 }
 function pushJournalDataRow(payload) {
@@ -832,7 +836,7 @@ async function pushToCloud(opts) {
         'Colonnes profil absentes côté Supabase, nouvel essai sans elles :',
         error.message
       );
-      const {profile_pseudo, profile_photo, ...dataWithoutProfile} = data;
+      const {profile_pseudo, profile_photo, cf_config, ...dataWithoutProfile} = data;
       ({error} = await pushJournalDataRow(dataWithoutProfile));
       if (myGen !== _pushGeneration) return;
     }
@@ -1126,6 +1130,17 @@ function _applyCloudDataDirect(data, cloudTrades) {
   if (data.risk_max) localStorage.setItem(accKey('tj_risk_max'), data.risk_max);
   if (data.risk_decimal != null) localStorage.setItem(accKey('tj_risk_decimal'), data.risk_decimal);
   if (data.payouts) localStorage.setItem(accKey('tj_payouts'), data.payouts);
+
+  if (data.cf_config) {
+    localStorage.setItem(accKey('tj_cf_config'), data.cf_config);
+    // Recharge la config des champs personnalisés en mémoire pour ce compte
+    // (custom-fields.js) — les appels renderTable()/refreshAllCharts() plus
+    // bas s'en serviront pour redessiner colonnes/KPI/graphiques à jour.
+    if (typeof cfLoad === 'function') {
+      cfLoad();
+      if (typeof cfEnsureOrders === 'function') cfEnsureOrders();
+    }
+  }
 
   if (data.profile_pseudo != null)
     localStorage.setItem(profileKey('tjp_profile_pseudo'), data.profile_pseudo);

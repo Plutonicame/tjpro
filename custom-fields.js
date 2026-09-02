@@ -1943,6 +1943,32 @@ window.redrawForKey = function (k) {
   _cfOrigRedrawForKey(k);
 };
 
+// _doSwitchAccount() (natif) ne rechargeait jamais APP.cfFields/cfColOrder/
+// cfKpiOrder/cfChartOrder pour le compte nouvellement actif : cfLoad() n'était
+// appelé qu'une seule fois, tout au début, au chargement du script. Résultat :
+// en changeant de compte de trading local, les colonnes/KPI/graphiques
+// personnalisés affichés restaient ceux du compte actif au chargement de la
+// page, même si le bon tj_cf_config__<accId> était correctement lu/écrit en
+// stockage. On recharge donc explicitement la config du compte ici, puis on
+// redessine (les fonctions renderTable/updateKPIs/refreshAllCharts ci-dessus
+// ont déjà tourné une première fois dans l'original avec l'ancienne config —
+// ce deuxième passage corrige l'affichage immédiatement après).
+if (typeof window._doSwitchAccount === 'function') {
+  const _cfOrigDoSwitchAccount = window._doSwitchAccount;
+  window._doSwitchAccount = function (accId) {
+    _cfOrigDoSwitchAccount(accId);
+    try {
+      cfLoad();
+      cfEnsureOrders();
+      renderTable();
+      updateKPIs();
+      refreshAllCharts();
+    } catch (e) {
+      console.warn('CF switchAccount:', e);
+    }
+  };
+}
+
 // Boutons de période (J/SEM/MOIS/TRIM/AN/TOUT) des graphiques personnalisés :
 // délégation d'événement plutôt que bindPBtns() natif, pour ne jamais
 // re-attacher de listener sur les boutons natifs (qui gèrent déjà les leurs).

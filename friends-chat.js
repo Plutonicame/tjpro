@@ -47,7 +47,7 @@ if (typeof FC_EMOJI_CATEGORIES === 'undefined') {
   // affectation sur window (et non "var") : "var" entrerait en conflit avec
   // le "const" du même nom déclaré dans emoji-data.js quand les deux
   // fichiers sont chargés ensemble, et casserait tout ce script.
-  window.FC_EMOJI_CATEGORIES = [{icon: '🙂', name: 'Emoji', emojis: FC_REACT_EMOJIS}];
+  window.FC_EMOJI_CATEGORIES = [{ icon: '🙂', name: 'Emoji', emojis: FC_REACT_EMOJIS }];
 }
 
 // Icônes vectorielles simples (currentColor : suivent la couleur du bouton),
@@ -90,7 +90,7 @@ function fcFmtDuration(sec) {
 }
 function fcFmtTime(iso) {
   try {
-    return new Date(iso).toLocaleTimeString('fr-FR', {hour: '2-digit', minute: '2-digit'});
+    return new Date(iso).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
   } catch (e) {
     return '';
   }
@@ -105,7 +105,13 @@ function fcAvatarHtml(photoUrl, pseudo) {
 function fcIsMissingTableError(error) {
   if (!error) return false;
   if (error.code === '42P01' || error.code === 'PGRST205' || error.code === 'PGRST202') return true;
-  const msg = ((error.message || '') + ' ' + (error.hint || '') + ' ' + (error.details || '')).toLowerCase();
+  const msg = (
+    (error.message || '') +
+    ' ' +
+    (error.hint || '') +
+    ' ' +
+    (error.details || '')
+  ).toLowerCase();
   return (
     msg.includes('does not exist') ||
     msg.includes('could not find the table') ||
@@ -337,9 +343,9 @@ async function fcPublishProfile() {
         user_id: currentUser.id,
         pseudo: profile.pseudo || 'Trader',
         photo_url: profile.photo || null,
-        updated_at: new Date().toISOString()
+        updated_at: new Date().toISOString(),
       },
-      {onConflict: 'user_id'}
+      { onConflict: 'user_id' },
     );
   } catch (e) {
     console.warn('fcPublishProfile:', e);
@@ -351,7 +357,7 @@ async function fcLoadContacts() {
   if (!currentUser || typeof sb === 'undefined') return;
   const me = currentUser.id;
   try {
-    const {data, error} = await sb
+    const { data, error } = await sb
       .from(FC_CONTACTS_TABLE)
       .select('user_id,contact_user_id')
       .or(`user_id.eq.${me},contact_user_id.eq.${me}`);
@@ -360,26 +366,26 @@ async function fcLoadContacts() {
       return;
     }
     const friendIds = Array.from(
-      new Set((data || []).map(r => (r.user_id === me ? r.contact_user_id : r.user_id)))
+      new Set((data || []).map((r) => (r.user_id === me ? r.contact_user_id : r.user_id))),
     );
     if (!friendIds.length) {
       fcContacts = [];
       fcRenderContactList();
       return;
     }
-    const {data: profiles, error: perr} = await sb
+    const { data: profiles, error: perr } = await sb
       .from(FC_PROFILES_TABLE)
       .select('user_id,pseudo,photo_url')
       .in('user_id', friendIds);
     if (perr && fcIsMissingTableError(perr)) fcShowSetupNotice();
     const profMap = {};
-    (profiles || []).forEach(p => {
+    (profiles || []).forEach((p) => {
       profMap[p.user_id] = p;
     });
-    fcContacts = friendIds.map(id => ({
+    fcContacts = friendIds.map((id) => ({
       friendId: id,
       pseudo: (profMap[id] && profMap[id].pseudo) || 'Utilisateur',
-      photo: (profMap[id] && profMap[id].photo_url) || ''
+      photo: (profMap[id] && profMap[id].photo_url) || '',
     }));
     await fcRefreshActivityOrder();
   } catch (e) {
@@ -411,7 +417,7 @@ function fcMarkRead(friendId) {
   fcUpdateNavBadge();
 }
 function fcInjectNavBadges() {
-  document.querySelectorAll('.nav-tab').forEach(btn => {
+  document.querySelectorAll('.nav-tab').forEach((btn) => {
     const oc = btn.getAttribute('onclick') || '';
     if (oc.indexOf("showPage('ami'") === -1 || btn.querySelector('.fc-nav-badge')) return;
     btn.style.position = 'relative';
@@ -426,7 +432,7 @@ function fcUpdateNavBadge() {
   // remonte qu'au rechargement de la page au lieu d'apparaître en direct.
   fcInjectNavBadges();
   const show = fcUnreadSet.size > 0;
-  document.querySelectorAll('.fc-nav-badge').forEach(dot => {
+  document.querySelectorAll('.fc-nav-badge').forEach((dot) => {
     dot.style.display = show ? 'block' : 'none';
   });
 }
@@ -438,22 +444,22 @@ async function fcRefreshActivityOrder() {
   }
   const me = currentUser.id;
   try {
-    const {data, error} = await sb
+    const { data, error } = await sb
       .from(FC_MESSAGES_TABLE)
       .select('sender_id,receiver_id,created_at')
       .or(`sender_id.eq.${me},receiver_id.eq.${me}`)
-      .order('created_at', {ascending: false})
+      .order('created_at', { ascending: false })
       .limit(400);
     if (!error && data) {
       fcActivityMap = {};
       const lastFromFriend = {};
-      data.forEach(m => {
+      data.forEach((m) => {
         const other = m.sender_id === me ? m.receiver_id : m.sender_id;
         if (!fcActivityMap[other]) fcActivityMap[other] = m.created_at;
         if (m.sender_id === other && !lastFromFriend[other]) lastFromFriend[other] = m.created_at;
       });
       fcUnreadSet = new Set();
-      Object.keys(lastFromFriend).forEach(fid => {
+      Object.keys(lastFromFriend).forEach((fid) => {
         if (fid === fcActiveFriendId) return; // conversation ouverte : jamais "non lu"
         const lastRead = fcGetLastRead(fid);
         if (!lastRead || lastFromFriend[fid] > lastRead) fcUnreadSet.add(fid);
@@ -481,9 +487,9 @@ function fcRenderContactList() {
     return;
   }
   list.innerHTML = fcContacts
-    .map(c => {
+    .map((c) => {
       const unread = fcUnreadSet.has(c.friendId);
-      return `<div class="fc-contact-item${c.friendId === fcActiveFriendId ? ' active' : ''}" data-friend-id="${fcEsc(c.friendId)}" onclick="fcOpenConversation('${fcEsc(c.friendId)}')">
+      return `<div class="fc-contact-item${c.friendId === fcActiveFriendId ? ' active' : ''}" data-friend-id="${fcEsc(c.friendId)}" onclick="fcOpenConversation(this.dataset.friendId)">
       <div class="fc-contact-avatar-wrap">
         ${fcAvatarHtml(c.photo, c.pseudo)}
         ${unread ? '<span class="fc-contact-unread-dot"></span>' : ''}
@@ -525,7 +531,7 @@ async function fcRunPseudoSearch() {
   }
   results.innerHTML = '<div class="fc-empty-hint">Recherche…</div>';
   try {
-    const {data, error} = await sb
+    const { data, error } = await sb
       .from(FC_PROFILES_TABLE)
       .select('user_id,pseudo,photo_url')
       .ilike('pseudo', `%${q}%`)
@@ -536,23 +542,23 @@ async function fcRunPseudoSearch() {
       return;
     }
     const me = currentUser.id;
-    const existingIds = new Set(fcContacts.map(c => c.friendId));
-    const filtered = (data || []).filter(p => p.user_id !== me);
+    const existingIds = new Set(fcContacts.map((c) => c.friendId));
+    const filtered = (data || []).filter((p) => p.user_id !== me);
     if (!filtered.length) {
       results.innerHTML = '<div class="fc-empty-hint">Aucun pseudo correspondant.</div>';
       return;
     }
     results.innerHTML = filtered
       .map(
-        p => `<div class="fc-result-item">
+        (p) => `<div class="fc-result-item">
         ${fcAvatarHtml(p.photo_url, p.pseudo)}
         <div class="fc-result-name">${fcEsc(p.pseudo)}</div>
         ${
           existingIds.has(p.user_id)
             ? '<span style="font-size:9px;color:var(--muted);font-family:var(--mono);flex-shrink:0;">DÉJÀ AJOUTÉ</span>'
-            : `<button class="fc-result-add-btn" onclick="fcAddContact('${fcEsc(p.user_id)}')">AJOUTER</button>`
+            : `<button class="fc-result-add-btn" data-user-id="${fcEsc(p.user_id)}" onclick="fcAddContact(this.dataset.userId)">AJOUTER</button>`
         }
-      </div>`
+      </div>`,
       )
       .join('');
   } catch (e) {
@@ -562,9 +568,9 @@ async function fcRunPseudoSearch() {
 async function fcAddContact(friendUserId) {
   if (!currentUser || typeof sb === 'undefined') return;
   try {
-    const {error} = await sb
+    const { error } = await sb
       .from(FC_CONTACTS_TABLE)
-      .insert({user_id: currentUser.id, contact_user_id: friendUserId});
+      .insert({ user_id: currentUser.id, contact_user_id: friendUserId });
     if (error && error.code !== '23505') {
       // 23505 = unique_violation (déjà ami) : pas grave, on continue
       if (fcIsMissingTableError(error)) fcShowSetupNotice();
@@ -581,7 +587,7 @@ async function fcAddContact(friendUserId) {
 // ══ Conversation ══
 async function fcOpenConversation(friendId) {
   fcActiveFriendId = friendId;
-  const c = fcContacts.find(x => x.friendId === friendId);
+  const c = fcContacts.find((x) => x.friendId === friendId);
   const emptyEl = document.getElementById('fcChatEmpty');
   const activeEl = document.getElementById('fcChatActive');
   if (emptyEl) emptyEl.style.display = 'none';
@@ -590,7 +596,7 @@ async function fcOpenConversation(friendId) {
   if (pseudoEl) pseudoEl.textContent = c ? c.pseudo : '…';
   const avatarEl = document.getElementById('fcChatAvatar');
   if (avatarEl) avatarEl.innerHTML = fcAvatarHtml(c ? c.photo : '', c ? c.pseudo : '?');
-  document.querySelectorAll('.fc-contact-item').forEach(el => {
+  document.querySelectorAll('.fc-contact-item').forEach((el) => {
     el.classList.toggle('active', el.dataset.friendId === friendId);
   });
   const wrap = document.getElementById('fcWrap');
@@ -611,11 +617,13 @@ async function fcLoadMessages(friendId) {
   if (!currentUser || typeof sb === 'undefined') return;
   const me = currentUser.id;
   try {
-    const {data, error} = await sb
+    const { data, error } = await sb
       .from(FC_MESSAGES_TABLE)
       .select('*')
-      .or(`and(sender_id.eq.${me},receiver_id.eq.${friendId}),and(sender_id.eq.${friendId},receiver_id.eq.${me})`)
-      .order('created_at', {ascending: true})
+      .or(
+        `and(sender_id.eq.${me},receiver_id.eq.${friendId}),and(sender_id.eq.${friendId},receiver_id.eq.${me})`,
+      )
+      .order('created_at', { ascending: true })
       .limit(500);
     if (error) {
       if (fcIsMissingTableError(error)) fcShowSetupNotice();
@@ -623,7 +631,7 @@ async function fcLoadMessages(friendId) {
       return;
     }
     fcMessages = data || [];
-    await fcLoadReactionsFor(fcMessages.map(m => m.id));
+    await fcLoadReactionsFor(fcMessages.map((m) => m.id));
     fcRenderMessages();
   } catch (e) {
     console.warn('fcLoadMessages:', e);
@@ -648,7 +656,8 @@ function fcCustomFieldHtml(cf) {
 }
 function fcBuildTradeCardHtml(t) {
   const res = typeof t.res === 'number' ? t.res : parseFloat(t.res) || 0;
-  const resColor = res >= 0 ? 'var(--fc-trade-pos-color,var(--green))' : 'var(--fc-trade-neg-color,var(--red))';
+  const resColor =
+    res >= 0 ? 'var(--fc-trade-pos-color,var(--green))' : 'var(--fc-trade-neg-color,var(--red))';
   const resTxt = (res >= 0 ? '+' : '') + res.toFixed(2) + ' €';
   const tfList = (t.tf || '').split('|').filter(Boolean);
   const confList = (t.conf || '').split('|').filter(Boolean);
@@ -669,16 +678,23 @@ function fcBuildTradeCardHtml(t) {
       ${t.reprend ? `<div class="fc-trade-row"><span>Reprend.</span><span>${fcEsc(t.reprend)}</span></div>` : ''}
       ${starsN ? `<div class="fc-trade-row"><span>Note</span><span>${starsHtml}</span></div>` : ''}
       ${Array.isArray(t.customFields) && t.customFields.length ? t.customFields.map(fcCustomFieldHtml).join('') : ''}
-      ${tfList.length || confList.length ? `<div class="fc-trade-chips">${tfList.concat(confList).map(c => `<span class="fc-trade-chip">${fcEsc(c)}</span>`).join('')}</div>` : ''}
+      ${
+        tfList.length || confList.length
+          ? `<div class="fc-trade-chips">${tfList
+              .concat(confList)
+              .map((c) => `<span class="fc-trade-chip">${fcEsc(c)}</span>`)
+              .join('')}</div>`
+          : ''
+      }
       ${t.notes ? `<div class="fc-trade-notes">${fcEsc(t.notes)}</div>` : ''}
-      ${imgs.length ? `<div class="fc-trade-imgs">${imgs.map(src => `<img src="${fcEsc(src)}" onclick="openFullscreen(this.src)">`).join('')}</div>` : ''}
+      ${imgs.length ? `<div class="fc-trade-imgs">${imgs.map((src) => `<img src="${fcEsc(src)}" onclick="openFullscreen(this.src)">`).join('')}</div>` : ''}
     </div>
   </div>`;
 }
 function fcAudioBubbleHtml(m, avatarUrl) {
   return `<div class="fc-audio-msg" data-msg-id="${m.id}">
     <div class="fc-audio-avatar">${avatarUrl ? `<img src="${fcEsc(avatarUrl)}" alt="">` : ''}</div>
-    <button class="fc-audio-play" onclick="fcToggleAudioPlay(${m.id}, '${fcEsc(m.audio_url)}')">▶</button>
+    <button class="fc-audio-play" data-msg-id="${m.id}" data-audio-url="${fcEsc(m.audio_url)}" onclick="fcToggleAudioPlay(this.dataset.msgId, this.dataset.audioUrl)">▶</button>
     <div class="fc-audio-bar"><div class="fc-audio-bar-fill"></div></div>
     <span class="fc-audio-duration">${fcFmtDuration(m.audio_duration)}</span>
   </div>`;
@@ -688,7 +704,7 @@ function fcRenderBubbleContent(m, mine) {
     const myProfile = typeof getProfile === 'function' ? getProfile() : null;
     const avatarUrl = mine
       ? (myProfile && myProfile.photo) || ''
-      : ((fcContacts.find(c => c.friendId === m.sender_id) || {}).photo || '');
+      : (fcContacts.find((c) => c.friendId === m.sender_id) || {}).photo || '';
     return fcAudioBubbleHtml(m, avatarUrl);
   }
   if (m.msg_type === 'trade' && m.trade_data) return fcBuildTradeCardHtml(m.trade_data);
@@ -700,7 +716,7 @@ function fcRenderMessageRow(m, me) {
   const reactions = fcReactionsMap[m.id] || [];
   const triggerHtml = `<button class="fc-react-trigger" onclick="event.stopPropagation();fcOpenReactionPicker(${m.id}, this)" title="Réagir"><span class="fc-react-face">🙂</span><span class="fc-react-plus">+</span></button>`;
   const badgesHtml = reactions.length
-    ? `<div class="fc-react-badges">${reactions.map(r => `<span class="fc-react-badge">${fcEsc(r.emoji)}</span>`).join('')}</div>`
+    ? `<div class="fc-react-badges">${reactions.map((r) => `<span class="fc-react-badge">${fcEsc(r.emoji)}</span>`).join('')}</div>`
     : '';
   const bubbleHtml = `<div class="fc-bubble-wrap">
       <div class="fc-bubble">${fcRenderBubbleContent(m, mine)}<div class="fc-bubble-time">${fcFmtTime(m.created_at)}</div></div>
@@ -711,7 +727,7 @@ function fcRenderMessageRow(m, me) {
 }
 function fcOnMessageRowClick(e, rowEl) {
   if (e.target.closest('.fc-react-trigger, .fc-audio-play, .fc-trade-imgs img')) return;
-  document.querySelectorAll('.fc-msg-row.show-react').forEach(r => {
+  document.querySelectorAll('.fc-msg-row.show-react').forEach((r) => {
     if (r !== rowEl) r.classList.remove('show-react');
   });
   rowEl.classList.toggle('show-react');
@@ -724,7 +740,7 @@ function fcRenderMessages() {
     box.innerHTML = '<div class="fc-empty-hint">Aucun message pour le moment.</div>';
     return;
   }
-  box.innerHTML = fcMessages.map(m => fcRenderMessageRow(m, me)).join('');
+  box.innerHTML = fcMessages.map((m) => fcRenderMessageRow(m, me)).join('');
   box.scrollTop = box.scrollHeight;
 }
 
@@ -736,7 +752,7 @@ function fcInjectReactPicker() {
   el.className = 'fc-react-picker';
   el.innerHTML = `
     <div class="fc-react-quick">
-      ${FC_REACT_EMOJIS.map(em => `<span class="fc-react-opt" data-emoji="${em}">${em}</span>`).join('')}
+      ${FC_REACT_EMOJIS.map((em) => `<span class="fc-react-opt" data-emoji="${em}">${em}</span>`).join('')}
       <button class="fc-react-more-btn" title="Plus d'emoji">+</button>
     </div>
     <div class="fc-react-full">
@@ -745,13 +761,14 @@ function fcInjectReactPicker() {
     </div>
   `;
   document.body.appendChild(el);
-  el.addEventListener('click', e => {
+  el.addEventListener('click', (e) => {
     if (e.target.closest('.fc-react-more-btn')) {
       fcExpandReactionPicker();
       return;
     }
     const opt = e.target.closest('.fc-react-opt, .fc-react-grid-emoji');
-    if (opt && fcReactPickerTargetId != null) fcSetReaction(fcReactPickerTargetId, opt.dataset.emoji);
+    if (opt && fcReactPickerTargetId != null)
+      fcSetReaction(fcReactPickerTargetId, opt.dataset.emoji);
   });
 }
 function fcBuildFullEmojiPicker() {
@@ -761,19 +778,20 @@ function fcBuildFullEmojiPicker() {
   if (!tabs || !scroll || tabs.dataset.built) return;
   tabs.dataset.built = '1';
   tabs.innerHTML = FC_EMOJI_CATEGORIES.map(
-    (cat, i) => `<span class="fc-react-tab${i === 0 ? ' active' : ''}" data-cat="${i}" title="${fcEsc(cat.name)}">${cat.icon}</span>`
+    (cat, i) =>
+      `<span class="fc-react-tab${i === 0 ? ' active' : ''}" data-cat="${i}" title="${fcEsc(cat.name)}">${cat.icon}</span>`,
   ).join('');
   scroll.innerHTML = FC_EMOJI_CATEGORIES.map(
     (cat, i) => `<div class="fc-react-cat-section" id="fcCatSection${i}">
       <div class="fc-react-cat-label">${fcEsc(cat.name)}</div>
-      <div class="fc-react-cat-grid">${cat.emojis.map(em => `<span class="fc-react-grid-emoji" data-emoji="${em}">${em}</span>`).join('')}</div>
-    </div>`
+      <div class="fc-react-cat-grid">${cat.emojis.map((em) => `<span class="fc-react-grid-emoji" data-emoji="${em}">${em}</span>`).join('')}</div>
+    </div>`,
   ).join('');
-  tabs.addEventListener('click', e => {
+  tabs.addEventListener('click', (e) => {
     const tab = e.target.closest('.fc-react-tab');
     if (!tab) return;
     const target = document.getElementById('fcCatSection' + tab.dataset.cat);
-    if (target) target.scrollIntoView({block: 'start', behavior: 'smooth'});
+    if (target) target.scrollIntoView({ block: 'start', behavior: 'smooth' });
   });
   scroll.addEventListener('scroll', () => fcUpdateActiveReactTab(scroll, tabs));
 }
@@ -784,7 +802,9 @@ function fcUpdateActiveReactTab(scroll, tabs) {
   sections.forEach((sec, i) => {
     if (sec.getBoundingClientRect().top - scrollTop <= 30) activeIdx = i;
   });
-  tabs.querySelectorAll('.fc-react-tab').forEach((t, i) => t.classList.toggle('active', i === activeIdx));
+  tabs
+    .querySelectorAll('.fc-react-tab')
+    .forEach((t, i) => t.classList.toggle('active', i === activeIdx));
 }
 function fcExpandReactionPicker() {
   const el = document.getElementById('fcReactPicker');
@@ -804,7 +824,8 @@ function fcPositionReactPicker() {
   const pRect = picker.getBoundingClientRect();
   let top = rect.top - pRect.height - 8;
   if (top < 4) top = rect.bottom + 8;
-  if (top + pRect.height > window.innerHeight - 4) top = Math.max(4, window.innerHeight - pRect.height - 4);
+  if (top + pRect.height > window.innerHeight - 4)
+    top = Math.max(4, window.innerHeight - pRect.height - 4);
   let left = rect.left - pRect.width / 2 + rect.width / 2;
   left = Math.max(6, Math.min(left, window.innerWidth - pRect.width - 6));
   picker.style.top = top + 'px';
@@ -823,7 +844,7 @@ function fcOpenReactionPicker(messageId, triggerEl) {
   if (full) full.style.display = 'none';
   picker.style.display = 'block';
   fcPositionReactPicker();
-  setTimeout(() => document.addEventListener('click', fcOnDocClickClosePicker, {once: true}), 0);
+  setTimeout(() => document.addEventListener('click', fcOnDocClickClosePicker, { once: true }), 0);
 }
 function fcCloseReactionPicker() {
   const picker = document.getElementById('fcReactPicker');
@@ -836,7 +857,7 @@ function fcOnDocClickClosePicker(e) {
   if (picker && picker.contains(e.target)) {
     // Clic à l'intérieur (onglet, bouton +, emoji) : on ne ferme pas,
     // mais il faut réarmer l'écoute pour le prochain clic réellement extérieur.
-    document.addEventListener('click', fcOnDocClickClosePicker, {once: true});
+    document.addEventListener('click', fcOnDocClickClosePicker, { once: true });
     return;
   }
   fcCloseReactionPicker();
@@ -846,29 +867,38 @@ async function fcSetReaction(messageId, emoji) {
   if (!currentUser || typeof sb === 'undefined') return;
   const me = currentUser.id;
   const list = fcReactionsMap[messageId] || [];
-  const mine = list.find(r => r.user_id === me);
+  const mine = list.find((r) => r.user_id === me);
   try {
     if (mine && mine.emoji === emoji) {
-      const {error} = await sb.from(FC_REACTIONS_TABLE).delete().eq('message_id', messageId).eq('user_id', me);
+      const { error } = await sb
+        .from(FC_REACTIONS_TABLE)
+        .delete()
+        .eq('message_id', messageId)
+        .eq('user_id', me);
       if (error) {
         console.warn('fcSetReaction (delete):', error);
-        if (!fcIsMissingTableError(error) && typeof showSync === 'function') showSync('⚠ Réaction impossible', '#ef4444');
+        if (!fcIsMissingTableError(error) && typeof showSync === 'function')
+          showSync('⚠ Réaction impossible', '#ef4444');
         return;
       }
-      fcReactionsMap[messageId] = list.filter(r => r.user_id !== me);
+      fcReactionsMap[messageId] = list.filter((r) => r.user_id !== me);
     } else {
-      const {error} = await sb
+      const { error } = await sb
         .from(FC_REACTIONS_TABLE)
-        .upsert({message_id: messageId, user_id: me, emoji}, {onConflict: 'message_id,user_id'});
+        .upsert(
+          { message_id: messageId, user_id: me, emoji },
+          { onConflict: 'message_id,user_id' },
+        );
       if (error) {
         console.warn('fcSetReaction (upsert):', error);
         if (fcIsMissingTableError(error)) {
-          if (typeof showSync === 'function') showSync('⚠ Réactions pas encore configurées (migration SQL)', '#f59e0b');
+          if (typeof showSync === 'function')
+            showSync('⚠ Réactions pas encore configurées (migration SQL)', '#f59e0b');
         } else if (typeof showSync === 'function') showSync('⚠ Réaction impossible', '#ef4444');
         return;
       }
-      const idx = list.findIndex(r => r.user_id === me);
-      const entry = {user_id: me, emoji, created_at: new Date().toISOString()};
+      const idx = list.findIndex((r) => r.user_id === me);
+      const entry = { user_id: me, emoji, created_at: new Date().toISOString() };
       if (idx >= 0) list[idx] = entry;
       else list.push(entry);
       fcReactionsMap[messageId] = list;
@@ -886,14 +916,18 @@ async function fcLoadReactionsFor(ids) {
     return;
   }
   try {
-    const {data, error} = await sb
+    const { data, error } = await sb
       .from(FC_REACTIONS_TABLE)
       .select('message_id,user_id,emoji,created_at')
       .in('message_id', ids);
     if (error) return; // dégradation silencieuse : le chat marche sans réactions si la migration n'est pas encore faite
-    (data || []).forEach(r => {
+    (data || []).forEach((r) => {
       if (!fcReactionsMap[r.message_id]) fcReactionsMap[r.message_id] = [];
-      fcReactionsMap[r.message_id].push({user_id: r.user_id, emoji: r.emoji, created_at: r.created_at});
+      fcReactionsMap[r.message_id].push({
+        user_id: r.user_id,
+        emoji: r.emoji,
+        created_at: r.created_at,
+      });
     });
   } catch (e) {
     console.warn('fcLoadReactionsFor:', e);
@@ -906,21 +940,21 @@ async function fcLoadReactionsFor(ids) {
 // s'il n'y a pas encore assez d'historique.
 function fcComputeRecentEmojis() {
   const entries = [];
-  Object.keys(fcReactionsMap).forEach(mid => {
-    (fcReactionsMap[mid] || []).forEach(r => {
+  Object.keys(fcReactionsMap).forEach((mid) => {
+    (fcReactionsMap[mid] || []).forEach((r) => {
       if (r.created_at) entries.push(r);
     });
   });
   entries.sort((a, b) => (b.created_at || '').localeCompare(a.created_at || ''));
   const seen = new Set();
   const recent = [];
-  entries.forEach(r => {
+  entries.forEach((r) => {
     if (!seen.has(r.emoji)) {
       seen.add(r.emoji);
       recent.push(r.emoji);
     }
   });
-  FC_REACT_EMOJIS.forEach(em => {
+  FC_REACT_EMOJIS.forEach((em) => {
     if (recent.length < 6 && !seen.has(em)) {
       seen.add(em);
       recent.push(em);
@@ -933,8 +967,9 @@ function fcRenderQuickReactRow() {
   const quick = document.querySelector('#fcReactPicker .fc-react-quick');
   if (!quick) return;
   quick.innerHTML =
-    fcRecentEmojis.map(em => `<span class="fc-react-opt" data-emoji="${em}">${em}</span>`).join('') +
-    '<button class="fc-react-more-btn" title="Plus d\'emoji">+</button>';
+    fcRecentEmojis
+      .map((em) => `<span class="fc-react-opt" data-emoji="${em}">${em}</span>`)
+      .join('') + '<button class="fc-react-more-btn" title="Plus d\'emoji">+</button>';
 }
 function fcHandleReactionChange(payload) {
   const row = payload.new && Object.keys(payload.new).length ? payload.new : payload.old;
@@ -942,15 +977,15 @@ function fcHandleReactionChange(payload) {
   const mid = row.message_id;
   let list = fcReactionsMap[mid] || [];
   if (payload.eventType === 'DELETE') {
-    list = list.filter(r => r.user_id !== row.user_id);
+    list = list.filter((r) => r.user_id !== row.user_id);
   } else {
-    const idx = list.findIndex(r => r.user_id === row.user_id);
-    const entry = {user_id: row.user_id, emoji: row.emoji, created_at: row.created_at};
+    const idx = list.findIndex((r) => r.user_id === row.user_id);
+    const entry = { user_id: row.user_id, emoji: row.emoji, created_at: row.created_at };
     if (idx >= 0) list[idx] = entry;
     else list.push(entry);
   }
   fcReactionsMap[mid] = list;
-  if (fcMessages.some(m => m.id === mid)) {
+  if (fcMessages.some((m) => m.id === mid)) {
     fcRenderMessages();
     fcComputeRecentEmojis();
   }
@@ -986,7 +1021,7 @@ function fcToggleAudioPlay(msgId, url) {
 }
 function fcUpdateAudioProgress() {
   const el = document.getElementById('fcAudioPlayer');
-  document.querySelectorAll('.fc-audio-msg').forEach(row => {
+  document.querySelectorAll('.fc-audio-msg').forEach((row) => {
     const id = row.dataset.msgId;
     const btn = row.querySelector('.fc-audio-play');
     const fill = row.querySelector('.fc-audio-bar-fill');
@@ -1011,18 +1046,18 @@ async function fcSendMessage(payload) {
       content: null,
       audio_url: null,
       audio_duration: null,
-      trade_data: null
+      trade_data: null,
     },
-    payload
+    payload,
   );
   try {
-    const {data, error} = await sb.from(FC_MESSAGES_TABLE).insert(row).select().single();
+    const { data, error } = await sb.from(FC_MESSAGES_TABLE).insert(row).select().single();
     if (error) {
       if (fcIsMissingTableError(error)) fcShowSetupNotice();
       else if (typeof showSync === 'function') showSync('⚠ Message non envoyé', '#ef4444');
       return;
     }
-    if (!fcMessages.some(m => m.id === data.id)) {
+    if (!fcMessages.some((m) => m.id === data.id)) {
       fcMessages.push(data);
       fcRenderMessages();
     }
@@ -1040,7 +1075,7 @@ function fcSendTextMessage() {
   input.value = '';
   input.style.height = 'auto';
   fcUpdateMicSendBtn();
-  fcSendMessage({msg_type: 'text', content: text});
+  fcSendMessage({ msg_type: 'text', content: text });
 }
 
 // ══ Partage d'un trade (fiche technique complète) ══
@@ -1064,7 +1099,7 @@ function fcRenderTradePickerList(filter) {
   if (!list) return;
   const f = (filter || '').toLowerCase();
   const trades = (APP.trades || [])
-    .filter(t => !f || (t.paire || '').toLowerCase().includes(f) || (t.date || '').includes(f))
+    .filter((t) => !f || (t.paire || '').toLowerCase().includes(f) || (t.date || '').includes(f))
     .sort((a, b) => (b.date || '').localeCompare(a.date || '') || b.id - a.id)
     .slice(0, 60);
   if (!trades.length) {
@@ -1072,9 +1107,12 @@ function fcRenderTradePickerList(filter) {
     return;
   }
   list.innerHTML = trades
-    .map(t => {
+    .map((t) => {
       const res = typeof t.res === 'number' ? t.res : parseFloat(t.res) || 0;
-      const resColor = res >= 0 ? 'var(--fc-trade-pos-color,var(--green))' : 'var(--fc-trade-neg-color,var(--red))';
+      const resColor =
+        res >= 0
+          ? 'var(--fc-trade-pos-color,var(--green))'
+          : 'var(--fc-trade-neg-color,var(--red))';
       return `<div class="fc-trade-pick-item" onclick="fcSendTradeMessage(${t.id})">
         <div class="fc-trade-pick-info">
           <div class="fc-trade-pick-pair">${fcEsc(t.paire || '—')}${t.dir ? ' · ' + fcEsc(t.dir) : ''}${t.backtest ? '&nbsp;<span class="fc-bt-badge">BT</span>' : ''}</div>
@@ -1088,15 +1126,15 @@ function fcRenderTradePickerList(filter) {
 function fcCollectCustomFields(t) {
   if (!Array.isArray(APP.cfFields) || !APP.cfFields.length) return [];
   const out = [];
-  APP.cfFields.forEach(f => {
+  APP.cfFields.forEach((f) => {
     const val = typeof cfDisplayValue === 'function' ? cfDisplayValue(f, t) : t['cf_' + f.id];
     if (val === undefined || val === null || val === '') return;
-    out.push({label: f.colName || f.label || f.id, type: f.type, value: val});
+    out.push({ label: f.colName || f.label || f.id, type: f.type, value: val });
   });
   return out;
 }
 function fcSendTradeMessage(tradeId) {
-  const t = (APP.trades || []).find(x => x.id === tradeId);
+  const t = (APP.trades || []).find((x) => x.id === tradeId);
   if (!t) return;
   const payload = {
     id: t.id,
@@ -1116,9 +1154,9 @@ function fcSendTradeMessage(tradeId) {
     conf: t.conf || '',
     backtest: !!t.backtest,
     customFields: fcCollectCustomFields(t),
-    images: Array.isArray(t.images) ? t.images.slice(0, 6) : []
+    images: Array.isArray(t.images) ? t.images.slice(0, 6) : [],
   };
-  fcSendMessage({msg_type: 'trade', trade_data: payload});
+  fcSendMessage({ msg_type: 'trade', trade_data: payload });
   fcCloseTradePicker();
 }
 
@@ -1148,7 +1186,9 @@ function fcInitWaveBars() {
   // fines à taille fixe, c'est leur NOMBRE qui s'adapte à l'écran pour aller
   // pile jusqu'au bout, au lieu de les étirer.
   const containerWidth = wave.getBoundingClientRect().width;
-  let count = Math.floor((containerWidth + FC_WAVE_BAR_GAP) / (FC_WAVE_BAR_WIDTH + FC_WAVE_BAR_GAP));
+  let count = Math.floor(
+    (containerWidth + FC_WAVE_BAR_GAP) / (FC_WAVE_BAR_WIDTH + FC_WAVE_BAR_GAP),
+  );
   if (!count || count < 15) count = 15; // garde-fou si mesuré avant mise en page
   wave.innerHTML = '';
   fcWaveSamples = new Array(count).fill(0);
@@ -1174,7 +1214,7 @@ function fcSampleAndRenderWave() {
   if (!wave) return;
   const bars = wave.children;
   for (let i = 0; i < bars.length; i++) {
-    bars[i].style.height = (15 + fcWaveSamples[i] * 85) + '%';
+    bars[i].style.height = 15 + fcWaveSamples[i] * 85 + '%';
   }
 }
 
@@ -1185,15 +1225,18 @@ async function fcStartRecording() {
     return;
   }
   try {
-    const stream = await navigator.mediaDevices.getUserMedia({audio: true});
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
     fcRecordStream = stream;
     const mimeCandidates = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4'];
     const mime = mimeCandidates.find(
-      m => window.MediaRecorder && MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported(m)
+      (m) =>
+        window.MediaRecorder && MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported(m),
     );
-    fcMediaRecorder = mime ? new MediaRecorder(stream, {mimeType: mime}) : new MediaRecorder(stream);
+    fcMediaRecorder = mime
+      ? new MediaRecorder(stream, { mimeType: mime })
+      : new MediaRecorder(stream);
     fcRecordedChunks = [];
-    fcMediaRecorder.ondataavailable = e => {
+    fcMediaRecorder.ondataavailable = (e) => {
       if (e.data && e.data.size) fcRecordedChunks.push(e.data);
     };
     fcMediaRecorder.start();
@@ -1267,13 +1310,13 @@ function fcStopRecording(shouldSend) {
   fcShowRecordingUI(false);
   try {
     recorder.onstop = async () => {
-      if (stream) stream.getTracks().forEach(t => t.stop());
+      if (stream) stream.getTracks().forEach((t) => t.stop());
       const duration = (Date.now() - startedAt) / 1000;
       if (!shouldSend || duration < 0.6 || !fcRecordedChunks.length) {
         fcRecordedChunks = [];
         return;
       }
-      const blob = new Blob(fcRecordedChunks, {type: recorder.mimeType || 'audio/webm'});
+      const blob = new Blob(fcRecordedChunks, { type: recorder.mimeType || 'audio/webm' });
       fcRecordedChunks = [];
       await fcUploadAndSendAudio(blob, duration);
     };
@@ -1353,19 +1396,19 @@ async function fcUploadAndSendAudio(blob, duration) {
   try {
     const ext = (blob.type || '').includes('mp4') ? 'm4a' : 'webm';
     const fileName = `${currentUser.id}/${Date.now()}_${Math.random().toString(36).slice(2, 8)}.${ext}`;
-    const {error} = await sb.storage
+    const { error } = await sb.storage
       .from(FC_AUDIO_BUCKET)
-      .upload(fileName, blob, {contentType: blob.type || 'audio/webm', upsert: false});
+      .upload(fileName, blob, { contentType: blob.type || 'audio/webm', upsert: false });
     if (error) {
       if (fcIsMissingTableError(error)) fcShowSetupNotice();
       else if (typeof showSync === 'function') showSync('⚠ Envoi du vocal échoué', '#ef4444');
       return;
     }
-    const {data: urlData} = sb.storage.from(FC_AUDIO_BUCKET).getPublicUrl(fileName);
+    const { data: urlData } = sb.storage.from(FC_AUDIO_BUCKET).getPublicUrl(fileName);
     await fcSendMessage({
       msg_type: 'audio',
       audio_url: urlData && urlData.publicUrl,
-      audio_duration: duration
+      audio_duration: duration,
     });
   } catch (e) {
     console.warn('fcUploadAndSendAudio:', e);
@@ -1392,7 +1435,7 @@ function fcBindInputBarEvents() {
       if (typeof autoGrow === 'function') autoGrow(input);
       fcUpdateMicSendBtn();
     });
-    input.addEventListener('keydown', e => {
+    input.addEventListener('keydown', (e) => {
       if (e.key === 'Enter' && !e.shiftKey) {
         e.preventDefault();
         fcSendTextMessage();
@@ -1405,7 +1448,7 @@ function fcBindInputBarEvents() {
     micBtn.addEventListener('click', fcOnMicClick);
     micBtn.addEventListener('pointerdown', fcOnMicPointerDown);
     micBtn.addEventListener('pointermove', fcOnMicPointerMove);
-    ['pointerup', 'pointercancel'].forEach(evt => micBtn.addEventListener(evt, fcOnMicPointerUp));
+    ['pointerup', 'pointercancel'].forEach((evt) => micBtn.addEventListener(evt, fcOnMicPointerUp));
   }
   fcUpdateMicSendBtn();
 }
@@ -1418,26 +1461,38 @@ function fcStartRealtime() {
     .channel('tjp_chat_' + me)
     .on(
       'postgres_changes',
-      {event: 'INSERT', schema: 'public', table: FC_MESSAGES_TABLE, filter: 'receiver_id=eq.' + me},
-      payload => fcHandleIncomingMessage(payload.new)
+      {
+        event: 'INSERT',
+        schema: 'public',
+        table: FC_MESSAGES_TABLE,
+        filter: 'receiver_id=eq.' + me,
+      },
+      (payload) => fcHandleIncomingMessage(payload.new),
     )
     .on(
       'postgres_changes',
-      {event: 'INSERT', schema: 'public', table: FC_MESSAGES_TABLE, filter: 'sender_id=eq.' + me},
-      payload => fcHandleIncomingMessage(payload.new)
+      { event: 'INSERT', schema: 'public', table: FC_MESSAGES_TABLE, filter: 'sender_id=eq.' + me },
+      (payload) => fcHandleIncomingMessage(payload.new),
     )
     .on(
       'postgres_changes',
-      {event: 'INSERT', schema: 'public', table: FC_CONTACTS_TABLE, filter: 'contact_user_id=eq.' + me},
-      () => fcLoadContacts()
+      {
+        event: 'INSERT',
+        schema: 'public',
+        table: FC_CONTACTS_TABLE,
+        filter: 'contact_user_id=eq.' + me,
+      },
+      () => fcLoadContacts(),
     )
     .on(
       'postgres_changes',
-      {event: 'INSERT', schema: 'public', table: FC_CONTACTS_TABLE, filter: 'user_id=eq.' + me},
-      () => fcLoadContacts()
+      { event: 'INSERT', schema: 'public', table: FC_CONTACTS_TABLE, filter: 'user_id=eq.' + me },
+      () => fcLoadContacts(),
     )
-    .on('postgres_changes', {event: '*', schema: 'public', table: FC_REACTIONS_TABLE}, payload =>
-      fcHandleReactionChange(payload)
+    .on(
+      'postgres_changes',
+      { event: '*', schema: 'public', table: FC_REACTIONS_TABLE },
+      (payload) => fcHandleReactionChange(payload),
     )
     .subscribe();
 }
@@ -1451,13 +1506,13 @@ function fcHandleIncomingMessage(m) {
   if (!m || !currentUser) return;
   const me = currentUser.id;
   const other = m.sender_id === me ? m.receiver_id : m.sender_id;
-  if (fcActiveFriendId === other && !fcMessages.some(x => x.id === m.id)) {
+  if (fcActiveFriendId === other && !fcMessages.some((x) => x.id === m.id)) {
     fcMessages.push(m);
     fcRenderMessages();
     if (m.sender_id === other) fcMarkRead(other); // vue en direct : reste marqué comme lu
   }
   fcActivityMap[other] = m.created_at;
-  if (fcContacts.some(c => c.friendId === other)) fcRefreshActivityOrder();
+  if (fcContacts.some((c) => c.friendId === other)) fcRefreshActivityOrder();
   else fcLoadContacts();
 }
 
@@ -1519,11 +1574,11 @@ function fcReset() {
   fcSetupNoticeShown = false;
   const wrap = document.getElementById('fcWrap');
   if (wrap) wrap.remove();
-  ['fcAddModal', 'fcTradeModal', 'fcReactPicker'].forEach(id => {
+  ['fcAddModal', 'fcTradeModal', 'fcReactPicker'].forEach((id) => {
     const el = document.getElementById(id);
     if (el) el.remove();
   });
-  document.querySelectorAll('.fc-nav-badge').forEach(el => el.remove());
+  document.querySelectorAll('.fc-nav-badge').forEach((el) => el.remove());
 }
 
 // ══ Intégration à l'éditeur de thème existant (page Paramètres) ══
@@ -1552,7 +1607,7 @@ const FC_THEME_DEFAULTS = {
   '--fc-trade-chip-bg': '#111827',
   '--fc-react-trigger-bg': '#111827',
   '--fc-react-badge-bg': '#161d2e',
-  '--fc-unread-dot-color': '#ef4444'
+  '--fc-unread-dot-color': '#ef4444',
 };
 function fcEnsureThemeDefaults() {
   Object.entries(FC_THEME_DEFAULTS).forEach(([vn, def]) => {
@@ -1566,28 +1621,108 @@ function fcEnsureThemeDefaults() {
 }
 function fcBuildThemeVars() {
   return [
-    {v: '--fc-bubble-mine-bg', l: 'Bulle envoyée — fond', page: 'Ami', section: 'Bulles de message'},
-    {v: '--fc-bubble-theirs-bg', l: 'Bulle reçue — fond', page: 'Ami', section: 'Bulles de message'},
-    {v: '--fc-bubble-theirs-border', l: 'Bulle reçue — bordure', page: 'Ami', section: 'Bulles de message'},
-    {v: '--fc-bubble-text', l: 'Texte des messages', page: 'Ami', section: 'Bulles de message'},
-    {v: '--fc-time-color', l: 'Heure des messages', page: 'Ami', section: 'Bulles de message'},
-    {v: '--fc-sidebar-bg', l: 'Fond de la liste de contacts', page: 'Ami', section: 'Contacts & interface'},
-    {v: '--fc-contact-active-bg', l: 'Contact sélectionné', page: 'Ami', section: 'Contacts & interface'},
-    {v: '--fc-add-btn-color', l: 'Bouton "+" ajouter un ami', page: 'Ami', section: 'Contacts & interface'},
-    {v: '--fc-icon-color', l: 'Icônes (trombone, micro...)', page: 'Ami', section: 'Contacts & interface'},
-    {v: '--fc-wave-color', l: "Barres de l'onde vocale", page: 'Ami', section: 'Micro & vocal'},
-    {v: '--fc-rec-dot-color', l: "Point d'enregistrement", page: 'Ami', section: 'Micro & vocal'},
-    {v: '--fc-cancel-color', l: 'Bouton annuler (corbeille)', page: 'Ami', section: 'Micro & vocal'},
-    {v: '--fc-send-color', l: 'Icône envoyer / micro actif', page: 'Ami', section: 'Micro & vocal'},
-    {v: '--fc-audio-play-bg', l: 'Bouton lecture des vocaux', page: 'Ami', section: 'Micro & vocal'},
-    {v: '--fc-audio-fill-color', l: 'Progression des vocaux', page: 'Ami', section: 'Micro & vocal'},
-    {v: '--fc-trade-head-bg', l: "En-tête de la fiche", page: 'Ami', section: 'Fiche de trade partagée'},
-    {v: '--fc-trade-pos-color', l: 'Résultat positif', page: 'Ami', section: 'Fiche de trade partagée'},
-    {v: '--fc-trade-neg-color', l: 'Résultat négatif', page: 'Ami', section: 'Fiche de trade partagée'},
-    {v: '--fc-trade-chip-bg', l: 'Étiquettes (TF / confluences)', page: 'Ami', section: 'Fiche de trade partagée'},
-    {v: '--fc-react-trigger-bg', l: 'Bouton réagir', page: 'Ami', section: 'Réactions'},
-    {v: '--fc-react-badge-bg', l: 'Pastille de réaction', page: 'Ami', section: 'Réactions'},
-    {v: '--fc-unread-dot-color', l: 'Point de notification (message non lu)', page: 'Ami', section: 'Contacts & interface'}
+    {
+      v: '--fc-bubble-mine-bg',
+      l: 'Bulle envoyée — fond',
+      page: 'Ami',
+      section: 'Bulles de message',
+    },
+    {
+      v: '--fc-bubble-theirs-bg',
+      l: 'Bulle reçue — fond',
+      page: 'Ami',
+      section: 'Bulles de message',
+    },
+    {
+      v: '--fc-bubble-theirs-border',
+      l: 'Bulle reçue — bordure',
+      page: 'Ami',
+      section: 'Bulles de message',
+    },
+    { v: '--fc-bubble-text', l: 'Texte des messages', page: 'Ami', section: 'Bulles de message' },
+    { v: '--fc-time-color', l: 'Heure des messages', page: 'Ami', section: 'Bulles de message' },
+    {
+      v: '--fc-sidebar-bg',
+      l: 'Fond de la liste de contacts',
+      page: 'Ami',
+      section: 'Contacts & interface',
+    },
+    {
+      v: '--fc-contact-active-bg',
+      l: 'Contact sélectionné',
+      page: 'Ami',
+      section: 'Contacts & interface',
+    },
+    {
+      v: '--fc-add-btn-color',
+      l: 'Bouton "+" ajouter un ami',
+      page: 'Ami',
+      section: 'Contacts & interface',
+    },
+    {
+      v: '--fc-icon-color',
+      l: 'Icônes (trombone, micro...)',
+      page: 'Ami',
+      section: 'Contacts & interface',
+    },
+    { v: '--fc-wave-color', l: "Barres de l'onde vocale", page: 'Ami', section: 'Micro & vocal' },
+    { v: '--fc-rec-dot-color', l: "Point d'enregistrement", page: 'Ami', section: 'Micro & vocal' },
+    {
+      v: '--fc-cancel-color',
+      l: 'Bouton annuler (corbeille)',
+      page: 'Ami',
+      section: 'Micro & vocal',
+    },
+    {
+      v: '--fc-send-color',
+      l: 'Icône envoyer / micro actif',
+      page: 'Ami',
+      section: 'Micro & vocal',
+    },
+    {
+      v: '--fc-audio-play-bg',
+      l: 'Bouton lecture des vocaux',
+      page: 'Ami',
+      section: 'Micro & vocal',
+    },
+    {
+      v: '--fc-audio-fill-color',
+      l: 'Progression des vocaux',
+      page: 'Ami',
+      section: 'Micro & vocal',
+    },
+    {
+      v: '--fc-trade-head-bg',
+      l: 'En-tête de la fiche',
+      page: 'Ami',
+      section: 'Fiche de trade partagée',
+    },
+    {
+      v: '--fc-trade-pos-color',
+      l: 'Résultat positif',
+      page: 'Ami',
+      section: 'Fiche de trade partagée',
+    },
+    {
+      v: '--fc-trade-neg-color',
+      l: 'Résultat négatif',
+      page: 'Ami',
+      section: 'Fiche de trade partagée',
+    },
+    {
+      v: '--fc-trade-chip-bg',
+      l: 'Étiquettes (TF / confluences)',
+      page: 'Ami',
+      section: 'Fiche de trade partagée',
+    },
+    { v: '--fc-react-trigger-bg', l: 'Bouton réagir', page: 'Ami', section: 'Réactions' },
+    { v: '--fc-react-badge-bg', l: 'Pastille de réaction', page: 'Ami', section: 'Réactions' },
+    {
+      v: '--fc-unread-dot-color',
+      l: 'Point de notification (message non lu)',
+      page: 'Ami',
+      section: 'Contacts & interface',
+    },
   ];
 }
 if (typeof window.buildTV === 'function') {

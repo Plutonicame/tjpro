@@ -479,15 +479,10 @@ function createAccount(sourcAccId) {
   return newAcc;
 }
 
-function switchAccount(accId, force) {
+function switchAccount(accId) {
   const accs = getAccounts();
   const acc = accs.find(a => a.id === accId);
   if (!acc) return;
-  // Vérification PIN si défini pour ce compte
-  if (acc.pinHash && !force) {
-    openAccountPinPrompt(accId);
-    return;
-  }
   _doSwitchAccount(accId);
 }
 
@@ -971,16 +966,6 @@ function addNewAccount() {
   }
   // Basculer sur le nouveau compte
   _doSwitchAccount(newAcc.id);
-}
-
-function openAccountPinPrompt(accId) {
-  // Simple prompt PIN pour le changement de compte protégé
-  const entered = prompt('Code PIN requis pour accéder à ce compte :');
-  if (!entered) return;
-  const accs = getAccounts();
-  const acc = accs.find(a => a.id === accId);
-  if (acc && entered === acc.pinHash) _doSwitchAccount(accId);
-  else alert('Code PIN incorrect.');
 }
 
 function updateAccountMenuInNav() {
