@@ -254,6 +254,14 @@ function cfKpiValueText(field) {
     const c = realTrades().filter(t => t['cf_' + field.id]).length;
     return c + ' réponse' + (c > 1 ? 's' : '');
   }
+  if (field.type === 'toggle') {
+    const map = cfCategoryStats(field);
+    const oui = map['Oui'] || {wins: 0, total: 0};
+    const non = map['Non'] || {wins: 0, total: 0};
+    if (!oui.total && !non.total) return '—';
+    const wr = oui.total ? Math.round((oui.wins / oui.total) * 100) + '%' : '—';
+    return `${oui.total} oui · ${non.total} non · ${wr} WR`;
+  }
   const map = cfCategoryStats(field);
   const ks = Object.keys(map);
   if (!ks.length) return '—';
