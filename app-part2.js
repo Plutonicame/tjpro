@@ -263,6 +263,11 @@ async function afterPinValidated() {
   const pulled = await initialPullWithRetry();
   pullGlobalChatData();
 
+  // Redécouvre les comptes créés/renommés depuis un autre appareil (voir
+  // discoverCloudAccounts) et rafraîchit le menu des comptes si besoin.
+  const accountsChanged = await discoverCloudAccounts();
+  if (accountsChanged && typeof renderAccountMenu === 'function') renderAccountMenu();
+
   // Supprimer écran de chargement
   const le = document.getElementById('loadingScreen');
   if (le) le.remove();
@@ -718,6 +723,7 @@ function buildSyncPayload(trades) {
   return {
     user_id: currentUser.id,
     acc_id: _currentAccId, // isole les trades/réglages de CE sous-compte local des autres
+    acc_name: (getAccounts().find(a => a.id === _currentAccId) || {}).name || null, // permet de redécouvrir ce compte (nom inclus) depuis un autre appareil, voir discoverCloudAccounts()
     trades,
     lists: APP.lists,
     next_id: APP.nextId,
@@ -765,13 +771,17 @@ function buildSyncPayload(trades) {
 
 // Détecte l'erreur Postgres "colonne inexistante" (42703) pour les colonnes
 // ajoutées par des migrations Supabase à part (profile_pseudo/profile_photo,
-// cf_config), qui peuvent ne pas avoir encore été appliquées sur ce projet.
+// cf_config, acc_name), qui peuvent ne pas avoir encore été appliquées sur ce
+// projet.
 function isMissingProfileColumnError(error) {
   if (!error) return false;
   const msg = ((error.message || '') + ' ' + (error.details || '')).toLowerCase();
   return (
     error.code === '42703' &&
-    (msg.includes('profile_pseudo') || msg.includes('profile_photo') || msg.includes('cf_config'))
+    (msg.includes('profile_pseudo') ||
+      msg.includes('profile_photo') ||
+      msg.includes('cf_config') ||
+      msg.includes('acc_name'))
   );
 }
 function pushJournalDataRow(payload) {
@@ -836,7 +846,7 @@ async function pushToCloud(opts) {
         'Colonnes profil absentes côté Supabase, nouvel essai sans elles :',
         error.message
       );
-      const {profile_pseudo, profile_photo, cf_config, ...dataWithoutProfile} = data;
+      const {profile_pseudo, profile_photo, cf_config, acc_name, ...dataWithoutProfile} = data;
       ({error} = await pushJournalDataRow(dataWithoutProfile));
       if (myGen !== _pushGeneration) return;
     }
@@ -1142,6 +1152,18 @@ function _applyCloudDataDirect(data, cloudTrades) {
     }
   }
 
+  // Propage le renommage d'un compte fait sur un autre appareil : si le nom
+  // reçu du cloud diffère du nom local pour ce compte, on aligne le local.
+  if (data.acc_name) {
+    const _accsForRename = getAccounts();
+    const _accIdxForRename = _accsForRename.findIndex(a => a.id === _currentAccId);
+    if (_accIdxForRename !== -1 && _accsForRename[_accIdxForRename].name !== data.acc_name) {
+      _accsForRename[_accIdxForRename].name = data.acc_name;
+      saveAccounts(_accsForRename);
+      if (typeof renderAccountMenu === 'function') renderAccountMenu();
+    }
+  }
+
   if (data.profile_pseudo != null)
     localStorage.setItem(profileKey('tjp_profile_pseudo'), data.profile_pseudo);
   if (data.profile_photo != null)
@@ -1274,6 +1296,57 @@ function stopRealtime() {
 }
 
 // ── Sondage périodique (filet de sécurité si le temps réel a un souci) ──
+// Redécouvre, à partir du cloud, les comptes de trading créés sur un autre
+// appareil et pas encore connus localement (ex : "Compte 2" créé sur PC,
+// jamais vu sur le téléphone). Sans ça, la liste des comptes elle-même
+// (tjp_accounts) ne vivait que dans le stockage local de chaque appareil :
+// les données de chaque compte étaient bien synchronisées via leur acc_id,
+// mais rien ne recréait localement un compte dont on n'avait jamais entendu
+// parler sur CET appareil. Propage aussi les renommages (acc_name).
+async function discoverCloudAccounts() {
+  if (!currentUser) return false;
+  let sel = await sb
+    .from('journal_data')
+    .select('acc_id, acc_name')
+    .eq('user_id', currentUser.id)
+    .not('acc_id', 'is', null)
+    .neq('acc_id', GLOBAL_SYNC_ACC_ID);
+  if (sel.error && isMissingProfileColumnError(sel.error)) {
+    // acc_name pas encore migrée côté Supabase : on découvre quand même les
+    // comptes, juste sans leur nom (repli sur une numérotation par défaut).
+    sel = await sb
+      .from('journal_data')
+      .select('acc_id')
+      .eq('user_id', currentUser.id)
+      .not('acc_id', 'is', null)
+      .neq('acc_id', GLOBAL_SYNC_ACC_ID);
+  }
+  if (sel.error || !sel.data) return false;
+  const accs = getAccounts();
+  let changed = false;
+  const seen = new Set();
+  sel.data.forEach(row => {
+    if (!row.acc_id || seen.has(row.acc_id)) return;
+    seen.add(row.acc_id);
+    const existing = accs.find(a => a.id === row.acc_id);
+    if (!existing) {
+      accs.push({
+        id: row.acc_id,
+        name: row.acc_name || 'Compte ' + (accs.length + 1),
+        pinHash: null,
+        createdAt: Date.now()
+      });
+      changed = true;
+    } else if (row.acc_name && existing.name !== row.acc_name) {
+      existing.name = row.acc_name;
+      changed = true;
+    }
+  });
+  if (changed) saveAccounts(accs);
+  return changed;
+}
+
+let _pollTickCount = 0;
 function startPolling() {
   if (window._pollInterval) return;
   window._pollInterval = setInterval(async () => {
@@ -1295,6 +1368,14 @@ function startPolling() {
           applyCloudData(data[0]);
           showSync('✓ Mis à jour', '#22c55e');
         }
+      }
+      // Découverte des comptes créés depuis un autre appareil, en tâche de
+      // fond, moins souvent que le sondage principal (~1 min au lieu de 15s)
+      // pour limiter le nombre de requêtes.
+      _pollTickCount++;
+      if (_pollTickCount % 4 === 0) {
+        const accountsChanged = await discoverCloudAccounts();
+        if (accountsChanged && typeof renderAccountMenu === 'function') renderAccountMenu();
       }
     } catch (e) {}
   }, 15000); // toutes les 15s
