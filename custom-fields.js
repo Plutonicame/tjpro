@@ -244,25 +244,32 @@ function cfCategoryOrder(field, map) {
   }
   return Object.keys(map);
 }
+// Toutes les cases KPI (bandeau du haut ET cartes de la section Graphiques)
+// suivent l'UNIQUE bouton BT déjà présent en haut du bandeau KPI (bt-kpi /
+// BT_STATE.kpi) — pas de bouton BT individuel ajouté sur les nouvelles cases.
+function cfKpiTradesFor(field) {
+  return typeof BT_STATE !== 'undefined' && BT_STATE.kpi ? APP.trades : realTrades();
+}
 function cfKpiValueText(field) {
+  const trades = cfKpiTradesFor(field);
   if (field.type === 'stars' || field.type === 'number') {
-    const {avg, count} = cfNumericStats(field);
+    const {avg, count} = cfNumericStats(field, trades);
     if (!count) return '—';
     return avg.toFixed(field.type === 'stars' ? 1 : 2) + (field.type === 'stars' ? ' ★' : '');
   }
   if (field.type === 'text') {
-    const c = realTrades().filter(t => t['cf_' + field.id]).length;
+    const c = trades.filter(t => t['cf_' + field.id]).length;
     return c + ' réponse' + (c > 1 ? 's' : '');
   }
   if (field.type === 'toggle') {
-    const map = cfCategoryStats(field);
+    const map = cfCategoryStats(field, trades);
     const oui = map['Oui'] || {wins: 0, total: 0};
     const non = map['Non'] || {wins: 0, total: 0};
     if (!oui.total && !non.total) return '—';
     const wr = oui.total ? Math.round((oui.wins / oui.total) * 100) + '%' : '—';
-    return `${oui.total} oui · ${non.total} non · ${wr} WR`;
+    return `${oui.total} oui · ${non.total} non · ${wr}`;
   }
-  const map = cfCategoryStats(field);
+  const map = cfCategoryStats(field, trades);
   const ks = Object.keys(map);
   if (!ks.length) return '—';
   ks.sort((a, b) => map[b].total - map[a].total);

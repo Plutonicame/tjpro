@@ -1276,7 +1276,17 @@ function startRealtime() {
           applyIaChatData(payload.new.ia_chat_data);
           return;
         }
-        if (payload.new.acc_id !== _currentAccId) return; // évènement pour un AUTRE sous-compte local : ignoré ici
+        if (payload.new.acc_id !== _currentAccId) {
+          // Évènement pour un AUTRE sous-compte : si c'est un compte encore
+          // inconnu sur cet appareil (créé/modifié ailleurs), le découvrir
+          // tout de suite plutôt que d'attendre le prochain sondage (~1 min).
+          if (!getAccounts().some(a => a.id === payload.new.acc_id)) {
+            discoverCloudAccounts().then(changed => {
+              if (changed && typeof renderAccountMenu === 'function') renderAccountMenu();
+            });
+          }
+          return;
+        }
         if (_lastPushTimestamp && payload.new.updated_at === _lastPushTimestamp) return; // écho de notre propre envoi
         _isSyncing = true;
         applyCloudData(payload.new);
@@ -1296,11 +1306,13 @@ function stopRealtime() {
 }
 
 // ── Sondage périodique (filet de sécurité si le temps réel a un souci) ──
-// Ne crée plus de compte local à partir du cloud (ça faisait réapparaître
-// tout seul, à chaque connexion, d'anciens comptes de test/orphelins) :
-// ajouter un compte reste une action volontaire de l'utilisateur ("＋
-// Ajouter un compte"). Propage seulement les renommages (acc_name) d'un
-// compte DÉJÀ connu sur CET appareil, pour rester cohérent entre appareils.
+// Redécouvre, à partir du cloud, les comptes de trading créés sur un autre
+// appareil et pas encore connus localement (ex : "Compte 2" créé sur PC,
+// jamais vu sur le téléphone). Sans ça, la liste des comptes elle-même
+// (tjp_accounts) ne vivait que dans le stockage local de chaque appareil :
+// les données de chaque compte étaient bien synchronisées via leur acc_id,
+// mais rien ne recréait localement un compte dont on n'avait jamais entendu
+// parler sur CET appareil. Propage aussi les renommages (acc_name).
 async function discoverCloudAccounts() {
   if (!currentUser) return false;
   let sel = await sb
@@ -1322,16 +1334,20 @@ async function discoverCloudAccounts() {
   if (sel.error || !sel.data) return false;
   const accs = getAccounts();
   let changed = false;
+  const seen = new Set();
   sel.data.forEach(row => {
-    if (!row.acc_id) return;
+    if (!row.acc_id || seen.has(row.acc_id)) return;
+    seen.add(row.acc_id);
     const existing = accs.find(a => a.id === row.acc_id);
-    // On ne crée PLUS de nouveau compte local automatiquement à partir d'un
-    // acc_id trouvé dans le cloud (ça faisait apparaître tout seul, à chaque
-    // connexion, d'anciens comptes de test/orphelins). Ajouter un compte
-    // reste une action volontaire de l'utilisateur (bouton "＋ Ajouter un
-    // compte"). On continue seulement à propager le renommage d'un compte
-    // DÉJÀ connu sur cet appareil, pour rester cohérent entre appareils.
-    if (existing && row.acc_name && existing.name !== row.acc_name) {
+    if (!existing) {
+      accs.push({
+        id: row.acc_id,
+        name: row.acc_name || 'Compte ' + (accs.length + 1),
+        pinHash: null,
+        createdAt: Date.now()
+      });
+      changed = true;
+    } else if (row.acc_name && existing.name !== row.acc_name) {
       existing.name = row.acc_name;
       changed = true;
     }

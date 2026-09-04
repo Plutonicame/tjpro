@@ -944,6 +944,18 @@ function deleteAccount(accId) {
     'tj_rm_down_var_val'
   ];
   keys.forEach(k => localStorage.removeItem(`${k}__${accId}`));
+  // Supprimer aussi la ligne cloud de ce compte : sinon elle reste orpheline
+  // dans journal_data et discoverCloudAccounts() la recréerait "fantôme" au
+  // prochain login sur un autre appareil (ou sur celui-ci après réinstall).
+  if (typeof currentUser !== 'undefined' && currentUser && typeof sb !== 'undefined') {
+    sb.from('journal_data')
+      .delete()
+      .eq('user_id', currentUser.id)
+      .eq('acc_id', accId)
+      .then(({error}) => {
+        if (error) console.warn('Suppression cloud du compte échouée :', error);
+      });
+  }
   accs = accs.filter(a => a.id !== accId);
   saveAccounts(accs);
   // Basculer sur un autre compte si on était sur celui-ci
@@ -966,6 +978,11 @@ function addNewAccount() {
   }
   // Basculer sur le nouveau compte
   _doSwitchAccount(newAcc.id);
+  // Pousser ce nouveau compte vers le cloud immédiatement (même vide), pour
+  // qu'il soit visible sur les autres appareils sans attendre un 1er trade.
+  if (typeof currentUser !== 'undefined' && currentUser && typeof schedulePush === 'function') {
+    schedulePush(0, {force: true});
+  }
 }
 
 function updateAccountMenuInNav() {
