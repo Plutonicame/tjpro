@@ -54,6 +54,11 @@ async function callPinAuth(payload, accessToken) {
   return data;
 }
 
+// Un seul écouteur clavier PIN actif à la fois : chaque nouvel appel à buildPad()
+// retire l'écouteur du pavé précédent avant d'attacher le sien (évite l'empilement
+// et toute fuite d'un pavé PIN caché qui continuerait à intercepter des touches).
+let _pinKeydownHandler = null;
+
 function buildPad(padId, dotsId, onComplete, errId) {
   const pad = document.getElementById(padId);
   pad.innerHTML = '';
@@ -76,24 +81,45 @@ function buildPad(padId, dotsId, onComplete, errId) {
     const err = document.getElementById(errId);
     if (!shake && err) err.style.display = 'none';
   }
+  function typeDigit(k) {
+    if (entry.length < 4) {
+      entry += k;
+      update();
+    }
+  }
+  function backspace() {
+    if (entry.length > 0) {
+      entry = entry.slice(0, -1);
+      update();
+    }
+  }
   ['1', '2', '3', '4', '5', '6', '7', '8', '9', 'empty', '0', 'del'].forEach(k => {
     const btn = document.createElement('button');
     btn.className = 'pin-btn' + (k === 'del' ? ' del' : k === 'empty' ? ' empty' : '');
     btn.textContent = k === 'del' ? '⌫' : k === 'empty' ? '' : k;
-    if (k !== 'empty')
-      btn.onclick = () => {
-        if (k === 'del') {
-          if (entry.length > 0) {
-            entry = entry.slice(0, -1);
-            update();
-          }
-        } else if (entry.length < 4) {
-          entry += k;
-          update();
-        }
-      };
+    if (k !== 'empty') btn.onclick = () => (k === 'del' ? backspace() : typeDigit(k));
     pad.appendChild(btn);
   });
+
+  // Saisie au clavier physique (PC) : les mêmes chiffres sont acceptés, mais on
+  // n'agit QUE sur `entry`/les points — jamais sur les boutons .pin-btn eux-mêmes.
+  // Comme le bouton correspondant n'est ni cliqué ni focus, son état :active
+  // (fond + zoom) ne se déclenche jamais : rien ne montre à l'écran quelle touche
+  // a été tapée, pour rester utilisable en public sans risque de regard indiscret.
+  if (_pinKeydownHandler) document.removeEventListener('keydown', _pinKeydownHandler);
+  _pinKeydownHandler = e => {
+    if (pad.offsetParent === null) return; // ce pavé n'est plus affiché
+    const tag = document.activeElement && document.activeElement.tagName;
+    if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+    if (e.key >= '0' && e.key <= '9') {
+      e.preventDefault();
+      typeDigit(e.key);
+    } else if (e.key === 'Backspace' || e.key === 'Delete') {
+      e.preventDefault();
+      backspace();
+    }
+  };
+  document.addEventListener('keydown', _pinKeydownHandler);
 }
 
 let pinFirstEntry = '';
