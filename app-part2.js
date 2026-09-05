@@ -781,11 +781,37 @@ function isMissingProfileColumnError(error) {
     (msg.includes('profile_pseudo') ||
       msg.includes('profile_photo') ||
       msg.includes('cf_config') ||
-      msg.includes('acc_name'))
+      msg.includes('acc_name') ||
+      msg.includes('deleted'))
   );
 }
 function pushJournalDataRow(payload) {
   return sb.from('journal_data').upsert(payload, {onConflict: 'user_id,acc_id'});
+}
+
+// Marque un compte comme supprimé côté cloud. Volontairement un UPSERT (comme
+// pour les trades) et non un DELETE SQL : les policies RLS de journal_data
+// n'ont jamais inclus de permission DELETE (jamais nécessaire avant cette
+// fonctionnalité), donc un DELETE direct est silencieusement filtré (0 ligne
+// affectée, pas d'erreur JS) et la ligne — donc le compte fantôme — persiste.
+// L'UPSERT, lui, est déjà autorisé de longue date : même chemin que le reste.
+async function cloudDeleteAccount(accId) {
+  if (!currentUser) return;
+  const payload = {
+    user_id: currentUser.id,
+    acc_id: accId,
+    deleted: true,
+    updated_at: new Date().toISOString()
+  };
+  const {error} = await sb.from('journal_data').upsert(payload, {onConflict: 'user_id,acc_id'});
+  if (error && isMissingProfileColumnError(error)) {
+    // Migration `deleted` pas encore appliquée côté Supabase : repli sur un
+    // DELETE direct (ne fonctionnera que si la policy RLS l'autorise déjà).
+    const del = await sb.from('journal_data').delete().eq('user_id', currentUser.id).eq('acc_id', accId);
+    if (del.error) console.warn('Suppression cloud du compte échouée :', del.error);
+  } else if (error) {
+    console.warn('Suppression cloud du compte échouée :', error);
+  }
 }
 
 // ── Envoi vers le cloud ──
@@ -1287,16 +1313,18 @@ function startRealtime() {
           return;
         }
         if (payload.new.acc_id !== _currentAccId) {
-          // Évènement pour un AUTRE sous-compte : si c'est un compte encore
-          // inconnu sur cet appareil (créé/modifié ailleurs), le découvrir
-          // tout de suite plutôt que d'attendre le prochain sondage (~1 min).
-          if (!getAccounts().some(a => a.id === payload.new.acc_id)) {
+          // Évènement pour un AUTRE sous-compte : compte tout juste marqué
+          // supprimé (deleted:true, voir cloudDeleteAccount) OU compte encore
+          // inconnu ici (créé ailleurs) → réconcilier tout de suite plutôt
+          // que d'attendre le prochain sondage (~1 min).
+          if (payload.new.deleted || !getAccounts().some(a => a.id === payload.new.acc_id)) {
             discoverCloudAccounts().then(changed => {
               if (changed && typeof renderAccountMenu === 'function') renderAccountMenu();
             });
           }
           return;
         }
+        if (payload.new.deleted) return; // notre propre compte actif marqué supprimé ailleurs : rien à appliquer
         if (_lastPushTimestamp && payload.new.updated_at === _lastPushTimestamp) return; // écho de notre propre envoi
         _isSyncing = true;
         applyCloudData(payload.new);
@@ -1330,10 +1358,11 @@ async function discoverCloudAccounts() {
     .select('acc_id, acc_name')
     .eq('user_id', currentUser.id)
     .not('acc_id', 'is', null)
-    .neq('acc_id', GLOBAL_SYNC_ACC_ID);
+    .neq('acc_id', GLOBAL_SYNC_ACC_ID)
+    .eq('deleted', false);
   if (sel.error && isMissingProfileColumnError(sel.error)) {
-    // acc_name pas encore migrée côté Supabase : on découvre quand même les
-    // comptes, juste sans leur nom (repli sur une numérotation par défaut).
+    // acc_name/deleted pas encore migrées côté Supabase : on découvre quand
+    // même les comptes (sans filtre "deleted" ni nom, repli par défaut).
     sel = await sb
       .from('journal_data')
       .select('acc_id')

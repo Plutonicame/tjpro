@@ -944,18 +944,12 @@ function deleteAccount(accId) {
     'tj_rm_down_var_val'
   ];
   keys.forEach(k => localStorage.removeItem(`${k}__${accId}`));
-  // Supprimer aussi la ligne cloud de ce compte : sinon elle reste orpheline
-  // dans journal_data et discoverCloudAccounts() la recréerait "fantôme" au
-  // prochain login sur un autre appareil (ou sur celui-ci après réinstall).
-  if (typeof currentUser !== 'undefined' && currentUser && typeof sb !== 'undefined') {
-    sb.from('journal_data')
-      .delete()
-      .eq('user_id', currentUser.id)
-      .eq('acc_id', accId)
-      .then(({error}) => {
-        if (error) console.warn('Suppression cloud du compte échouée :', error);
-      });
-  }
+  // Marquer ce compte comme supprimé dans le cloud : même mécanisme que les
+  // trades (upsert, déjà autorisé par les policies existantes), pas un DELETE
+  // SQL brut — les policies RLS actuelles n'ont jamais prévu de permission de
+  // suppression de ligne, donc un vrai DELETE échoue silencieusement (0 ligne
+  // affectée, aucune erreur) et le compte revient au sondage suivant.
+  if (typeof cloudDeleteAccount === 'function') cloudDeleteAccount(accId);
   accs = accs.filter(a => a.id !== accId);
   saveAccounts(accs);
   // Basculer sur un autre compte si on était sur celui-ci
