@@ -1410,22 +1410,31 @@ async function discoverCloudAccounts() {
         createdAt: Date.now()
       });
       changed = true;
-    } else if (row.acc_name && existing.name !== row.acc_name) {
-      existing.name = row.acc_name;
-      changed = true;
+    } else {
+      if (row.acc_name && existing.name !== row.acc_name) {
+        existing.name = row.acc_name;
+        changed = true;
+      }
+      if (existing.pendingSync) {
+        // Vu au moins une fois dans le cloud : ce compte est bien arrivé,
+        // il n'a plus besoin d'être protégé d'une suppression locale.
+        delete existing.pendingSync;
+        changed = true;
+      }
     }
   });
   // Retire les comptes locaux dont la ligne cloud a disparu (compte
-  // supprimé depuis un autre appareil, ou vieille ligne fantôme qu'on vient
-  // de nettoyer) — jamais le compte actif, et on laisse 2 min de marge à un
-  // compte tout juste créé le temps que son 1er push (addNewAccount) arrive
-  // dans le cloud, pour ne pas le supprimer par erreur avant qu'il n'y soit.
-  const GRACE_MS = 2 * 60 * 1000;
+  // supprimé depuis un autre appareil) — jamais le compte actif, ni un
+  // compte encore "pendingSync" (tout juste créé, jamais vu dans le cloud
+  // ne serait-ce qu'une fois — donc son 1er push n'est probablement pas
+  // encore arrivé, pas de suppression). Pas de délai arbitraire ici : dès
+  // qu'un compte a été vu une fois (ci-dessus), son absence signifie une
+  // vraie suppression, pas un push en retard.
   const before = accs.length;
   accs = accs.filter(a => {
     if (a.id === _currentAccId) return true;
     if (seen.has(a.id)) return true;
-    if (a.createdAt && Date.now() - a.createdAt < GRACE_MS) return true;
+    if (a.pendingSync) return true;
     return false;
   });
   if (accs.length !== before) changed = true;

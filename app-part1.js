@@ -451,7 +451,13 @@ function createAccount(sourcAccId) {
   const accs = getAccounts();
   const newId = 'acc_' + Date.now();
   const newName = 'Compte ' + (accs.length + 1);
-  const newAcc = {id: newId, name: newName, pinHash: null, createdAt: Date.now()};
+  // pendingSync: protège ce compte d'une suppression locale par
+  // discoverCloudAccounts() tant que sa toute première ligne cloud n'a pas
+  // encore été vue au moins une fois (voir cette fonction) — sans quoi un
+  // compte tout juste créé, pas encore poussé, semblerait "supprimé" au
+  // premier passage. Levé dès qu'il est vu une fois dans le cloud, sur
+  // n'importe quel appareil.
+  const newAcc = {id: newId, name: newName, pinHash: null, createdAt: Date.now(), pendingSync: true};
   accs.push(newAcc);
   saveAccounts(accs);
   // Initialiser localStorage du nouveau compte avec valeurs par défaut
