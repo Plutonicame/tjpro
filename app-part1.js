@@ -2082,25 +2082,161 @@ function openFullscreen(src) {
   // Créer overlay plein écran
   const overlay = document.createElement('div');
   overlay.style.cssText =
-    'position:fixed;inset:0;background:rgba(0,0,0,.95);z-index:99999;display:flex;align-items:center;justify-content:center;cursor:zoom-out;';
-  overlay.onclick = () => document.body.removeChild(overlay);
+    'position:fixed;inset:0;background:rgba(0,0,0,.95);z-index:99999;display:flex;align-items:center;justify-content:center;cursor:zoom-out;overflow:hidden;touch-action:none;';
   const img = document.createElement('img');
   img.src = src;
+  img.draggable = false;
   img.style.cssText =
-    'max-width:95vw;max-height:95vh;width:auto;height:auto;object-fit:contain;border-radius:6px;';
+    'max-width:95vw;max-height:95vh;width:auto;height:auto;object-fit:contain;border-radius:6px;touch-action:none;cursor:zoom-in;';
+
+  function close() {
+    if (overlay.parentNode) document.body.removeChild(overlay);
+  }
+
+  // ── Zoom (molette souris / pincement tactile) + déplacement (glisser) ──
+  let scale = 1,
+    tx = 0,
+    ty = 0;
+  const MIN_SCALE = 1,
+    MAX_SCALE = 5;
+  function applyTransform(smooth) {
+    img.style.transition = smooth ? 'transform .15s ease-out' : 'none';
+    img.style.transform = `translate(${tx}px, ${ty}px) scale(${scale})`;
+    img.style.cursor = scale > MIN_SCALE ? 'grab' : 'zoom-in';
+  }
+  function clampPan() {
+    // Empêche de faire glisser l'image hors de vue quand elle est zoomée
+    const maxTx = ((scale - 1) * img.clientWidth) / 2;
+    const maxTy = ((scale - 1) * img.clientHeight) / 2;
+    tx = Math.max(-maxTx, Math.min(maxTx, tx));
+    ty = Math.max(-maxTy, Math.min(maxTy, ty));
+  }
+  function zoomAt(clientX, clientY, newScale) {
+    newScale = Math.max(MIN_SCALE, Math.min(MAX_SCALE, newScale));
+    const rect = img.getBoundingClientRect();
+    const cx = clientX - (rect.left + rect.width / 2);
+    const cy = clientY - (rect.top + rect.height / 2);
+    const ratio = newScale / scale;
+    tx = cx - (cx - tx) * ratio;
+    ty = cy - (cy - ty) * ratio;
+    scale = newScale;
+    if (scale === MIN_SCALE) {
+      tx = 0;
+      ty = 0;
+    }
+    clampPan();
+    applyTransform(true);
+  }
+
+  // Molette (PC)
+  img.addEventListener(
+    'wheel',
+    e => {
+      e.preventDefault();
+      zoomAt(e.clientX, e.clientY, scale * (e.deltaY < 0 ? 1.25 : 0.8));
+    },
+    { passive: false }
+  );
+
+  // Glisser (souris) + pincement à deux doigts (tactile), via Pointer Events unifiés
+  const pointers = new Map();
+  let dragging = false,
+    panStart = null,
+    tapStart = null,
+    pinchStartDist = 0,
+    pinchStartScale = 1,
+    moved = false;
+  function dist(a, b) {
+    return Math.hypot(a.x - b.x, a.y - b.y);
+  }
+  function midpoint(a, b) {
+    return { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+  }
+  img.addEventListener('pointerdown', e => {
+    img.setPointerCapture(e.pointerId);
+    pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (pointers.size === 1) {
+      dragging = true;
+      moved = false;
+      tapStart = { x: e.clientX, y: e.clientY };
+      panStart = { x: e.clientX - tx, y: e.clientY - ty };
+    } else if (pointers.size === 2) {
+      const [a, b] = [...pointers.values()];
+      pinchStartDist = dist(a, b);
+      pinchStartScale = scale;
+    }
+  });
+  img.addEventListener('pointermove', e => {
+    if (!pointers.has(e.pointerId)) return;
+    pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (pointers.size === 2) {
+      const [a, b] = [...pointers.values()];
+      if (pinchStartDist > 0) {
+        const mid = midpoint(a, b);
+        zoomAt(mid.x, mid.y, pinchStartScale * (dist(a, b) / pinchStartDist));
+      }
+      moved = true;
+    } else if (dragging) {
+      if (Math.hypot(e.clientX - tapStart.x, e.clientY - tapStart.y) > 6) moved = true;
+      if (scale > MIN_SCALE) {
+        tx = e.clientX - panStart.x;
+        ty = e.clientY - panStart.y;
+        clampPan();
+        applyTransform(false);
+      }
+    }
+  });
+  function endPointer(e) {
+    pointers.delete(e.pointerId);
+    if (pointers.size < 2) pinchStartDist = 0;
+    if (pointers.size === 1) {
+      // Un doigt levé pendant un pincement : reprise en glisser simple avec le
+      // doigt restant, recalcule l'origine pour éviter un saut visuel.
+      const [p] = [...pointers.values()];
+      panStart = { x: p.x - tx, y: p.y - ty };
+      tapStart = { x: p.x, y: p.y };
+      dragging = true;
+    } else if (pointers.size === 0) {
+      dragging = false;
+    }
+  }
+  img.addEventListener('pointerup', endPointer);
+  img.addEventListener('pointercancel', endPointer);
+
+  // Tap/clic simple = ferme (avec un court délai pour laisser une chance au double-
+  // tap/double-clic, qui bascule le zoom à la place). Un glisser ne ferme jamais.
+  let pendingClose = null;
+  img.addEventListener('click', e => {
+    e.stopPropagation();
+    if (moved) return;
+    if (pendingClose) {
+      clearTimeout(pendingClose);
+      pendingClose = null;
+      zoomAt(e.clientX, e.clientY, scale > MIN_SCALE ? MIN_SCALE : 2.5);
+    } else {
+      pendingClose = setTimeout(() => {
+        pendingClose = null;
+        if (scale === MIN_SCALE) close();
+      }, 280);
+    }
+  });
+
+  overlay.onclick = close;
+
   // Bouton fermer
   const closeBtn = document.createElement('button');
   closeBtn.textContent = '✕';
   closeBtn.style.cssText =
-    'position:absolute;top:16px;right:16px;background:rgba(255,255,255,.15);border:none;color:#fff;font-size:20px;width:40px;height:40px;border-radius:50%;cursor:pointer;';
+    'position:absolute;top:16px;right:16px;background:rgba(255,255,255,.15);border:none;color:#fff;font-size:20px;width:40px;height:40px;border-radius:50%;cursor:pointer;z-index:1;';
   closeBtn.onclick = e => {
     e.stopPropagation();
-    document.body.removeChild(overlay);
+    close();
   };
   overlay.appendChild(img);
   overlay.appendChild(closeBtn);
   document.body.appendChild(overlay);
 }
+
 function deleteTradeImage(id, idx) {
   const t = APP.trades.find(x => x.id === id);
   if (!t || !t.images) return;
