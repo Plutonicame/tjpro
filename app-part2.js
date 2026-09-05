@@ -1270,6 +1270,16 @@ function startRealtime() {
         filter: 'user_id=eq.' + currentUser.id
       },
       payload => {
+        if (payload.eventType === 'DELETE') {
+          // Une ligne journal_data a été supprimée (compte supprimé sur un
+          // autre appareil) : on réconcilie tout de suite avec le cloud
+          // plutôt que d'attendre le sondage (~1 min), pour que la
+          // suppression se propage ici quasi instantanément.
+          discoverCloudAccounts().then(changed => {
+            if (changed && typeof renderAccountMenu === 'function') renderAccountMenu();
+          });
+          return;
+        }
         if (!payload.new || payload.new.user_id !== currentUser.id) return;
         if (payload.new.acc_id === GLOBAL_SYNC_ACC_ID) {
           if (_lastChatPushTimestamp && payload.new.updated_at === _lastChatPushTimestamp) return;
@@ -1332,7 +1342,7 @@ async function discoverCloudAccounts() {
       .neq('acc_id', GLOBAL_SYNC_ACC_ID);
   }
   if (sel.error || !sel.data) return false;
-  const accs = getAccounts();
+  let accs = getAccounts();
   let changed = false;
   const seen = new Set();
   sel.data.forEach(row => {
@@ -1352,6 +1362,20 @@ async function discoverCloudAccounts() {
       changed = true;
     }
   });
+  // Retire les comptes locaux dont la ligne cloud a disparu (compte
+  // supprimé depuis un autre appareil, ou vieille ligne fantôme qu'on vient
+  // de nettoyer) — jamais le compte actif, et on laisse 2 min de marge à un
+  // compte tout juste créé le temps que son 1er push (addNewAccount) arrive
+  // dans le cloud, pour ne pas le supprimer par erreur avant qu'il n'y soit.
+  const GRACE_MS = 2 * 60 * 1000;
+  const before = accs.length;
+  accs = accs.filter(a => {
+    if (a.id === _currentAccId) return true;
+    if (seen.has(a.id)) return true;
+    if (a.createdAt && Date.now() - a.createdAt < GRACE_MS) return true;
+    return false;
+  });
+  if (accs.length !== before) changed = true;
   if (changed) saveAccounts(accs);
   return changed;
 }
