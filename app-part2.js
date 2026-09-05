@@ -1296,6 +1296,16 @@ function startRealtime() {
         filter: 'user_id=eq.' + currentUser.id
       },
       payload => {
+        // Log de diagnostic temporaire (à retirer une fois le temps réel
+        // confirmé fiable) : à supprimer/ignorer si tout fonctionne, mais
+        // permet de voir dans la console si l'évènement arrive bien et avec
+        // quelles données, en cas de nouveau souci de propagation.
+        console.log(
+          '[TJP realtime]',
+          payload.eventType,
+          'acc_id=' + (payload.new?.acc_id ?? payload.old?.acc_id),
+          'deleted=' + payload.new?.deleted
+        );
         if (payload.eventType === 'DELETE') {
           // Une ligne journal_data a été supprimée (compte supprimé sur un
           // autre appareil) : on réconcilie tout de suite avec le cloud
@@ -1333,7 +1343,21 @@ function startRealtime() {
       }
     )
     .subscribe(status => {
-      if (status === 'SUBSCRIBED') showSync('✓ Temps réel actif', '#22c55e');
+      if (status === 'SUBSCRIBED') {
+        showSync('✓ Temps réel actif', '#22c55e');
+      } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
+        // Le canal est mort (réseau coupé, veille, jeton expiré...) : sans ça
+        // il reste bloqué silencieusement pour toujours, car startRealtime()
+        // refuse de relancer tant que _realtimeChannel référence encore
+        // l'ancien canal (même mort). On le libère et on retente sous 3s.
+        if (_realtimeChannel) {
+          sb.removeChannel(_realtimeChannel);
+          _realtimeChannel = null;
+        }
+        setTimeout(() => {
+          if (currentUser) startRealtime();
+        }, 3000);
+      }
     });
 }
 function stopRealtime() {
@@ -1417,6 +1441,13 @@ function startPolling() {
     try {
       const {data: rd} = await sb.auth.refreshSession();
       if (rd?.session?.user) currentUser = rd.session.user;
+      if (rd?.session?.access_token && sb.realtime && typeof sb.realtime.setAuth === 'function') {
+        sb.realtime.setAuth(rd.session.access_token); // voir startRealtime() : jeton du canal temps réel tenu à jour
+      }
+      // Filet de sécurité : si le canal temps réel a disparu sans même passer
+      // par un statut d'erreur explicite (websocket mort en silence), on le
+      // relance ici — pire cas, la synchro reste au moins réactive sous 15s.
+      if (!_realtimeChannel) startRealtime();
       const {data, error} = await sb
         .from('journal_data')
         .select('*')
