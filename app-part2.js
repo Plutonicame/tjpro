@@ -2680,7 +2680,8 @@ async function pcAskAI(question, trades, history) {
   let authToken = PC_SUPABASE_ANON_KEY;
   let payload = {
     question,
-    history: pcHistoryForAI(history)
+    history: pcHistoryForAI(history),
+    acc_id: _currentAccId // indispensable côté serveur pour cibler la bonne ligne journal_data
   };
 
   let pushOk = true;
