@@ -2729,14 +2729,20 @@ async function pcAskAI(question, trades, history) {
   const data = await res.json();
   if (data.error) throw new Error(data.error);
 
-  // Images réellement jointes à CETTE requête (celles que l'IA a pu regarder) : uniquement
-  // l'échantillon de trades du repli ci-dessus. Compte cloud en fonctionnement normal : l'IA
-  // va chercher elle-même les images de trades via ses outils côté serveur — on n'a alors
-  // aucun moyen de savoir lesquelles, le cas échéant, elle a demandées.
-  const images = (payload.images || []).map(im => ({
-    label: [im.paire, im.date].filter(Boolean).join(' · '),
-    dataUrl: im.dataUrl
-  }));
+  // Images réellement jointes à CETTE requête (celles que l'IA a pu regarder) : l'échantillon
+  // de trades du repli local ci-dessus, OU (compte cloud) les images que l'IA est allée
+  // chercher elle-même via get_trade_images — la fonction Edge nous les renvoie maintenant
+  // dans data.images pour qu'on puisse les montrer dans le chat.
+  const images = [
+    ...(payload.images || []).map(im => ({
+      label: [im.paire, im.date].filter(Boolean).join(' · '),
+      dataUrl: im.dataUrl
+    })),
+    ...(data.images || []).map(im => ({
+      label: [im.paire, im.date].filter(Boolean).join(' · '),
+      dataUrl: im.dataUrl
+    }))
+  ];
   return {answer: data.answer, images};
 }
 
@@ -2774,14 +2780,20 @@ async function sendPcMessage() {
       '<br><br><span style="opacity:.6;font-size:.85em;">(réponse générée en local, l\'assistant IA est momentanément indisponible)</span>';
   }
 
-  // Miniatures des images envoyées à l'IA pour cette question, pour qu'on voie
-  // exactement ce qu'elle a pu analyser. Recompressées en plus petit avant
-  // d'être conservées dans l'historique (sinon chaque question avec graphiques
-  // alourdirait vite le stockage local).
+  // Miniatures des images envoyées/montrées à l'IA pour cette question, pour qu'on voie
+  // exactement ce qu'elle a pu analyser. Seules les vraies images en base64 (repli local)
+  // sont recompressées avant d'être conservées dans l'historique, pour ne pas alourdir le
+  // stockage local — une URL de storage cloud est déjà juste un lien, rien à compresser.
   let imagesHtml = '';
   if (images.length) {
     try {
-      const thumbs = await Promise.all(images.map(im => compressImage(im.dataUrl, 220, 0.5)));
+      const thumbs = await Promise.all(
+        images.map(im =>
+          typeof im.dataUrl === 'string' && im.dataUrl.startsWith('data:image')
+            ? compressImage(im.dataUrl, 220, 0.5)
+            : Promise.resolve(im.dataUrl)
+        )
+      );
       imagesHtml = pcImagesHtml(images.map((im, i) => ({label: im.label, dataUrl: thumbs[i]})));
     } catch (e) {
       console.warn('Miniatures des images IA impossibles à générer :', e);
