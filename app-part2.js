@@ -841,9 +841,12 @@ async function cloudDeleteAccount(accId) {
 }
 
 // ── Envoi vers le cloud ──
+// Renvoie true si la sauvegarde a bien abouti côté serveur, false sinon — utilisé
+// par pcAskAI pour savoir si les données côté serveur sont fiables avant de laisser
+// l'IA les interroger elle-même (sinon, mieux vaut les lui envoyer directement).
 async function pushToCloud(opts) {
   opts = opts || {};
-  if (!currentUser || !currentUser.id) return;
+  if (!currentUser || !currentUser.id) return false;
   _isPushing = true;
   const myGen = ++_pushGeneration; // identifie ce push précis parmi d'éventuels chevauchements
   try {
@@ -882,13 +885,13 @@ async function pushToCloud(opts) {
         console.warn('Fusion cloud impossible, envoi de la version locale seule :', e);
       }
     }
-    if (myGen !== _pushGeneration) return; // un envoi plus récent a pris le relais entre-temps
+    if (myGen !== _pushGeneration) return true; // un envoi plus récent a pris le relais entre-temps
 
     const data = buildSyncPayload(finalTrades);
     _lastPushTimestamp = data.updated_at;
 
     let {error} = await pushJournalDataRow(data);
-    if (myGen !== _pushGeneration) return;
+    if (myGen !== _pushGeneration) return true;
 
     if (error && isMissingProfileColumnError(error)) {
       // La migration qui ajoute profile_pseudo/profile_photo n'est pas encore
@@ -900,13 +903,14 @@ async function pushToCloud(opts) {
       );
       const {profile_pseudo, profile_photo, cf_config, acc_name, ...dataWithoutProfile} = data;
       ({error} = await pushJournalDataRow(dataWithoutProfile));
-      if (myGen !== _pushGeneration) return;
+      if (myGen !== _pushGeneration) return true;
     }
 
     if (error) {
       console.error('Erreur sauvegarde journal_data :', error);
       showSync('⚠ ' + (error.message || 'Erreur sauvegarde'), '#ef4444');
       pcShowSyncFailureWarning(error.message || 'Erreur inconnue');
+      return false;
     } else {
       showSync('✓ Sauvegardé', '#22c55e');
       localStorage.setItem(accKey('tjp_last_updated_at'), data.updated_at);
@@ -921,14 +925,17 @@ async function pushToCloud(opts) {
         renderTable();
         updateNavBadges();
       }
+      return true;
     }
   } catch (e) {
     if (myGen === _pushGeneration) showSync('⚠ Réseau', '#f59e0b');
+    return false;
+  } finally {
+    if (myGen === _pushGeneration)
+      setTimeout(() => {
+        _isPushing = false;
+      }, 500);
   }
-  if (myGen === _pushGeneration)
-    setTimeout(() => {
-      _isPushing = false;
-    }, 500);
 }
 
 // Sauvegarde manuelle, déclenchée par le bouton "Sauvegarder et synchroniser" :
@@ -2645,39 +2652,8 @@ function pcHistoryForAI(history) {
 
 // Extrait un échantillon raisonnable d'images de trades (les plus récentes) pour l'IA,
 // avec leur contexte (date/paire/résultat), pour rester dans des limites de taille/coût acceptables.
-// Capture tous les graphiques Track Record actuellement rendus (Chart.js) en images, pour
-// que l'IA puisse les voir. Contrairement aux trades/comptes, un graphique n'existe QUE dans
-// le navigateur (rendu sur un <canvas>) — impossible à aller chercher côté serveur, donc on
-// les envoie directement à chaque question (l'IA ne les regarde que si la question l'exige).
-const CHART_LABELS = {
-  eq: 'Évolution du capital',
-  pnl: 'P&L',
-  pie: 'Win Rate',
-  risk: 'Risk Management',
-  mgmt: 'Impact du Management',
-  cConf: 'Comparaison par confluence',
-  cPairs: 'Comparaison par paire',
-  cSessions: 'Comparaison par session',
-  jours: 'Comparaison par jour de semaine',
-  cTF: 'Comparaison par timeframe'
-};
-function pcPrepareChartImages() {
-  const out = [];
-  if (typeof CH !== 'object' || !CH) return out;
-  Object.keys(CH).forEach(key => {
-    try {
-      const chart = CH[key];
-      if (!chart || typeof chart.toBase64Image !== 'function') return;
-      const dataUrl = chart.toBase64Image();
-      if (dataUrl && dataUrl.startsWith('data:image'))
-        out.push({name: CHART_LABELS[key] || key, dataUrl});
-    } catch (e) {
-      /* graphique pas encore rendu ou détruit : on l'ignore simplement */
-    }
-  });
-  return out;
-}
-
+// NB : les graphiques Track Record (Chart.js) ne sont volontairement PAS envoyés à l'IA —
+// seules les images jointes aux trades le sont.
 function pcPrepareImagesForAI(trades, maxImages = 8) {
   const sorted = [...(trades || [])]
     .filter(t => t.images && t.images.length)
@@ -2704,21 +2680,25 @@ async function pcAskAI(question, trades, history) {
   let authToken = PC_SUPABASE_ANON_KEY;
   let payload = {
     question,
-    history: pcHistoryForAI(history),
-    chartImages: pcPrepareChartImages()
+    history: pcHistoryForAI(history)
   };
 
+  let pushOk = true;
   if (isCloud) {
     // Compte cloud : on s'assure que journal_data est à jour côté serveur (le push est un
     // no-op si rien n'a changé), puis on envoie le VRAI token de l'utilisateur — c'est lui qui
     // permet à la fonction Edge d'aller chercher les données elle-même via ses outils, plutôt
-    // que de les recevoir poussées ici. On n'envoie donc plus trades/compte/images de trades
+    // que de les recevoir poussées ici. On n'envoie donc pas trades/compte/images de trades
     // dans ce cas : l'IA peut demander get_trades puis get_trade_images (TOUS les trades sont
     // potentiellement accessibles, pas juste un échantillon de 8) si elle en a besoin.
+    // MAIS si cette synchro échoue, la ligne côté serveur peut être périmée ou vide (l'IA
+    // répondrait alors "aucun trade trouvé" alors qu'ils existent bien en local) : dans ce
+    // cas on bascule sur l'envoi direct ci-dessous plutôt que de faire confiance au serveur.
     try {
-      await pushToCloud();
+      pushOk = await pushToCloud();
     } catch (e) {
       console.warn('Sync avant question IA impossible :', e);
+      pushOk = false;
     }
     try {
       const {data: sessionData} = await sb.auth.getSession();
@@ -2727,10 +2707,10 @@ async function pcAskAI(question, trades, history) {
       console.warn('Session introuvable, repli sur envoi direct des données :', e);
     }
   }
-  if (!isCloud || authToken === PC_SUPABASE_ANON_KEY) {
-    // Pas de compte cloud (ou session indisponible) : repli sur l'ancien comportement,
-    // les données et un échantillon d'images sont envoyés directement dans la requête
-    // (impossible d'aller chercher plus à la demande sans compte cloud).
+  if (!isCloud || authToken === PC_SUPABASE_ANON_KEY || !pushOk) {
+    // Pas de compte cloud, session indisponible, ou synchro pré-question échouée : repli sur
+    // l'envoi direct, les données et un échantillon d'images partent dans la requête
+    // (impossible d'aller chercher plus à la demande sans compte cloud à jour).
     payload.compte = pcPrepareAccountContext();
     payload.trades = pcPrepareTradesForAI(trades);
     payload.images = pcPrepareImagesForAI(trades);
@@ -2748,18 +2728,14 @@ async function pcAskAI(question, trades, history) {
   const data = await res.json();
   if (data.error) throw new Error(data.error);
 
-  // Images réellement jointes à CETTE requête (celles que l'IA a pu regarder) :
-  // les graphiques (toujours, cloud ou non) + l'échantillon de trades en repli local
-  // uniquement (compte cloud : l'IA va chercher elle-même les images de trades via
-  // ses outils côté serveur — on n'a alors aucun moyen de savoir lesquelles, le cas
-  // échéant, elle a demandées).
-  const images = [
-    ...(payload.chartImages || []).map(c => ({label: c.name, dataUrl: c.dataUrl})),
-    ...(payload.images || []).map(im => ({
-      label: [im.paire, im.date].filter(Boolean).join(' · '),
-      dataUrl: im.dataUrl
-    }))
-  ];
+  // Images réellement jointes à CETTE requête (celles que l'IA a pu regarder) : uniquement
+  // l'échantillon de trades du repli ci-dessus. Compte cloud en fonctionnement normal : l'IA
+  // va chercher elle-même les images de trades via ses outils côté serveur — on n'a alors
+  // aucun moyen de savoir lesquelles, le cas échéant, elle a demandées.
+  const images = (payload.images || []).map(im => ({
+    label: [im.paire, im.date].filter(Boolean).join(' · '),
+    dataUrl: im.dataUrl
+  }));
   return {answer: data.answer, images};
 }
 
