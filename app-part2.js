@@ -1601,12 +1601,6 @@ function _tradeImagePathFromUrl(url) {
   return url.slice(idx + marker.length).split('?')[0];
 }
 
-// Upload une image déjà compressée (data URL) vers Supabase Storage et renvoie son
-// URL publique. Si l'upload échoue (pas de réseau, pas connecté...), on garde
-// l'image compressée en base64 en secours plutôt que de perdre la donnée.
-// Upload la photo de profil (même bucket que les images de trades, sous
-// {user_id}/profile_*.jpg) et renvoie son URL publique. upsert:true car une
-// seule photo de profil par compte — pas besoin d'empiler les anciennes.
 async function uploadProfilePhotoToStorage(compressedDataUrl) {
   try {
     if (!currentUser || !currentUser.id || !window.sb) return compressedDataUrl;
@@ -1628,36 +1622,65 @@ async function uploadProfilePhotoToStorage(compressedDataUrl) {
   }
 }
 
-async function uploadTradeImageToStorage(compressedDataUrl) {
+const R2_UPLOAD_ENDPOINT = 'https://ghjashqgwlaofjubzrcp.supabase.co/functions/v1/r2-upload';
+
+// Upload une image déjà compressée (data URL) vers Cloudflare R2 via l'Edge Function
+// r2-upload (qui seule détient les clés R2) et renvoie son URL publique. Si l'upload
+// échoue (pas de réseau, fonction indisponible...), on garde l'image compressée en
+// base64 en secours plutôt que de perdre la donnée — même filet de sécurité qu'avant.
+async function uploadTradeImageToR2(compressedDataUrl) {
   try {
     if (!currentUser || !currentUser.id || !window.sb) return compressedDataUrl;
-    const res = await fetch(compressedDataUrl);
-    const blob = await res.blob();
-    const fileName = `${currentUser.id}/${Date.now()}_${Math.random().toString(36).slice(2, 8)}.jpg`;
-    const {error: uploadErr} = await sb.storage
-      .from(TRADE_IMAGES_BUCKET)
-      .upload(fileName, blob, {contentType: 'image/jpeg', upsert: false});
-    if (uploadErr) {
-      console.warn('Upload image vers Storage échoué, conservation en local :', uploadErr);
+    const {data: sessionData} = await sb.auth.getSession();
+    const token = sessionData?.session?.access_token;
+    if (!token) return compressedDataUrl;
+    const res = await fetch(R2_UPLOAD_ENDPOINT, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json', Authorization: 'Bearer ' + token},
+      body: JSON.stringify({dataUrl: compressedDataUrl})
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || data.error) {
+      console.warn('Upload image vers R2 échoué, conservation en local :', data.error || res.status);
       return compressedDataUrl;
     }
-    const {data: urlData} = sb.storage.from(TRADE_IMAGES_BUCKET).getPublicUrl(fileName);
-    return urlData && urlData.publicUrl ? urlData.publicUrl : compressedDataUrl;
+    return data.url || compressedDataUrl;
   } catch (e) {
-    console.warn('Upload image vers Storage échoué (exception), conservation en local :', e);
+    console.warn('Upload image vers R2 échoué (exception), conservation en local :', e);
     return compressedDataUrl;
   }
 }
 
-// Supprime le fichier correspondant dans Storage (silencieux, best-effort — si ça
-// échoue on n'embête pas l'utilisateur, ça laissera juste un fichier orphelin).
+// Supprime le fichier correspondant (best-effort, silencieux — si ça échoue on n'embête
+// pas l'utilisateur, ça laissera juste un fichier orphelin). Détecte automatiquement
+// l'hébergeur : anciennes images encore sur Supabase Storage, ou nouvelles sur R2.
 function deleteTradeImageFromStorage(url) {
-  const path = _tradeImagePathFromUrl(url);
-  if (!path || !window.sb) return;
-  sb.storage
-    .from(TRADE_IMAGES_BUCKET)
-    .remove([path])
-    .catch(e => console.warn('Suppression image Storage échouée (ignorée) :', e));
+  if (!url || typeof url !== 'string' || url.startsWith('data:image')) return;
+  const supabasePath = _tradeImagePathFromUrl(url);
+  if (supabasePath && window.sb) {
+    sb.storage
+      .from(TRADE_IMAGES_BUCKET)
+      .remove([supabasePath])
+      .catch(e => console.warn('Suppression image Supabase Storage échouée (ignorée) :', e));
+    return;
+  }
+  deleteTradeImageFromR2(url);
+}
+
+async function deleteTradeImageFromR2(url) {
+  try {
+    if (!currentUser || !currentUser.id || !window.sb) return;
+    const {data: sessionData} = await sb.auth.getSession();
+    const token = sessionData?.session?.access_token;
+    if (!token) return;
+    await fetch(R2_UPLOAD_ENDPOINT, {
+      method: 'DELETE',
+      headers: {'Content-Type': 'application/json', Authorization: 'Bearer ' + token},
+      body: JSON.stringify({url})
+    });
+  } catch (e) {
+    console.warn('Suppression image R2 échouée (ignorée) :', e);
+  }
 }
 
 // Migre toutes les images déjà stockées en base64 (ancien système) vers Supabase
@@ -1681,7 +1704,7 @@ async function migrateImagesToStorage() {
     const original = t.images[ii];
     try {
       const compressed = await compressImage(original);
-      const uploaded = await uploadTradeImageToStorage(compressed);
+      const uploaded = await uploadTradeImageToR2(compressed);
       if (uploaded && !uploaded.startsWith('data:')) {
         t.images[ii] = uploaded;
         done++;
@@ -1699,7 +1722,11 @@ async function migrateImagesToStorage() {
   if (!failed) localStorage.setItem(accKey('tjp_images_migrated'), '1'); // tout est passé : plus besoin de réessayer aux prochaines connexions
 }
 
-function compressImage(dataUrl, maxWidth = 1000, quality = 0.7) {
+// maxWidth/quality par défaut pensés pour rester nets même zoomés à 5x (cf. openFullscreen) :
+// une capture d'écran de graphique fait typiquement 1600-1920px de large nativement — la
+// redescendre à 1000px était la vraie cause du flou en zoomant, la qualité JPEG n'y changeait
+// presque rien à côté de cette perte de résolution.
+function compressImage(dataUrl, maxWidth = 1920, quality = 0.85) {
   return new Promise(resolve => {
     const img = new Image();
     img.onload = () => {
@@ -1727,7 +1754,7 @@ function addFormImage() {
     const reader = new FileReader();
     reader.onload = async e => {
       const compressed = await compressImage(e.target.result);
-      const finalSrc = await uploadTradeImageToStorage(compressed);
+      const finalSrc = await uploadTradeImageToR2(compressed);
       window._formImages.push(finalSrc);
       renderFormImages();
     };
@@ -2790,7 +2817,7 @@ async function sendPcMessage() {
       const thumbs = await Promise.all(
         images.map(im =>
           typeof im.dataUrl === 'string' && im.dataUrl.startsWith('data:image')
-            ? compressImage(im.dataUrl, 220, 0.5)
+            ? compressImage(im.dataUrl, 480, 0.75)
             : Promise.resolve(im.dataUrl)
         )
       );

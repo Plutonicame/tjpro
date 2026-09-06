@@ -5402,8 +5402,8 @@ function addEditImage() {
           ? await compressImage(e.target.result)
           : e.target.result;
       const finalSrc =
-        typeof uploadTradeImageToStorage === 'function'
-          ? await uploadTradeImageToStorage(compressed)
+        typeof uploadTradeImageToR2 === 'function'
+          ? await uploadTradeImageToR2(compressed)
           : compressed;
       window._editImages.push(finalSrc);
       const t = APP.trades.find(x => x.id === _editId);
