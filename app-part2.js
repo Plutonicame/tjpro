@@ -2383,9 +2383,12 @@ function pcUpdateChatTitleBar() {
 // jusqu'à exécuter du script. On n'échappe donc jamais m.text brut dans le DOM :
 // on le fait passer par DOMPurify, qui n'autorise que le strict nécessaire pour
 // la mise en forme déjà utilisée ailleurs dans ce fichier (indicateur "réflexion
-// en cours", saut de ligne du repli local).
-const PC_CHAT_ALLOWED_TAGS = ['br', 'strong', 'em', 'b', 'i', 'span'];
-const PC_CHAT_ALLOWED_ATTR = ['id', 'class', 'style'];
+// en cours", saut de ligne du repli local) + les miniatures d'images envoyées à
+// l'IA (pcImagesHtml). "img"/"src" sont autorisés, mais AUCUN attribut "on*"
+// (onclick compris) ne l'est : le zoom au clic passe par un écouteur délégué
+// (cf. plus bas), jamais par un attribut inline, qui serait de toute façon retiré.
+const PC_CHAT_ALLOWED_TAGS = ['br', 'strong', 'em', 'b', 'i', 'span', 'img'];
+const PC_CHAT_ALLOWED_ATTR = ['id', 'class', 'style', 'src', 'title'];
 function pcSanitizeChatHtml(html) {
   const raw = String(html == null ? '' : html);
   if (typeof DOMPurify === 'undefined') {
@@ -2396,6 +2399,32 @@ function pcSanitizeChatHtml(html) {
     ALLOWED_TAGS: PC_CHAT_ALLOWED_TAGS,
     ALLOWED_ATTR: PC_CHAT_ALLOWED_ATTR
   });
+}
+
+// Zoom des miniatures IA affichées dans le chat (délégation sur le document,
+// donc pas besoin d'attribut onclick inline — qui serait de toute façon retiré
+// par pcSanitizeChatHtml ci-dessus). Réutilise le visualiseur plein écran
+// zoomable existant (openFullscreen).
+document.addEventListener('click', e => {
+  const img = e.target.closest('.pc-msg-img');
+  if (img) openFullscreen(img.src);
+});
+
+// Construit le HTML (sûr pour pcSanitizeChatHtml) des miniatures à afficher sous
+// un message du chat IA, pour montrer exactement quelles images ont été envoyées
+// pour cette question.
+function pcImagesHtml(images) {
+  if (!images || !images.length) return '';
+  return (
+    '<span style="display:block;margin-top:8px;">' +
+    images
+      .map(
+        im =>
+          `<img class="pc-msg-img" src="${im.dataUrl}" title="${escapeHtml(im.label || '')}" style="width:72px;height:54px;object-fit:cover;border-radius:6px;border:1px solid #4f8ef7;cursor:zoom-in;margin:0 6px 6px 0;">`
+      )
+      .join('') +
+    '</span>'
+  );
 }
 
 function renderPcChat() {
@@ -2718,7 +2747,20 @@ async function pcAskAI(question, trades, history) {
   if (!res.ok) throw new Error('HTTP ' + res.status);
   const data = await res.json();
   if (data.error) throw new Error(data.error);
-  return data.answer;
+
+  // Images réellement jointes à CETTE requête (celles que l'IA a pu regarder) :
+  // les graphiques (toujours, cloud ou non) + l'échantillon de trades en repli local
+  // uniquement (compte cloud : l'IA va chercher elle-même les images de trades via
+  // ses outils côté serveur — on n'a alors aucun moyen de savoir lesquelles, le cas
+  // échéant, elle a demandées).
+  const images = [
+    ...(payload.chartImages || []).map(c => ({label: c.name, dataUrl: c.dataUrl})),
+    ...(payload.images || []).map(im => ({
+      label: [im.paire, im.date].filter(Boolean).join(' · '),
+      dataUrl: im.dataUrl
+    }))
+  ];
+  return {answer: data.answer, images};
 }
 
 async function sendPcMessage() {
@@ -2743,8 +2785,11 @@ async function sendPcMessage() {
 
   const trades = APP.trades || [];
   let answer;
+  let images = [];
   try {
-    answer = await pcAskAI(q, trades, historySnapshot);
+    const result = await pcAskAI(q, trades, historySnapshot);
+    answer = result.answer;
+    images = result.images || [];
   } catch (err) {
     console.warn('Agent IA indisponible, bascule sur le moteur local :', err);
     answer =
@@ -2752,15 +2797,29 @@ async function sendPcMessage() {
       '<br><br><span style="opacity:.6;font-size:.85em;">(réponse générée en local, l\'assistant IA est momentanément indisponible)</span>';
   }
 
+  // Miniatures des images envoyées à l'IA pour cette question, pour qu'on voie
+  // exactement ce qu'elle a pu analyser. Recompressées en plus petit avant
+  // d'être conservées dans l'historique (sinon chaque question avec graphiques
+  // alourdirait vite le stockage local).
+  let imagesHtml = '';
+  if (images.length) {
+    try {
+      const thumbs = await Promise.all(images.map(im => compressImage(im.dataUrl, 220, 0.5)));
+      imagesHtml = pcImagesHtml(images.map((im, i) => ({label: im.label, dataUrl: thumbs[i]})));
+    } catch (e) {
+      console.warn('Miniatures des images IA impossibles à générer :', e);
+    }
+  }
+
   // Remplace le message "réflexion en cours" par la vraie réponse
   const idx = conv.messages.findIndex(m => m.text.includes(thinkingId));
   if (idx !== -1) {
-    conv.messages[idx] = {role: 'bot', text: answer};
+    conv.messages[idx] = {role: 'bot', text: answer + imagesHtml};
     conv.updatedAt = Date.now();
     pcSaveConversations(pcConversations);
     renderPcChat();
   } else {
-    pcPushMsg('bot', answer);
+    pcPushMsg('bot', answer + imagesHtml);
   }
 }
 
