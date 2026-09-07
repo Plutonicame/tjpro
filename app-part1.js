@@ -1800,6 +1800,15 @@ function pcUpdateUndoBtnVisibility() {
   if (!btn) return;
   btn.classList.toggle('visible', window._deletedTradesStack.length > 0);
 }
+// Supprime toutes les images d'un trade de leur hébergeur (R2 ou Supabase Storage,
+// détecté automatiquement par deleteTradeImageFromStorage). Best-effort, silencieux,
+// ne bloque jamais l'interface — voir deleteTradeImageFromStorage pour le détail.
+function deleteAllTradeImages(trade) {
+  if (!trade || !Array.isArray(trade.images)) return;
+  trade.images.forEach(img => {
+    if (typeof deleteTradeImageFromStorage === 'function') deleteTradeImageFromStorage(img);
+  });
+}
 function deleteTrade(id) {
   markUserAction();
   const idx = APP.trades.findIndex(t => t.id === parseInt(id, 10));
@@ -1808,6 +1817,9 @@ function deleteTrade(id) {
   window._deletedTradesStack.push({trade: removed, index: idx});
   if (window._deletedTradesStack.length > 20) window._deletedTradesStack.shift();
   APP.trades.splice(idx, 1);
+  // Supprimé tout de suite, y compris côté stockage : si tu annules via le bouton
+  // "Annuler", le trade revient mais SES IMAGES, elles, ne reviendront pas.
+  deleteAllTradeImages(removed);
   saveState();
   renderTable();
   updateNavBadges();
@@ -1867,6 +1879,7 @@ function executeDeleteAllTrades() {
   if (window._deletedTradesStack.length > 20) {
     window._deletedTradesStack = window._deletedTradesStack.slice(-20);
   }
+  APP.trades.forEach(t => deleteAllTradeImages(t));
   APP.trades = [];
   saveState();
   renderTable();
