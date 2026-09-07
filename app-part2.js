@@ -1637,7 +1637,7 @@ async function uploadTradeImageToR2(compressedDataUrl) {
     const res = await fetch(R2_UPLOAD_ENDPOINT, {
       method: 'POST',
       headers: {'Content-Type': 'application/json', Authorization: 'Bearer ' + token},
-      body: JSON.stringify({dataUrl: compressedDataUrl})
+      body: JSON.stringify({action: 'upload', dataUrl: compressedDataUrl})
     });
     const data = await res.json().catch(() => ({}));
     if (!res.ok || data.error) {
@@ -1674,9 +1674,9 @@ async function deleteTradeImageFromR2(url) {
     const token = sessionData?.session?.access_token;
     if (!token) return;
     await fetch(R2_UPLOAD_ENDPOINT, {
-      method: 'DELETE',
+      method: 'POST',
       headers: {'Content-Type': 'application/json', Authorization: 'Bearer ' + token},
-      body: JSON.stringify({url})
+      body: JSON.stringify({action: 'delete', url})
     });
   } catch (e) {
     console.warn('Suppression image R2 échouée (ignorée) :', e);
