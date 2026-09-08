@@ -526,10 +526,13 @@ function cfApplyKpiOrder() {
     if (map[id]) strip.appendChild(map[id]);
   });
 }
-// Empile les cases KPI par lignes de 14 maximum, TOUTES DE LA MÊME TAILLE :
+// Nombre maximum de cases KPI par ligne, selon le mode d'affichage (voir
+// cfScreenMode() plus bas — téléphone / PC vertical / PC normal / ultra wide).
+const CF_KPI_MAX_PER_ROW = {phone: 3, vertical: 4, normal: 6, ultrawide: 10};
+// Empile les cases KPI par lignes de {max} maximum, TOUTES DE LA MÊME TAILLE :
 // contrairement à une répartition "équilibrée" (qui donnerait des cases plus
 // petites sur une ligne de 8 que sur une ligne de 7), on garde ici une seule
-// grille à 14 colonnes fixes pour toutes les lignes ; la dernière ligne
+// grille à {max} colonnes fixes pour toutes les lignes ; la dernière ligne
 // incomplète est complétée par des cases vides (juste le fond), exactement
 // comme en mode téléphone.
 function cfBalancedRowSizes(total, maxPerRow) {
@@ -542,9 +545,11 @@ function cfBalancedRowSizes(total, maxPerRow) {
 //  - Téléphone : toujours des lignes de 3, complétées par des cases vides
 //    (juste le fond, pas de contenu) si la dernière ligne n'est pas pleine —
 //    les cases ne changent jamais de taille.
-//  - PC : une seule ligne tant qu'il y a 14 cases ou moins (elles se
-//    partagent alors la largeur totale, donc rétrécissent progressivement) ;
-//    au-delà de 14, répartition équilibrée sur plusieurs lignes de 14 max.
+//  - PC (vertical / normal / ultra wide) : une seule ligne tant qu'il y a
+//    moins de cases que le maximum du mode (elles se partagent alors la
+//    largeur totale, donc rétrécissent progressivement) ; au-delà,
+//    répartition sur plusieurs lignes de {max} maximum, toutes de la même
+//    taille.
 function cfLayoutKpiStrip() {
   const strip = document.querySelector('#page-trackrecord .kpi-strip');
   if (!strip) return;
@@ -559,12 +564,13 @@ function cfLayoutKpiStrip() {
     row.remove();
   });
   const rowBg = gc('--kpi-strip-background') || '#1e2d45';
+  const maxPerRow = CF_KPI_MAX_PER_ROW[cfScreenMode()] || CF_KPI_MAX_PER_ROW.normal;
   if (cfIsMobile()) {
     strip.style.display = 'flex';
     strip.style.flexDirection = 'column';
     strip.style.gap = '1px';
     strip.style.gridTemplateColumns = '';
-    const rowSize = 3;
+    const rowSize = maxPerRow;
     const rows = Math.ceil(n / rowSize);
     for (let r = 0; r < rows; r++) {
       const rowEl = document.createElement('div');
@@ -588,7 +594,7 @@ function cfLayoutKpiStrip() {
     }
     return;
   }
-  if (n <= 14) {
+  if (n <= maxPerRow) {
     strip.style.display = 'grid';
     strip.style.flexDirection = '';
     strip.style.gridTemplateColumns = 'repeat(' + n + ',1fr)';
@@ -599,7 +605,7 @@ function cfLayoutKpiStrip() {
     strip.style.flexDirection = 'column';
     strip.style.gap = '1px';
     strip.style.gridTemplateColumns = '';
-    const sizes = cfBalancedRowSizes(n, 14);
+    const sizes = cfBalancedRowSizes(n, maxPerRow);
     let idx = 0;
     sizes.forEach(size => {
       const rowEl = document.createElement('div');
@@ -725,17 +731,19 @@ function cfEnsureChartsContainer() {
 #chartsContainer>*{cursor:grab;}
 #chartsContainer>*.sortable-ghost{opacity:.35;}
 #chartsContainer>*.sortable-drag{cursor:grabbing;}
-@media(max-width:1100px){#cfBottomRow{grid-template-columns:1fr!important;}}
+@media(max-width:700px){#cfBottomRow{grid-template-columns:1fr!important;}}
 /* Largeurs MINIMUM, pas figées : flex-grow permet à un graphique seul sur sa
-   ligne de s'étirer pour occuper toute la place (management à 100% s'il est
-   seul, camemberts qui remplissent l'espace s'ils sont moins nombreux que le
-   maximum par ligne), tout en se limitant à sa taille minimum dès qu'un
-   autre graphique partage la même ligne. */
-#chartsContainer{--cf-pie-basis:16.6667%;}
-@media(max-width:1100px){#chartsContainer{--cf-pie-basis:33.3334%;}}
+   ligne de s'étirer pour occuper toute la place (un graphique seul prend
+   100%, des camemberts qui remplissent l'espace s'ils sont moins nombreux
+   que le maximum par ligne), tout en se limitant à sa taille minimum dès
+   qu'un autre graphique partage la même ligne. Les 3 variables --cf-*-basis
+   sont recalculées en JS (cfApplyChartLayout) selon le mode d'affichage
+   (téléphone / PC vertical / PC normal / ultra wide) — voir cfScreenMode()
+   et CF_CHART_MAX_PER_ROW.*/
 .cf-flex-full{flex:1 1 100%;}
-.cf-flex-half{flex:1 1 50%;}
 .cf-flex-pie{flex:1 1 var(--cf-pie-basis,16.6667%);}
+.cf-flex-barv{flex:1 1 var(--cf-barv-basis,50%);}
+.cf-flex-other{flex:1 1 var(--cf-other-basis,100%);}
 .cf-row-break{flex-basis:100%;width:0;height:0;margin:0;padding:0;border:0;}
 `;
   document.head.appendChild(style);
@@ -1179,49 +1187,84 @@ function cfApplyChartOrder() {
     if (map[id]) container.appendChild(map[id]);
   });
 }
-function cfIsMobile() {
-  return !!(window.matchMedia && window.matchMedia('(max-width:1100px)').matches);
+// ── Système de mode d'affichage (4 profils d'écran) ──
+// - "phone"     : téléphone — largeur ≤ 700px, quelle que soit l'orientation
+// - "vertical"  : écran PC en orientation portrait (moniteur tourné à la
+//   verticale) — largeur > 700px et plus haut que large
+// - "ultrawide" : écran PC très large (ratio largeur/hauteur ≥ 2/1, ex.
+//   21:9, 32:9) — Paul, si un de tes écrans est mal classé, ce sont ces 3
+//   seuils (700px / portrait / ratio 2:1) qu'il faut ajuster ici.
+// - "normal"    : PC/laptop classique (tout le reste)
+// Recalculé à la volée via matchMedia (voir les écouteurs de breakpoint en
+// bas de fichier) — aucune donnée n'est stockée, c'est purement dérivé de la
+// taille d'écran réelle à l'instant T.
+function cfScreenMode() {
+  if (window.matchMedia && window.matchMedia('(max-width:700px)').matches) return 'phone';
+  if (window.matchMedia && window.matchMedia('(orientation:portrait)').matches) return 'vertical';
+  if (window.matchMedia && window.matchMedia('(min-aspect-ratio:2/1)').matches) return 'ultrawide';
+  return 'normal';
 }
+function cfIsMobile() {
+  return cfScreenMode() === 'phone';
+}
+// Nombre maximum d'éléments par ligne, par groupe de graphique et par mode.
+const CF_CHART_MAX_PER_ROW = {
+  phone: {pie: 1, barv: 1, other: 1},
+  vertical: {pie: 3, barv: 1, other: 1},
+  normal: {pie: 4, barv: 2, other: 1},
+  ultrawide: {pie: 6, barv: 3, other: 2}
+};
 // Largeurs MINIMUM (pas figées) via flexbox : chaque carte porte une classe
-// qui fixe sa taille plancher (pleine / demie / camembert), et flex-grow
-// s'occupe tout seul de l'étirer pour remplir sa ligne quand rien d'autre ne
-// la partage — un management seul prend 100%, deux camemberts seuls entre
-// eux prennent 50% chacun, six camemberts se tassent à 1/6 chacun, etc. Plus
-// besoin de compter les camemberts ni de détecter le mode téléphone en JS :
-// la bascule PC/téléphone de --cf-pie-basis (1/6 ↔ 1/3) est gérée en pur CSS
-// via media query (voir cfEnsureChartsContainer).
+// qui fixe sa taille plancher, et flex-grow s'occupe tout seul de l'étirer
+// pour remplir sa ligne quand rien d'autre ne la partage — un graphique seul
+// prend 100%, deux camemberts seuls entre eux prennent 50% chacun, six
+// camemberts se tassent à 1/6 chacun, etc. Les largeurs plancher (variables
+// --cf-*-basis) sont recalculées par cfApplyChartLayout() à chaque rendu et
+// à chaque changement de mode, à partir de CF_CHART_MAX_PER_ROW.
 // Chaque graphique appartient à un "groupe" : deux graphiques de groupes
 // différents ne doivent JAMAIS se retrouver sur la même ligne, même s'il
 // reste de la place. À l'intérieur d'un même groupe en revanche, ils
 // s'assemblent librement (plusieurs lignes si besoin, autant que le nombre
 // d'éléments l'exige — jamais un nombre de lignes figé).
-//  - "pie"        : tous les camemberts (natif Win Rate + custom)
-//  - "comparison" : Impact du management + tous les graphiques barres custom
-//  - "solo-<id>"  : chaque autre graphique (Évolution du capital, P&L, Risk
-//    Management, Confluence, Paire, Session, Jour, Timeframe...) est seul
-//    dans son propre groupe — il occupe donc toujours sa ligne à lui.
+//  - "pie"   : tous les camemberts (natif Win Rate + custom)
+//  - "barv"  : tous les graphiques en barres VERTICALES (Impact du
+//    management, natif, + barres verticales custom)
+//  - "other" : les graphiques en barres HORIZONTALES (Confluence, Paire,
+//    Session, Jour, Timeframe, natifs, + barres horizontales custom) — seuls
+//    à s'associer par 2 en mode ultra wide, seuls (100%) partout ailleurs
+//  - "solo-<id>" : Évolution du capital, P&L et Risk Management restent
+//    TOUJOURS seuls sur leur ligne, dans tous les modes — jamais concernés
+//    par le groupe "other" ni par aucun regroupement
 function cfChartGroup(el) {
   const id = el.dataset.chartId;
   if (id === 'pie') return 'pie';
-  if (id === 'mgmt') return 'comparison';
+  if (id === 'mgmt') return 'barv';
+  if (id === 'conf' || id === 'pairs' || id === 'sessions' || id === 'jours' || id === 'tf')
+    return 'other';
   const f = APP.cfFields.find(x => x.id === id);
   if (f && f.widget) {
     if (f.widget.kind === 'pie') return 'pie';
-    if (f.widget.kind === 'bar-v' || f.widget.kind === 'bar-h') return 'comparison';
+    if (f.widget.kind === 'bar-v') return 'barv';
+    if (f.widget.kind === 'bar-h') return 'other';
   }
   return 'solo-' + id;
 }
 function cfApplyChartLayout() {
   const container = document.getElementById('chartsContainer');
   if (!container) return;
+  const maxes = CF_CHART_MAX_PER_ROW[cfScreenMode()] || CF_CHART_MAX_PER_ROW.normal;
+  container.style.setProperty('--cf-pie-basis', 100 / maxes.pie + '%');
+  container.style.setProperty('--cf-barv-basis', 100 / maxes.barv + '%');
+  container.style.setProperty('--cf-other-basis', 100 / maxes.other + '%');
   container.querySelectorAll('.cf-row-break').forEach(el => el.remove());
   const children = Array.from(container.children);
   children.forEach(el => {
-    el.classList.remove('cf-flex-full', 'cf-flex-half', 'cf-flex-pie');
+    el.classList.remove('cf-flex-full', 'cf-flex-pie', 'cf-flex-barv', 'cf-flex-other');
     el.style.removeProperty('grid-column');
     const group = cfChartGroup(el);
     if (group === 'pie') el.classList.add('cf-flex-pie');
-    else if (group === 'comparison') el.classList.add('cf-flex-half');
+    else if (group === 'barv') el.classList.add('cf-flex-barv');
+    else if (group === 'other') el.classList.add('cf-flex-other');
     else el.classList.add('cf-flex-full');
   });
   // Sépare deux groupes différents consécutifs par un séparateur de ligne
@@ -1496,6 +1539,7 @@ function cfToggleOrderSection() {
 }
 function cfRenderSettings() {
   cfEnsureCard();
+  cfEnsureNavToggleCard();
   cfEnsureOrders();
   const listEl = document.getElementById('cfFieldsList');
   const noneEl = document.getElementById('cfNoFields');
@@ -2067,6 +2111,65 @@ function cfEnsureHistoryGridStyle() {
   document.head.appendChild(style);
 }
 
+// ── Menu de navigation en colonne, forçable sur PC ──
+// Réglage 100% local à cet appareil (PAS synchronisé cloud) : chaque écran
+// de Paul (vertical / normal / ultra wide) est un appareil différent, avec
+// potentiellement un choix différent — synchroniser ce réglage entre
+// appareils forcerait le même choix partout, ce qui n'a pas de sens ici.
+function cfNavForceColumn() {
+  return !!ls('tj_nav_force_column', false);
+}
+function cfEnsureNavStyle() {
+  if (document.getElementById('cfNavStyle')) return;
+  const style = document.createElement('style');
+  style.id = 'cfNavStyle';
+  style.textContent = `
+body.cf-nav-force-column .nav-desktop{display:none!important;}
+body.cf-nav-force-column .nav-mobile{display:block!important;}
+body.cf-nav-force-column .hamburger{display:flex!important;}
+`;
+  document.head.appendChild(style);
+}
+function cfApplyNavStyle() {
+  cfEnsureNavStyle();
+  document.body.classList.toggle('cf-nav-force-column', cfNavForceColumn());
+}
+function cfToggleNavColumn() {
+  const c = cfNavForceColumn();
+  lss('tj_nav_force_column', !c);
+  const tgl = document.getElementById('cfTglNavColumn');
+  if (tgl) tgl.classList.toggle('on', !c);
+  const lbl = document.getElementById('cfNavColumnLbl');
+  if (lbl) lbl.textContent = !c ? 'Activé' : 'Désactivé';
+  cfApplyNavStyle();
+}
+// Carte Paramètres dédiée (indépendante de la carte "Champs personnalisés"),
+// visible sur téléphone comme sur PC — sans effet visible sur téléphone
+// (déjà en menu colonne par défaut), utile sur les 3 modes PC.
+function cfEnsureNavToggleCard() {
+  if (document.getElementById('cfNavCard')) return;
+  const modGrid = document.getElementById('modGrid');
+  if (!modGrid) return;
+  const card = document.createElement('div');
+  card.className = 'card';
+  card.id = 'cfNavCard';
+  card.innerHTML = `
+    <div class="card-header"><div class="card-title" data-editable>AFFICHAGE — NAVIGATION (PC)</div></div>
+    <div class="card-body">
+      <div style="font-size:11px;color:var(--muted);margin-bottom:12px;" data-editable>Sur PC (écran vertical, normal ou ultra wide), affiche les pages en colonne dans le bouton ☰ au lieu de la barre horizontale, comme sur téléphone.</div>
+      <div class="tgl-row">
+        <span data-editable>Menu en colonne :</span>
+        <div class="tgl-track" id="cfTglNavColumn" onclick="cfToggleNavColumn()"><div class="tgl-thumb"></div></div>
+        <span id="cfNavColumnLbl" style="color:var(--muted)">Désactivé</span>
+      </div>
+    </div>`;
+  modGrid.parentNode.insertBefore(card, modGrid);
+  if (cfNavForceColumn()) {
+    document.getElementById('cfTglNavColumn').classList.add('on');
+    document.getElementById('cfNavColumnLbl').textContent = 'Activé';
+  }
+}
+
 // ── Mode stylo : police + taille indépendante PC/téléphone pour le libellé
 // des questions personnalisées (les autres éléments éditables de l'appli ne
 // sont pas concernés — le comportement natif, volontairement identique sur
@@ -2199,6 +2302,7 @@ function cfInit() {
     cfEnsureModal();
     cfEnsureCard();
     cfEnsureHistoryGridStyle();
+    cfApplyNavStyle();
     cfApplyPencilStylesCss();
     cfInjectFormFields('f');
     cfInjectFormFields('e');
@@ -2220,9 +2324,9 @@ document.addEventListener('DOMContentLoaded', function () {
   setTimeout(cfInit, 120);
 });
 // Recalcule les mises en page dépendantes du nombre de cases (KPI) et de la
-// largeur d'écran (graphiques) au franchissement du seuil PC/téléphone.
+// largeur d'écran (graphiques) au franchissement d'un des 3 seuils utilisés
+// par cfScreenMode() (téléphone / portrait / ultra wide).
 if (window.matchMedia) {
-  const _cfMq = window.matchMedia('(max-width:1100px)');
   const _cfOnBreakpointChange = function () {
     try {
       cfLayoutKpiStrip();
@@ -2230,6 +2334,12 @@ if (window.matchMedia) {
       cfNormalizeChartHeights();
     } catch (e) {}
   };
-  if (_cfMq.addEventListener) _cfMq.addEventListener('change', _cfOnBreakpointChange);
-  else if (_cfMq.addListener) _cfMq.addListener(_cfOnBreakpointChange);
+  [
+    window.matchMedia('(max-width:700px)'),
+    window.matchMedia('(orientation:portrait)'),
+    window.matchMedia('(min-aspect-ratio:2/1)')
+  ].forEach(mq => {
+    if (mq.addEventListener) mq.addEventListener('change', _cfOnBreakpointChange);
+    else if (mq.addListener) mq.addListener(_cfOnBreakpointChange);
+  });
 }
