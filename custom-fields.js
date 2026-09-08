@@ -2192,6 +2192,18 @@ function cfEnsureHistoryGridStyle() {
   document.head.appendChild(style);
 }
 
+// Historique des trades > œil (voir images) : cliquer à côté des images
+// (sur le fond sombre) ferme directement la fenêtre, plus besoin de
+// descendre jusqu'au bouton FERMER en bas.
+function cfEnsureImgViewClickOutside() {
+  const modal = document.getElementById('imgViewModal');
+  if (!modal || modal.dataset.cfClickOutside) return;
+  modal.dataset.cfClickOutside = '1';
+  modal.addEventListener('click', function (e) {
+    if (e.target === modal) modal.classList.remove('open');
+  });
+}
+
 // ── Menu de navigation en colonne, forçable sur PC ──
 // Réglage PAR MODE (téléphone / vertical / normal / ultrawide), synchronisé
 // cloud comme le reste de cf_config : c'est le MODE qui porte le réglage
@@ -2218,9 +2230,6 @@ body.cf-nav-force-column.cf-mode-normal .nav-mobile-row1,
 body.cf-nav-force-column.cf-mode-ultrawide .nav-mobile-row1{flex:1 1 auto;min-width:0;}
 body.cf-nav-force-column.cf-mode-normal .nav-mobile-row2,
 body.cf-nav-force-column.cf-mode-ultrawide .nav-mobile-row2{flex:0 0 auto;border-top:none;padding:0 16px 0 0;}
-/* La carte "Préférences" (mode forcé + toggle) n'a aucun effet visible sur
-   téléphone (déjà en menu colonne par défaut) : masquée pour ne pas encombrer. */
-body.cf-mode-phone #cfNavCard{display:none!important;}
 `;
   document.head.appendChild(style);
 }
