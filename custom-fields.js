@@ -102,14 +102,47 @@ const CF_WIDGET_META = {
   pie: {label: 'Camembert'}
 };
 const CF_CHART_WIDGET_KINDS = ['card', 'line', 'bar-v', 'bar-h', 'pie'];
+// Les 4 profils d'écran (voir cfScreenMode() plus bas pour le détail de la
+// détection). Liste centrale réutilisée partout où les 4 modes doivent être
+// énumérés (ordres par mode, réglages de navigation par mode, sélecteur de
+// mode forcé...).
+const CF_SCREEN_MODES = ['phone', 'vertical', 'normal', 'ultrawide'];
+const CF_MODE_LABELS = {
+  phone: 'Téléphone',
+  vertical: 'PC vertical',
+  normal: 'PC normal',
+  ultrawide: 'Ultra wide'
+};
 
 // ── Chargement / sauvegarde ──
+// Rétrocompatibilité : avant les 4 modes, "chartOrder" était un tableau
+// unique partagé par tous les écrans. On le retrouve comme point de départ
+// identique des 4 modes au premier chargement après la mise à jour, pour ne
+// pas perdre l'ordre déjà choisi.
+function cfNormalizeChartOrderByMode(cfg) {
+  const out = {};
+  if (cfg && cfg.chartOrderByMode && typeof cfg.chartOrderByMode === 'object') {
+    CF_SCREEN_MODES.forEach(m => {
+      out[m] = Array.isArray(cfg.chartOrderByMode[m]) ? cfg.chartOrderByMode[m] : null;
+    });
+    return out;
+  }
+  if (cfg && Array.isArray(cfg.chartOrder)) {
+    CF_SCREEN_MODES.forEach(m => (out[m] = cfg.chartOrder.slice()));
+    return out;
+  }
+  return out;
+}
 function cfLoad() {
   const cfg = lsAcc('tj_cf_config', null);
   APP.cfFields = cfg && Array.isArray(cfg.fields) ? cfg.fields : [];
   APP.cfColOrder = cfg && Array.isArray(cfg.colOrder) ? cfg.colOrder : null;
   APP.cfKpiOrder = cfg && Array.isArray(cfg.kpiOrder) ? cfg.kpiOrder : null;
-  APP.cfChartOrder = cfg && Array.isArray(cfg.chartOrder) ? cfg.chartOrder : null;
+  APP.cfChartOrderByMode = cfNormalizeChartOrderByMode(cfg);
+  APP.cfNavColumnByMode =
+    cfg && cfg.navColumnByMode && typeof cfg.navColumnByMode === 'object'
+      ? cfg.navColumnByMode
+      : {};
   APP.cfPencilStyles =
     cfg && cfg.pencilStyles && typeof cfg.pencilStyles === 'object' ? cfg.pencilStyles : {};
 }
@@ -118,7 +151,8 @@ function cfConfigSnapshot() {
     fields: APP.cfFields,
     colOrder: APP.cfColOrder,
     kpiOrder: APP.cfKpiOrder,
-    chartOrder: APP.cfChartOrder,
+    chartOrderByMode: APP.cfChartOrderByMode,
+    navColumnByMode: APP.cfNavColumnByMode,
     pencilStyles: APP.cfPencilStyles
   };
 }
@@ -150,7 +184,11 @@ function cfInsertIntoOrder(orderArr, id, afterId) {
 function cfEnsureOrders() {
   if (!APP.cfColOrder) APP.cfColOrder = CF_BUILTIN_COLS.map(c => c.id);
   if (!APP.cfKpiOrder) APP.cfKpiOrder = CF_BUILTIN_KPIS.map(k => k.id);
-  if (!APP.cfChartOrder) APP.cfChartOrder = CF_BUILTIN_CHARTS.map(c => c.id);
+  if (!APP.cfChartOrderByMode) APP.cfChartOrderByMode = {};
+  if (!APP.cfNavColumnByMode) APP.cfNavColumnByMode = {};
+  CF_SCREEN_MODES.forEach(m => {
+    if (!APP.cfChartOrderByMode[m]) APP.cfChartOrderByMode[m] = CF_BUILTIN_CHARTS.map(c => c.id);
+  });
   const kpiFieldIds = new Set(
     APP.cfFields.filter(f => f.widget && f.widget.kind === 'kpi').map(f => f.id)
   );
@@ -167,16 +205,20 @@ function cfEnsureOrders() {
     if (!APP.cfKpiOrder.includes(id)) APP.cfKpiOrder.push(id);
   });
   chartFieldIds.forEach(id => {
-    if (!APP.cfChartOrder.includes(id)) APP.cfChartOrder.push(id);
+    CF_SCREEN_MODES.forEach(m => {
+      if (!APP.cfChartOrderByMode[m].includes(id)) APP.cfChartOrderByMode[m].push(id);
+    });
   });
   const builtinColIds = new Set(CF_BUILTIN_COLS.map(c => c.id));
   const builtinKpiIds = new Set(CF_BUILTIN_KPIS.map(k => k.id));
   const builtinChartIds = new Set(CF_BUILTIN_CHARTS.map(c => c.id));
   APP.cfColOrder = APP.cfColOrder.filter(id => builtinColIds.has(id) || allFieldIds.has(id));
   APP.cfKpiOrder = APP.cfKpiOrder.filter(id => builtinKpiIds.has(id) || kpiFieldIds.has(id));
-  APP.cfChartOrder = APP.cfChartOrder.filter(
-    id => builtinChartIds.has(id) || chartFieldIds.has(id)
-  );
+  CF_SCREEN_MODES.forEach(m => {
+    APP.cfChartOrderByMode[m] = APP.cfChartOrderByMode[m].filter(
+      id => builtinChartIds.has(id) || chartFieldIds.has(id)
+    );
+  });
 }
 // Initialisation IMMÉDIATE et synchrone (pas de setTimeout / DOMContentLoaded
 // ici) : APP existe déjà (const APP=loadState(); s'est exécuté avant que ce
@@ -753,8 +795,9 @@ function cfEnsureChartsContainer() {
   // cartes se décalent en direct (animation intégrée de Sortable.js). Les
   // clics sur les boutons/inputs à l'intérieur (BT, périodes, stylo...)
   // restent normaux grâce à "filter". Complémentaire à la liste "ORDRE DES
-  // GRAPHIQUES" des Paramètres (les deux écrivent dans APP.cfChartOrder,
-  // donc restent toujours cohérents entre eux).
+  // GRAPHIQUES" des Paramètres (les deux écrivent dans
+  // APP.cfChartOrderByMode[mode actuel], donc restent toujours cohérents
+  // entre eux).
   if (window.Sortable) {
     new Sortable(container, {
       animation: 200,
@@ -917,7 +960,8 @@ function cfChartsSortableOnEnd() {
   const order = Array.from(container.children)
     .map(el => el.dataset.chartId)
     .filter(Boolean);
-  APP.cfChartOrder = order;
+  cfEnsureOrders();
+  APP.cfChartOrderByMode[cfScreenMode()] = order;
   cfPersist();
   cfApplyChartOrder();
   cfApplyChartLayout();
@@ -1183,7 +1227,8 @@ function cfApplyChartOrder() {
   Array.from(container.children).forEach(card => {
     if (card.dataset.chartId) map[card.dataset.chartId] = card;
   });
-  APP.cfChartOrder.forEach(id => {
+  const order = APP.cfChartOrderByMode[cfScreenMode()] || CF_BUILTIN_CHARTS.map(c => c.id);
+  order.forEach(id => {
     if (map[id]) container.appendChild(map[id]);
   });
 }
@@ -1192,13 +1237,26 @@ function cfApplyChartOrder() {
 // - "vertical"  : écran PC en orientation portrait (moniteur tourné à la
 //   verticale) — largeur > 700px et plus haut que large
 // - "ultrawide" : écran PC très large (ratio largeur/hauteur ≥ 2/1, ex.
-//   21:9, 32:9) — Paul, si un de tes écrans est mal classé, ce sont ces 3
-//   seuils (700px / portrait / ratio 2:1) qu'il faut ajuster ici.
+//   21:9, 32:9)
 // - "normal"    : PC/laptop classique (tout le reste)
 // Recalculé à la volée via matchMedia (voir les écouteurs de breakpoint en
 // bas de fichier) — aucune donnée n'est stockée, c'est purement dérivé de la
-// taille d'écran réelle à l'instant T.
+// taille d'écran réelle à l'instant T. SAUF si un mode est forcé manuellement
+// (sélecteur "Mode d'affichage" dans Paramètres > Préférences) : ce réglage
+// est local à CET appareil (pas synchronisé cloud, exprès — un forçage n'a de
+// sens que sur l'appareil dont l'écran est mal détecté) et prend le dessus
+// sur toute détection automatique.
+function cfModeOverride() {
+  const v = ls('tj_mode_override', 'auto');
+  return CF_SCREEN_MODES.includes(v) ? v : 'auto';
+}
+function cfSetModeOverride(v) {
+  lss('tj_mode_override', CF_SCREEN_MODES.includes(v) ? v : 'auto');
+  cfRecomputeLayout();
+}
 function cfScreenMode() {
+  const forced = cfModeOverride();
+  if (forced !== 'auto') return forced;
   if (window.matchMedia && window.matchMedia('(max-width:700px)').matches) return 'phone';
   if (window.matchMedia && window.matchMedia('(orientation:portrait)').matches) return 'vertical';
   if (window.matchMedia && window.matchMedia('(min-aspect-ratio:2/1)').matches) return 'ultrawide';
@@ -1514,7 +1572,7 @@ function cfEnsureCard() {
           <div class="mod-list" id="cfColOrderList"></div>
           <div class="mod-col-title" style="margin-top:16px;margin-bottom:8px;">ORDRE DES CASES KPI</div>
           <div class="mod-list" id="cfKpiOrderList"></div>
-          <div class="mod-col-title" style="margin-top:16px;margin-bottom:8px;">ORDRE DES GRAPHIQUES / WIDGETS</div>
+          <div class="mod-col-title" id="cfChartOrderTitle" style="margin-top:16px;margin-bottom:8px;">ORDRE DES GRAPHIQUES / WIDGETS</div>
           <div class="mod-list" id="cfChartOrderList"></div>
         </div>
       </div>
@@ -1598,11 +1656,22 @@ function cfRenderSettings() {
     if (f.widget && CF_CHART_WIDGET_KINDS.includes(f.widget.kind))
       chartLabelMap[f.id] = f.colName || f.label;
   });
-  cfRenderOrderList('cfChartOrderList', APP.cfChartOrder, chartLabelMap, newOrder => {
-    APP.cfChartOrder = newOrder;
-    cfPersist();
-    if (typeof refreshAllCharts === 'function') refreshAllCharts();
-  });
+  const _cfCurMode = cfScreenMode();
+  const _cfOrderTitle = document.getElementById('cfChartOrderTitle');
+  if (_cfOrderTitle)
+    _cfOrderTitle.textContent =
+      'ORDRE DES GRAPHIQUES / WIDGETS — mode actuel : ' +
+      (CF_MODE_LABELS[_cfCurMode] || _cfCurMode);
+  cfRenderOrderList(
+    'cfChartOrderList',
+    APP.cfChartOrderByMode[_cfCurMode],
+    chartLabelMap,
+    newOrder => {
+      APP.cfChartOrderByMode[_cfCurMode] = newOrder;
+      cfPersist();
+      if (typeof refreshAllCharts === 'function') refreshAllCharts();
+    }
+  );
 }
 
 // ── Modale de création / édition d'un champ ──
@@ -1806,13 +1875,19 @@ function cfSaveBuilder() {
   cfInsertIntoOrder(APP.cfColOrder, field.id, afterCol);
   if (widgetKind === 'kpi') {
     cfInsertIntoOrder(APP.cfKpiOrder, field.id, widgetAfter);
-    APP.cfChartOrder = APP.cfChartOrder.filter(x => x !== field.id);
+    CF_SCREEN_MODES.forEach(m => {
+      APP.cfChartOrderByMode[m] = APP.cfChartOrderByMode[m].filter(x => x !== field.id);
+    });
   } else if (CF_CHART_WIDGET_KINDS.includes(widgetKind)) {
-    cfInsertIntoOrder(APP.cfChartOrder, field.id, widgetAfter);
+    CF_SCREEN_MODES.forEach(m => {
+      cfInsertIntoOrder(APP.cfChartOrderByMode[m], field.id, widgetAfter);
+    });
     APP.cfKpiOrder = APP.cfKpiOrder.filter(x => x !== field.id);
   } else {
     APP.cfKpiOrder = APP.cfKpiOrder.filter(x => x !== field.id);
-    APP.cfChartOrder = APP.cfChartOrder.filter(x => x !== field.id);
+    CF_SCREEN_MODES.forEach(m => {
+      APP.cfChartOrderByMode[m] = APP.cfChartOrderByMode[m].filter(x => x !== field.id);
+    });
   }
 
   cfPersist();
@@ -2077,7 +2152,11 @@ if (typeof window._applyCloudDataDirect === 'function') {
         APP.cfFields = Array.isArray(cfg.fields) ? cfg.fields : [];
         APP.cfColOrder = Array.isArray(cfg.colOrder) ? cfg.colOrder : null;
         APP.cfKpiOrder = Array.isArray(cfg.kpiOrder) ? cfg.kpiOrder : null;
-        APP.cfChartOrder = Array.isArray(cfg.chartOrder) ? cfg.chartOrder : null;
+        APP.cfChartOrderByMode = cfNormalizeChartOrderByMode(cfg);
+        APP.cfNavColumnByMode =
+          cfg.navColumnByMode && typeof cfg.navColumnByMode === 'object'
+            ? cfg.navColumnByMode
+            : {};
         APP.cfPencilStyles =
           cfg.pencilStyles && typeof cfg.pencilStyles === 'object' ? cfg.pencilStyles : {};
         cfEnsureOrders();
@@ -2086,6 +2165,8 @@ if (typeof window._applyCloudDataDirect === 'function') {
         cfInjectFormFields('e');
         renderTable();
         refreshAllCharts();
+        cfLayoutKpiStrip();
+        cfApplyNavStyle();
         cfRenderSettings();
         cfApplyPencilStylesCss();
       }
@@ -2112,12 +2193,13 @@ function cfEnsureHistoryGridStyle() {
 }
 
 // ── Menu de navigation en colonne, forçable sur PC ──
-// Réglage 100% local à cet appareil (PAS synchronisé cloud) : chaque écran
-// de Paul (vertical / normal / ultra wide) est un appareil différent, avec
-// potentiellement un choix différent — synchroniser ce réglage entre
-// appareils forcerait le même choix partout, ce qui n'a pas de sens ici.
+// Réglage PAR MODE (téléphone / vertical / normal / ultrawide), synchronisé
+// cloud comme le reste de cf_config : c'est le MODE qui porte le réglage
+// (pas l'appareil), donc si deux appareils différents se retrouvent un jour
+// dans le même mode, ils se comportent pareil — logique, puisque tout le
+// reste (graphiques, KPI) fonctionne déjà par mode de la même façon.
 function cfNavForceColumn() {
-  return !!ls('tj_nav_force_column', false);
+  return !!(APP.cfNavColumnByMode && APP.cfNavColumnByMode[cfScreenMode()]);
 }
 function cfEnsureNavStyle() {
   if (document.getElementById('cfNavStyle')) return;
@@ -2127,47 +2209,108 @@ function cfEnsureNavStyle() {
 body.cf-nav-force-column .nav-desktop{display:none!important;}
 body.cf-nav-force-column .nav-mobile{display:block!important;}
 body.cf-nav-force-column .hamburger{display:flex!important;}
+/* PC normal / ultra wide : on fusionne les 2 lignes du menu téléphone en une
+   seule (badges tout à droite) — la 2e ligne séparée n'a de sens que sur un
+   écran étroit (téléphone / PC vertical), pas ici. */
+body.cf-nav-force-column.cf-mode-normal .nav-mobile,
+body.cf-nav-force-column.cf-mode-ultrawide .nav-mobile{display:flex!important;flex-direction:row;align-items:center;}
+body.cf-nav-force-column.cf-mode-normal .nav-mobile-row1,
+body.cf-nav-force-column.cf-mode-ultrawide .nav-mobile-row1{flex:1 1 auto;min-width:0;}
+body.cf-nav-force-column.cf-mode-normal .nav-mobile-row2,
+body.cf-nav-force-column.cf-mode-ultrawide .nav-mobile-row2{flex:0 0 auto;border-top:none;padding:0 16px 0 0;}
+/* La carte "Préférences" (mode forcé + toggle) n'a aucun effet visible sur
+   téléphone (déjà en menu colonne par défaut) : masquée pour ne pas encombrer. */
+body.cf-mode-phone #cfNavCard{display:none!important;}
 `;
   document.head.appendChild(style);
 }
 function cfApplyNavStyle() {
   cfEnsureNavStyle();
+  const mode = cfScreenMode();
+  document.body.classList.remove(
+    'cf-mode-phone',
+    'cf-mode-vertical',
+    'cf-mode-normal',
+    'cf-mode-ultrawide'
+  );
+  document.body.classList.add('cf-mode-' + mode);
   document.body.classList.toggle('cf-nav-force-column', cfNavForceColumn());
 }
-function cfToggleNavColumn() {
-  const c = cfNavForceColumn();
-  lss('tj_nav_force_column', !c);
+// Recalcule tout ce qui dépend du mode d'affichage (largeur d'écran OU mode
+// forcé manuellement) : KPI, ordre + largeur des graphiques, style de nav,
+// et les Paramètres si la page est ouverte (sélecteur de mode / toggle /
+// liste d'ordre des graphiques doivent refléter le mode qu'on vient
+// d'activer).
+function cfRecomputeLayout() {
+  try {
+    cfLayoutKpiStrip();
+    cfApplyChartOrder();
+    cfApplyChartLayout();
+    cfNormalizeChartHeights();
+    cfApplyNavStyle();
+    cfRenderSettings();
+  } catch (e) {}
+}
+function cfRefreshPrefsCard() {
+  const sel = document.getElementById('cfModeOverrideSel');
+  if (sel) sel.value = cfModeOverride();
+  const modeLbl = document.getElementById('cfNavModeLbl');
+  if (modeLbl) modeLbl.textContent = CF_MODE_LABELS[cfScreenMode()] || cfScreenMode();
   const tgl = document.getElementById('cfTglNavColumn');
-  if (tgl) tgl.classList.toggle('on', !c);
   const lbl = document.getElementById('cfNavColumnLbl');
-  if (lbl) lbl.textContent = !c ? 'Activé' : 'Désactivé';
+  if (tgl && lbl) {
+    const on = cfNavForceColumn();
+    tgl.classList.toggle('on', on);
+    lbl.textContent = on ? 'Activé' : 'Désactivé';
+  }
+}
+function cfToggleNavColumn() {
+  cfEnsureOrders();
+  const mode = cfScreenMode();
+  APP.cfNavColumnByMode[mode] = !APP.cfNavColumnByMode[mode];
+  cfPersist();
+  cfRefreshPrefsCard();
   cfApplyNavStyle();
 }
-// Carte Paramètres dédiée (indépendante de la carte "Champs personnalisés"),
-// visible sur téléphone comme sur PC — sans effet visible sur téléphone
-// (déjà en menu colonne par défaut), utile sur les 3 modes PC.
+// Carte "PRÉFÉRENCES", placée entre "CAPITAL & RISK" et "RISK MANAGEMENT —
+// RÉGLAGES" (repérées via leur data-tvar, stable même si le titre affiché
+// est renommé) — pour l'instant : mode d'affichage forcé + toggle nav. Ne
+// touche pas à la carte "Champs personnalisés" (cfEnsureCard), gérée à part.
 function cfEnsureNavToggleCard() {
-  if (document.getElementById('cfNavCard')) return;
+  if (document.getElementById('cfNavCard')) {
+    cfRefreshPrefsCard();
+    return;
+  }
+  const anchorTitle = document.querySelector('[data-tvar="--crt-riskreglages"]');
+  const anchorCard = anchorTitle && anchorTitle.closest('.card');
   const modGrid = document.getElementById('modGrid');
-  if (!modGrid) return;
+  const insertBeforeEl = anchorCard || modGrid;
+  if (!insertBeforeEl) return;
   const card = document.createElement('div');
   card.className = 'card';
   card.id = 'cfNavCard';
   card.innerHTML = `
-    <div class="card-header"><div class="card-title" data-editable>AFFICHAGE — NAVIGATION (PC)</div></div>
+    <div class="card-header"><div class="card-title" data-editable>PRÉFÉRENCES</div></div>
     <div class="card-body">
-      <div style="font-size:11px;color:var(--muted);margin-bottom:12px;" data-editable>Sur PC (écran vertical, normal ou ultra wide), affiche les pages en colonne dans le bouton ☰ au lieu de la barre horizontale, comme sur téléphone.</div>
+      <div class="fg" style="max-width:240px;margin-bottom:14px;">
+        <label data-editable>Mode d'affichage</label>
+        <select id="cfModeOverrideSel" onchange="cfSetModeOverride(this.value)">
+          <option value="auto">Auto (détection automatique)</option>
+          <option value="phone">Téléphone</option>
+          <option value="vertical">PC vertical</option>
+          <option value="normal">PC normal</option>
+          <option value="ultrawide">Ultra wide</option>
+        </select>
+      </div>
+      <div style="font-size:10px;color:var(--muted);margin:-6px 0 10px;">Réglage propre au mode actif : <b id="cfNavModeLbl">—</b></div>
       <div class="tgl-row">
-        <span data-editable>Menu en colonne :</span>
+        <span data-editable>Menu de navigation en colonne (PC) :</span>
         <div class="tgl-track" id="cfTglNavColumn" onclick="cfToggleNavColumn()"><div class="tgl-thumb"></div></div>
         <span id="cfNavColumnLbl" style="color:var(--muted)">Désactivé</span>
       </div>
     </div>`;
-  modGrid.parentNode.insertBefore(card, modGrid);
-  if (cfNavForceColumn()) {
-    document.getElementById('cfTglNavColumn').classList.add('on');
-    document.getElementById('cfNavColumnLbl').textContent = 'Activé';
-  }
+  insertBeforeEl.parentNode.insertBefore(card, insertBeforeEl);
+  cfRefreshPrefsCard();
 }
 
 // ── Mode stylo : police + taille indépendante PC/téléphone pour le libellé
@@ -2324,22 +2467,17 @@ document.addEventListener('DOMContentLoaded', function () {
   setTimeout(cfInit, 120);
 });
 // Recalcule les mises en page dépendantes du nombre de cases (KPI) et de la
-// largeur d'écran (graphiques) au franchissement d'un des 3 seuils utilisés
-// par cfScreenMode() (téléphone / portrait / ultra wide).
+// largeur d'écran (graphiques, nav) au franchissement d'un des 3 seuils
+// utilisés par cfScreenMode() (téléphone / portrait / ultra wide). Sans
+// effet si un mode est forcé manuellement (le mode ne peut alors plus
+// changer via ces seuils), mais inoffensif de les garder branchés.
 if (window.matchMedia) {
-  const _cfOnBreakpointChange = function () {
-    try {
-      cfLayoutKpiStrip();
-      cfApplyChartLayout();
-      cfNormalizeChartHeights();
-    } catch (e) {}
-  };
   [
     window.matchMedia('(max-width:700px)'),
     window.matchMedia('(orientation:portrait)'),
     window.matchMedia('(min-aspect-ratio:2/1)')
   ].forEach(mq => {
-    if (mq.addEventListener) mq.addEventListener('change', _cfOnBreakpointChange);
-    else if (mq.addListener) mq.addListener(_cfOnBreakpointChange);
+    if (mq.addEventListener) mq.addEventListener('change', cfRecomputeLayout);
+    else if (mq.addListener) mq.addListener(cfRecomputeLayout);
   });
 }
