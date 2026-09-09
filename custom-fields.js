@@ -2183,10 +2183,24 @@ window.updateKPIs = function () {
 // Le camembert Win Rate natif doit avoir EXACTEMENT le même rayon (donc la
 // même épaisseur d'anneau) et la même absence de légende que les
 // camemberts custom (catégories identifiées par l'info-bulle au clic).
-// radius en PIXELS (pas en %) fige la taille indépendamment de la légende.
-// On complète après coup plutôt que dupliquer drawPie() : elle recrée
-// entièrement CH.pie à chaque appel, donc ce correctif doit s'appliquer
-// après CHAQUE appel, pas une seule fois.
+// Constat : masquer la légende après coup (CH.pie.options...+update())
+// fonctionne, mais PAS agrandir le rayon de la même façon — Chart.js v4 ne
+// recalcule pas la géométrie de l'anneau pour un simple update() suite à
+// une mutation directe de `options.radius`. Le rayon doit donc être fixé
+// EN AMONT, avant la toute première création du graphique : Chart.overrides
+// (config par défaut par type de graphique, Chart.js v4) est fait pour ça —
+// drawPie() ne précise pas de "radius" explicite, donc cette valeur par
+// défaut s'applique dès sa première exécution, sans rien devoir corriger
+// après coup.
+if (window.Chart && Chart.overrides && Chart.overrides.doughnut) {
+  Chart.overrides.doughnut.radius = CF_PIE_RADIUS;
+  if (!Chart.overrides.doughnut.plugins) Chart.overrides.doughnut.plugins = {};
+  if (!Chart.overrides.doughnut.plugins.legend) Chart.overrides.doughnut.plugins.legend = {};
+  Chart.overrides.doughnut.plugins.legend.display = false;
+}
+// Filet de sécurité complémentaire (garde le rayon/l'absence de légende
+// même si un futur appel de drawPie() précisait explicitement ses propres
+// valeurs, qui primeraient alors sur le défaut ci-dessus) :
 if (typeof window.drawPie === 'function') {
   const _cfOrigDrawPie = window.drawPie;
   window.drawPie = function (...args) {
@@ -2195,11 +2209,8 @@ if (typeof window.drawPie === 'function') {
       // CH est déclaré avec `const CH = {}` dans app-part1.js : ça ne
       // l'attache PAS à window (contrairement à `var`/aux fonctions), mais
       // il reste accessible en référence directe (même portée globale
-      // partagée entre les <script>). Le garde-fou `window.CH` d'origine
-      // était donc TOUJOURS faux, silencieusement — rien de ce bloc ne
-      // s'exécutait jamais.
+      // partagée entre les <script>).
       if (typeof CH !== 'undefined' && CH.pie) {
-        CH.pie.options.radius = CF_PIE_RADIUS;
         if (!CH.pie.options.plugins) CH.pie.options.plugins = {};
         if (!CH.pie.options.plugins.legend) CH.pie.options.plugins.legend = {};
         CH.pie.options.plugins.legend.display = false;
