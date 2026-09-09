@@ -113,12 +113,22 @@ const CF_MODE_LABELS = {
   normal: 'PC normal',
   ultrawide: 'Ultra wide'
 };
-// Rayon fixe (en pixels) forcé sur TOUS les camemberts (natif Win Rate +
-// custom), pour qu'ils aient tous la même épaisseur d'anneau quel que soit
-// le nombre de catégories/lignes de légende. Estimé pour bien remplir le
-// canevas 195×195 tout en laissant la place à une légende sur 1-2 lignes —
-// à ajuster ici si ce n'est pas exactement la taille voulue.
-const CF_PIE_RADIUS = 72;
+// Paramètres fixes forcés sur TOUS les camemberts (natif Win Rate +
+// custom), pour qu'ils soient tous rigoureusement identiques (rayon ET
+// zone) :
+//  - CF_PIE_RADIUS : rayon de l'anneau, en pixels absolus.
+//  - CF_PIE_CANVAS_MAX : taille max du canevas (carré), en pixels. Pas de
+//    légende à loger (plugins.legend.display:false partout, catégories
+//    identifiées par l'info-bulle au clic/survol) : juste assez de marge
+//    autour de l'anneau (200px de diamètre) pour l'effet de survol
+//    (hoverOffset) et le padding interne de Chart.js.
+//  - CF_PIE_ZONE_HEIGHT : hauteur de la zone (fond) qui contient le canevas.
+// cfEnsureChartsContainer() applique ces 3 valeurs au Win Rate natif (qui
+// avait ses propres dimensions, différentes, dans index.html) pour qu'il
+// utilise exactement les mêmes paramètres que les camemberts custom.
+const CF_PIE_RADIUS = 100;
+const CF_PIE_CANVAS_MAX = 220;
+const CF_PIE_ZONE_HEIGHT = 240;
 
 // ── Chargement / sauvegarde ──
 // Rétrocompatibilité : avant les 4 modes, "chartOrder" était un tableau
@@ -734,6 +744,22 @@ function cfEnsureChartsContainer() {
 
   const twoColWrap = pieCard.parentElement;
   pieCard.dataset.chartId = 'pie';
+  // Le Win Rate natif avait ses propres dimensions (220px / canevas 195px)
+  // et un fond dédié (--winrate-body-bg), différents du gabarit des
+  // camemberts custom (cfEnsureChartNode) : on les aligne ici sur les mêmes
+  // constantes partagées (CF_PIE_ZONE_HEIGHT / CF_PIE_CANVAS_MAX) pour que
+  // les deux soient rigoureusement identiques, au pixel près.
+  const winrateBody = document.getElementById('winrateBody');
+  const pieCanvas = document.getElementById('cPie');
+  if (winrateBody) {
+    winrateBody.classList.add('cf-pie-body');
+    winrateBody.style.height = CF_PIE_ZONE_HEIGHT + 'px';
+    winrateBody.style.background = '';
+  }
+  if (pieCanvas) {
+    pieCanvas.style.maxWidth = CF_PIE_CANVAS_MAX + 'px';
+    pieCanvas.style.maxHeight = CF_PIE_CANVAS_MAX + 'px';
+  }
   container.appendChild(pieCard);
   mgmtCard.dataset.chartId = 'mgmt';
   container.appendChild(mgmtCard);
@@ -1064,10 +1090,13 @@ function cfEnsureChartNode(field) {
     card.dataset.chartId = field.id;
     card.style.background = 'var(--card)';
     const isPie = field.widget.kind === 'pie';
-    const canvasStyle = isPie ? ' style="max-width:195px;max-height:195px;"' : '';
+    const canvasStyle = isPie
+      ? ` style="max-width:${CF_PIE_CANVAS_MAX}px;max-height:${CF_PIE_CANVAS_MAX}px;"`
+      : '';
     const bodyClass = isPie ? 'chart-body cf-pie-body' : 'chart-body';
+    const bodyHeight = isPie ? CF_PIE_ZONE_HEIGHT : 220;
     card.innerHTML = `<div class="chart-header"><div class="chart-title" data-editable data-tvar="--cf-${field.id}-title" id="cftitle-${field.id}" style="color:var(--cf-${field.id}-title,#00e5a0)">${escapeHtml((field.colName || field.label).toUpperCase())}</div>${cfChartHeaderControlsHtml(field.id)}</div>
-      <div class="${bodyClass}" style="height:220px"><canvas id="cfchart-${field.id}"${canvasStyle}></canvas></div>`;
+      <div class="${bodyClass}" style="height:${bodyHeight}px"><canvas id="cfchart-${field.id}"${canvasStyle}></canvas></div>`;
     container.appendChild(card);
   }
   return card;
@@ -1206,15 +1235,11 @@ function cfDrawChart(field) {
     const palette = ks.map(
       (k, i) => gc('--cf-' + field.id + '-slice-' + (i + 1)) || fallback[i % fallback.length]
     );
-    // Avec beaucoup de catégories, la légende (en bas) a besoin de plus de
-    // lignes ; comme la hauteur totale du graphique est fixe, chaque ligne de
-    // légende en plus grignote la place du donut, qui paraît alors plus
-    // petit qu'un camembert à 2-3 catégories (ex: Win Rate). On réduit donc
-    // la légende progressivement pour limiter cet effet, sans jamais toucher
-    // à la hauteur du conteneur (voir la mésaventure avec Chart.js plus haut
-    // dans cette conversation).
-    const legendFontSize = ks.length <= 3 ? 11 : ks.length <= 5 ? 9 : 8;
-    const legendBoxSize = ks.length <= 3 ? 13 : ks.length <= 5 ? 10 : 9;
+    // Pas de légende : les catégories s'identifient déjà via l'info-bulle
+    // au clic/survol d'une part du camembert. Ça évite aussi que le nombre
+    // de catégories fasse varier la place disponible pour l'anneau — chaque
+    // camembert garde ainsi le même rayon fixe (CF_PIE_RADIUS) quel que
+    // soit le nombre de catégories.
     CH[field.id] = new Chart(ctx, {
       type: 'doughnut',
       data: {
@@ -1228,19 +1253,7 @@ function cfDrawChart(field) {
         maintainAspectRatio: true,
         cutout: '60%',
         radius: CF_PIE_RADIUS,
-        plugins: {
-          legend: {
-            position: 'bottom',
-            align: 'center',
-            labels: {
-              padding: ks.length <= 3 ? 16 : 8,
-              color: '#94a3b8',
-              font: {size: legendFontSize},
-              boxWidth: legendBoxSize,
-              boxHeight: legendBoxSize
-            }
-          }
-        }
+        plugins: {legend: {display: false}}
       }
     });
   }
@@ -2142,13 +2155,12 @@ window.updateKPIs = function () {
 };
 
 // Le camembert Win Rate natif doit avoir EXACTEMENT le même rayon (donc la
-// même épaisseur d'anneau) que les camemberts custom — sinon le nombre/la
-// longueur des catégories de la légende fait varier la taille apparente
-// d'un camembert à l'autre (Chart.js réduit le rayon pour laisser de la
-// place à une légende plus haute). radius en PIXELS (pas en %) fige la
-// taille indépendamment de la légende. On complète après coup plutôt que
-// dupliquer drawPie() : elle recrée entièrement CH.pie à chaque appel, donc
-// ce correctif doit s'appliquer après CHAQUE appel, pas une seule fois.
+// même épaisseur d'anneau) et la même absence de légende que les
+// camemberts custom (catégories identifiées par l'info-bulle au clic).
+// radius en PIXELS (pas en %) fige la taille indépendamment de la légende.
+// On complète après coup plutôt que dupliquer drawPie() : elle recrée
+// entièrement CH.pie à chaque appel, donc ce correctif doit s'appliquer
+// après CHAQUE appel, pas une seule fois.
 if (typeof window.drawPie === 'function') {
   const _cfOrigDrawPie = window.drawPie;
   window.drawPie = function (...args) {
@@ -2156,6 +2168,9 @@ if (typeof window.drawPie === 'function') {
     try {
       if (window.CH && CH.pie) {
         CH.pie.options.radius = CF_PIE_RADIUS;
+        if (!CH.pie.options.plugins) CH.pie.options.plugins = {};
+        if (!CH.pie.options.plugins.legend) CH.pie.options.plugins.legend = {};
+        CH.pie.options.plugins.legend.display = false;
         CH.pie.update('none');
       }
     } catch (e) {}
