@@ -2192,7 +2192,13 @@ if (typeof window.drawPie === 'function') {
   window.drawPie = function (...args) {
     _cfOrigDrawPie.apply(this, args);
     try {
-      if (window.CH && CH.pie) {
+      // CH est déclaré avec `const CH = {}` dans app-part1.js : ça ne
+      // l'attache PAS à window (contrairement à `var`/aux fonctions), mais
+      // il reste accessible en référence directe (même portée globale
+      // partagée entre les <script>). Le garde-fou `window.CH` d'origine
+      // était donc TOUJOURS faux, silencieusement — rien de ce bloc ne
+      // s'exécutait jamais.
+      if (typeof CH !== 'undefined' && CH.pie) {
         CH.pie.options.radius = CF_PIE_RADIUS;
         if (!CH.pie.options.plugins) CH.pie.options.plugins = {};
         if (!CH.pie.options.plugins.legend) CH.pie.options.plugins.legend = {};
@@ -2618,6 +2624,7 @@ function cfInit() {
     cfEnsureModal();
     cfEnsureCard();
     cfEnsureHistoryGridStyle();
+    cfEnsureImgViewClickOutside();
     cfApplyNavStyle();
     cfApplyPencilStylesCss();
     cfInjectFormFields('f');
