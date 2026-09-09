@@ -113,6 +113,12 @@ const CF_MODE_LABELS = {
   normal: 'PC normal',
   ultrawide: 'Ultra wide'
 };
+// Rayon fixe (en pixels) forcé sur TOUS les camemberts (natif Win Rate +
+// custom), pour qu'ils aient tous la même épaisseur d'anneau quel que soit
+// le nombre de catégories/lignes de légende. Estimé pour bien remplir le
+// canevas 195×195 tout en laissant la place à une légende sur 1-2 lignes —
+// à ajuster ici si ce n'est pas exactement la taille voulue.
+const CF_PIE_RADIUS = 72;
 
 // ── Chargement / sauvegarde ──
 // Rétrocompatibilité : avant les 4 modes, "chartOrder" était un tableau
@@ -143,6 +149,10 @@ function cfLoad() {
     cfg && cfg.navColumnByMode && typeof cfg.navColumnByMode === 'object'
       ? cfg.navColumnByMode
       : {};
+  APP.cfChartLinksByMode =
+    cfg && cfg.chartLinksByMode && typeof cfg.chartLinksByMode === 'object'
+      ? cfg.chartLinksByMode
+      : {};
   APP.cfPencilStyles =
     cfg && cfg.pencilStyles && typeof cfg.pencilStyles === 'object' ? cfg.pencilStyles : {};
 }
@@ -153,6 +163,7 @@ function cfConfigSnapshot() {
     kpiOrder: APP.cfKpiOrder,
     chartOrderByMode: APP.cfChartOrderByMode,
     navColumnByMode: APP.cfNavColumnByMode,
+    chartLinksByMode: APP.cfChartLinksByMode,
     pencilStyles: APP.cfPencilStyles
   };
 }
@@ -186,8 +197,10 @@ function cfEnsureOrders() {
   if (!APP.cfKpiOrder) APP.cfKpiOrder = CF_BUILTIN_KPIS.map(k => k.id);
   if (!APP.cfChartOrderByMode) APP.cfChartOrderByMode = {};
   if (!APP.cfNavColumnByMode) APP.cfNavColumnByMode = {};
+  if (!APP.cfChartLinksByMode) APP.cfChartLinksByMode = {};
   CF_SCREEN_MODES.forEach(m => {
     if (!APP.cfChartOrderByMode[m]) APP.cfChartOrderByMode[m] = CF_BUILTIN_CHARTS.map(c => c.id);
+    if (!Array.isArray(APP.cfChartLinksByMode[m])) APP.cfChartLinksByMode[m] = [];
   });
   const kpiFieldIds = new Set(
     APP.cfFields.filter(f => f.widget && f.widget.kind === 'kpi').map(f => f.id)
@@ -218,6 +231,16 @@ function cfEnsureOrders() {
     APP.cfChartOrderByMode[m] = APP.cfChartOrderByMode[m].filter(
       id => builtinChartIds.has(id) || chartFieldIds.has(id)
     );
+    // Une liaison n'a de sens que si ses 2 graphiques existent encore ET
+    // sont toujours immédiatement adjacents (dans ce sens précis) dans
+    // l'ordre de CE mode — sinon on la laisse tomber silencieusement.
+    const order = APP.cfChartOrderByMode[m];
+    APP.cfChartLinksByMode[m] = APP.cfChartLinksByMode[m].filter(key => {
+      const parts = key.split('|');
+      if (parts.length !== 2) return false;
+      const idx = order.indexOf(parts[0]);
+      return idx !== -1 && order[idx + 1] === parts[1];
+    });
   });
 }
 // Initialisation IMMÉDIATE et synchrone (pas de setTimeout / DOMContentLoaded
@@ -774,18 +797,16 @@ function cfEnsureChartsContainer() {
 #chartsContainer>*.sortable-ghost{opacity:.35;}
 #chartsContainer>*.sortable-drag{cursor:grabbing;}
 @media(max-width:700px){#cfBottomRow{grid-template-columns:1fr!important;}}
-/* Largeurs MINIMUM, pas figées : flex-grow permet à un graphique seul sur sa
-   ligne de s'étirer pour occuper toute la place (un graphique seul prend
-   100%, des camemberts qui remplissent l'espace s'ils sont moins nombreux
-   que le maximum par ligne), tout en se limitant à sa taille minimum dès
-   qu'un autre graphique partage la même ligne. Les 3 variables --cf-*-basis
-   sont recalculées en JS (cfApplyChartLayout) selon le mode d'affichage
-   (téléphone / PC vertical / PC normal / ultra wide) — voir cfScreenMode()
-   et CF_CHART_MAX_PER_ROW.*/
+/* Largeur MINIMUM du camembert, pas figée : flex-grow permet à un camembert
+   seul sur sa ligne de s'étirer pour occuper toute la place, et --cf-pie-basis
+   est recalculée en JS (cfApplyChartLayout) selon le mode d'affichage
+   (téléphone / PC vertical / PC normal / ultra wide). Les graphiques "barv"
+   (barres verticales) et "other" (barres horizontales) n'ont plus de classe
+   fixe : leur largeur dépend de la série liée à laquelle ils appartiennent
+   (voir cfApplyChartLayout — style.flex posé directement en JS, 100% par
+   défaut, 100/N% seulement pour une série explicitement liée à la main). */
 .cf-flex-full{flex:1 1 100%;}
 .cf-flex-pie{flex:1 1 var(--cf-pie-basis,16.6667%);}
-.cf-flex-barv{flex:1 1 var(--cf-barv-basis,50%);}
-.cf-flex-other{flex:1 1 var(--cf-other-basis,100%);}
 .cf-row-break{flex-basis:100%;width:0;height:0;margin:0;padding:0;border:0;}
 `;
   document.head.appendChild(style);
@@ -850,7 +871,14 @@ function cfEnsureChartsContainer() {
 // ⚠️ Ces seuils sont un réglage raisonnable mais pas testés en conditions
 // réelles (aucun navigateur disponible ici) — à ajuster si le geste est trop
 // ou pas assez sensible.
+// Liaison "déposé sur le côté" en cours de survol, en attente de
+// confirmation à la fin du glisser (cfChartsSortableOnEnd) — uniquement
+// pour barv/other, le camembert s'assemble déjà tout seul automatiquement.
+// Reflète toujours le DERNIER survol en date (réinitialisée à chaque appel,
+// reposée seulement si ce survol précis est un dépose sur le bord).
+let _cfPendingLink = null;
 function cfChartsSortableOnMove(evt) {
+  _cfPendingLink = null;
   const related = evt.related,
     dragged = evt.dragged;
   if (!related || related === dragged || !evt.originalEvent) return true;
@@ -909,12 +937,18 @@ function cfChartsSortableOnMove(evt) {
   if (!relatedIsFull && cfChartGroup(dragged) !== cfChartGroup(related)) return false;
   if (clientX != null && rect.width && !relatedIsFull) {
     const relativeX = (clientX - rect.left) / rect.width;
+    const group = cfChartGroup(related);
+    const draggedId = dragged.dataset.chartId,
+      relatedId = related.dataset.chartId;
+    const linkable = (group === 'barv' || group === 'other') && draggedId && relatedId;
     if (relativeX < 0.2) {
       container.insertBefore(dragged, related);
+      if (linkable) _cfPendingLink = {a: draggedId, b: relatedId};
       return false;
     }
     if (relativeX > 0.8) {
       container.insertBefore(dragged, related.nextSibling);
+      if (linkable) _cfPendingLink = {a: relatedId, b: draggedId};
       return false;
     }
   }
@@ -933,6 +967,7 @@ function cfChartsSortableOnMove(evt) {
 // après (sous peine de perdre définitivement l'édition au clic sur ce titre,
 // car setupPencil() ne réattache jamais un _ph déjà posé).
 function cfChartsSortableOnStart() {
+  _cfPendingLink = null;
   const container = document.getElementById('chartsContainer');
   if (!container) return;
   container.querySelectorAll('[data-editable]').forEach(el => {
@@ -961,7 +996,27 @@ function cfChartsSortableOnEnd() {
     .map(el => el.dataset.chartId)
     .filter(Boolean);
   cfEnsureOrders();
-  APP.cfChartOrderByMode[cfScreenMode()] = order;
+  const mode = cfScreenMode();
+  APP.cfChartOrderByMode[mode] = order;
+  // Reconstruit les liaisons valides : ne garde que celles où les 2
+  // graphiques sont encore immédiatement adjacents dans ce sens précis,
+  // puis ajoute la nouvelle liaison si le tout dernier survol avant le
+  // lâcher était un dépose explicite sur le bord (_cfPendingLink).
+  const oldLinks = new Set(APP.cfChartLinksByMode[mode] || []);
+  const newLinks = [];
+  for (let i = 0; i < order.length - 1; i++) {
+    const key = order[i] + '|' + order[i + 1];
+    if (oldLinks.has(key)) newLinks.push(key);
+  }
+  if (_cfPendingLink) {
+    const idx = order.indexOf(_cfPendingLink.a);
+    if (idx !== -1 && order[idx + 1] === _cfPendingLink.b) {
+      const key = _cfPendingLink.a + '|' + _cfPendingLink.b;
+      if (!newLinks.includes(key)) newLinks.push(key);
+    }
+  }
+  _cfPendingLink = null;
+  APP.cfChartLinksByMode[mode] = newLinks;
   cfPersist();
   cfApplyChartOrder();
   cfApplyChartLayout();
@@ -1172,6 +1227,7 @@ function cfDrawChart(field) {
         responsive: true,
         maintainAspectRatio: true,
         cutout: '60%',
+        radius: CF_PIE_RADIUS,
         plugins: {
           legend: {
             position: 'bottom',
@@ -1266,33 +1322,33 @@ function cfIsMobile() {
   return cfScreenMode() === 'phone';
 }
 // Nombre maximum d'éléments par ligne, par groupe de graphique et par mode.
+// Pour "pie" : automatique, comme avant (tous les camemberts s'assemblent
+// tout seuls jusqu'à ce maximum). Pour "barv"/"other" : ce nombre n'est plus
+// automatique, c'est désormais la TAILLE MAXIMALE d'une série liée à la main
+// (voir cfChartLinksByMode plus bas) — deux graphiques de comparaison
+// adjacents ne partagent une ligne QUE si Paul a explicitement déposé l'un
+// sur le côté de l'autre ; sinon, chacun reste seul sur sa ligne (100%),
+// même côte à côte dans l'ordre.
 const CF_CHART_MAX_PER_ROW = {
   phone: {pie: 1, barv: 1, other: 1},
   vertical: {pie: 3, barv: 1, other: 1},
   normal: {pie: 4, barv: 2, other: 1},
   ultrawide: {pie: 6, barv: 3, other: 2}
 };
-// Largeurs MINIMUM (pas figées) via flexbox : chaque carte porte une classe
-// qui fixe sa taille plancher, et flex-grow s'occupe tout seul de l'étirer
-// pour remplir sa ligne quand rien d'autre ne la partage — un graphique seul
-// prend 100%, deux camemberts seuls entre eux prennent 50% chacun, six
-// camemberts se tassent à 1/6 chacun, etc. Les largeurs plancher (variables
-// --cf-*-basis) sont recalculées par cfApplyChartLayout() à chaque rendu et
-// à chaque changement de mode, à partir de CF_CHART_MAX_PER_ROW.
 // Chaque graphique appartient à un "groupe" : deux graphiques de groupes
 // différents ne doivent JAMAIS se retrouver sur la même ligne, même s'il
-// reste de la place. À l'intérieur d'un même groupe en revanche, ils
-// s'assemblent librement (plusieurs lignes si besoin, autant que le nombre
-// d'éléments l'exige — jamais un nombre de lignes figé).
-//  - "pie"   : tous les camemberts (natif Win Rate + custom)
+// reste de la place.
+//  - "pie"   : tous les camemberts (natif Win Rate + custom) — s'assemblent
+//    AUTOMATIQUEMENT jusqu'au maximum du mode, comme avant.
 //  - "barv"  : tous les graphiques en barres VERTICALES (Impact du
-//    management, natif, + barres verticales custom)
+//    management, natif, + barres verticales custom) — ne partagent une ligne
+//    que par liaison EXPLICITE (glisser-déposer sur le côté).
 //  - "other" : les graphiques en barres HORIZONTALES (Confluence, Paire,
-//    Session, Jour, Timeframe, natifs, + barres horizontales custom) — seuls
-//    à s'associer par 2 en mode ultra wide, seuls (100%) partout ailleurs
+//    Session, Jour, Timeframe, natifs, + barres horizontales custom) — même
+//    principe que "barv" : liaison explicite uniquement.
 //  - "solo-<id>" : Évolution du capital, P&L et Risk Management restent
 //    TOUJOURS seuls sur leur ligne, dans tous les modes — jamais concernés
-//    par le groupe "other" ni par aucun regroupement
+//    par aucun regroupement, ni automatique ni par liaison.
 function cfChartGroup(el) {
   const id = el.dataset.chartId;
   if (id === 'pie') return 'pie';
@@ -1307,24 +1363,66 @@ function cfChartGroup(el) {
   }
   return 'solo-' + id;
 }
+// Liaisons explicites (paires côte-à-côte) du mode actuel, sous forme d'un
+// Set de clés "idGauche|idDroite" — voir cfChartsSortableOnMove/OnEnd pour
+// comment elles se créent (dépose sur le bord gauche/droit d'un graphique
+// compatible) et cfEnsureOrders pour leur nettoyage (adjacence toujours
+// valide).
+function cfCurrentLinks() {
+  cfEnsureOrders();
+  return new Set(APP.cfChartLinksByMode[cfScreenMode()] || []);
+}
 function cfApplyChartLayout() {
   const container = document.getElementById('chartsContainer');
   if (!container) return;
   const maxes = CF_CHART_MAX_PER_ROW[cfScreenMode()] || CF_CHART_MAX_PER_ROW.normal;
   container.style.setProperty('--cf-pie-basis', 100 / maxes.pie + '%');
-  container.style.setProperty('--cf-barv-basis', 100 / maxes.barv + '%');
-  container.style.setProperty('--cf-other-basis', 100 / maxes.other + '%');
   container.querySelectorAll('.cf-row-break').forEach(el => el.remove());
   const children = Array.from(container.children);
+  const links = cfCurrentLinks();
   children.forEach(el => {
-    el.classList.remove('cf-flex-full', 'cf-flex-pie', 'cf-flex-barv', 'cf-flex-other');
+    el.classList.remove('cf-flex-full', 'cf-flex-pie');
+    el.style.removeProperty('flex');
     el.style.removeProperty('grid-column');
-    const group = cfChartGroup(el);
-    if (group === 'pie') el.classList.add('cf-flex-pie');
-    else if (group === 'barv') el.classList.add('cf-flex-barv');
-    else if (group === 'other') el.classList.add('cf-flex-other');
-    else el.classList.add('cf-flex-full');
   });
+  // Les camemberts gardent leur regroupement automatique (classe + variable
+  // CSS, comme avant). Les "barv"/"other" sont traités par série CONSÉCUTIVE
+  // explicitement liée : une série de taille 1 (par défaut) prend 100%, une
+  // série liée de taille N prend 100/N% chacun — plafonnée au maximum du
+  // mode pour ce groupe (une liaison ne peut jamais dépasser cette taille).
+  let i = 0;
+  while (i < children.length) {
+    const el = children[i];
+    const group = cfChartGroup(el);
+    if (group === 'pie') {
+      el.classList.add('cf-flex-pie');
+      i++;
+      continue;
+    }
+    if (group === 'barv' || group === 'other') {
+      const cap = maxes[group] || 1;
+      let runEnd = i;
+      while (
+        runEnd - i + 1 < cap &&
+        runEnd + 1 < children.length &&
+        cfChartGroup(children[runEnd + 1]) === group &&
+        links.has(
+          children[runEnd].dataset.chartId + '|' + children[runEnd + 1].dataset.chartId
+        )
+      ) {
+        runEnd++;
+      }
+      const runSize = runEnd - i + 1;
+      const basisPct = runSize > 1 ? 100 / runSize + '%' : '100%';
+      for (let k = i; k <= runEnd; k++) {
+        children[k].style.flex = '1 1 ' + basisPct;
+      }
+      i = runEnd + 1;
+      continue;
+    }
+    el.classList.add('cf-flex-full');
+    i++;
+  }
   // Sépare deux groupes différents consécutifs par un séparateur de ligne
   // invisible (flex-basis:100%, hauteur 0) : un élément à 100% de large
   // force forcément un retour à la ligne juste après lui, ce qui empêche
@@ -2043,6 +2141,27 @@ window.updateKPIs = function () {
   }
 };
 
+// Le camembert Win Rate natif doit avoir EXACTEMENT le même rayon (donc la
+// même épaisseur d'anneau) que les camemberts custom — sinon le nombre/la
+// longueur des catégories de la légende fait varier la taille apparente
+// d'un camembert à l'autre (Chart.js réduit le rayon pour laisser de la
+// place à une légende plus haute). radius en PIXELS (pas en %) fige la
+// taille indépendamment de la légende. On complète après coup plutôt que
+// dupliquer drawPie() : elle recrée entièrement CH.pie à chaque appel, donc
+// ce correctif doit s'appliquer après CHAQUE appel, pas une seule fois.
+if (typeof window.drawPie === 'function') {
+  const _cfOrigDrawPie = window.drawPie;
+  window.drawPie = function (...args) {
+    _cfOrigDrawPie.apply(this, args);
+    try {
+      if (window.CH && CH.pie) {
+        CH.pie.options.radius = CF_PIE_RADIUS;
+        CH.pie.update('none');
+      }
+    } catch (e) {}
+  };
+}
+
 const _cfOrigRefreshAllCharts = window.refreshAllCharts;
 window.refreshAllCharts = function () {
   _cfOrigRefreshAllCharts();
@@ -2156,6 +2275,10 @@ if (typeof window._applyCloudDataDirect === 'function') {
         APP.cfNavColumnByMode =
           cfg.navColumnByMode && typeof cfg.navColumnByMode === 'object'
             ? cfg.navColumnByMode
+            : {};
+        APP.cfChartLinksByMode =
+          cfg.chartLinksByMode && typeof cfg.chartLinksByMode === 'object'
+            ? cfg.chartLinksByMode
             : {};
         APP.cfPencilStyles =
           cfg.pencilStyles && typeof cfg.pencilStyles === 'object' ? cfg.pencilStyles : {};
