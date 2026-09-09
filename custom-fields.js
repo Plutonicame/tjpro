@@ -749,6 +749,13 @@ function cfEnsureChartsContainer() {
   // camemberts custom (cfEnsureChartNode) : on les aligne ici sur les mêmes
   // constantes partagées (CF_PIE_ZONE_HEIGHT / CF_PIE_CANVAS_MAX) pour que
   // les deux soient rigoureusement identiques, au pixel près.
+  // IMPORTANT : Chart.js dimensionne un canevas "responsive" d'après la
+  // taille de son PARENT DIRECT, pas d'après un max-width/max-height posé
+  // sur le canevas lui-même (ça ne suffit pas à le contraindre de façon
+  // fiable — sans ça le camembert peut se retrouver énorme et rogné sur un
+  // écran étroit). On enveloppe donc le canevas dans un conteneur à taille
+  // FIXE (pas juste "max"), et c'est CE conteneur, pas le canevas, qui porte
+  // la contrainte de taille.
   const winrateBody = document.getElementById('winrateBody');
   const pieCanvas = document.getElementById('cPie');
   if (winrateBody) {
@@ -756,9 +763,24 @@ function cfEnsureChartsContainer() {
     winrateBody.style.height = CF_PIE_ZONE_HEIGHT + 'px';
     winrateBody.style.background = '';
   }
-  if (pieCanvas) {
-    pieCanvas.style.maxWidth = CF_PIE_CANVAS_MAX + 'px';
-    pieCanvas.style.maxHeight = CF_PIE_CANVAS_MAX + 'px';
+  if (pieCanvas && !pieCanvas.dataset.cfWrapped) {
+    pieCanvas.dataset.cfWrapped = '1';
+    pieCanvas.style.maxWidth = '';
+    pieCanvas.style.maxHeight = '';
+    const wrap = document.createElement('div');
+    wrap.style.cssText =
+      'width:' + CF_PIE_CANVAS_MAX + 'px;height:' + CF_PIE_CANVAS_MAX + 'px;';
+    pieCanvas.parentNode.insertBefore(wrap, pieCanvas);
+    wrap.appendChild(pieCanvas);
+  }
+  // Force un premier rendu à travers notre patch de drawPie (voir plus bas) :
+  // si le tout premier rendu natif a eu lieu avant que ce fichier n'ait la
+  // main, il l'a fait avec la légende et le rayon d'origine, jamais corrigés
+  // depuis faute d'un nouvel appel à drawPie() derrière.
+  if (typeof window.drawPie === 'function' && typeof ST !== 'undefined') {
+    try {
+      window.drawPie(ST.pie || 'tout');
+    } catch (e) {}
   }
   container.appendChild(pieCard);
   mgmtCard.dataset.chartId = 'mgmt';
@@ -1090,13 +1112,17 @@ function cfEnsureChartNode(field) {
     card.dataset.chartId = field.id;
     card.style.background = 'var(--card)';
     const isPie = field.widget.kind === 'pie';
-    const canvasStyle = isPie
-      ? ` style="max-width:${CF_PIE_CANVAS_MAX}px;max-height:${CF_PIE_CANVAS_MAX}px;"`
-      : '';
     const bodyClass = isPie ? 'chart-body cf-pie-body' : 'chart-body';
     const bodyHeight = isPie ? CF_PIE_ZONE_HEIGHT : 220;
+    // Chart.js dimensionne un canevas "responsive" d'après son PARENT
+    // DIRECT — un max-width/max-height posé sur le canevas lui-même ne le
+    // contraint pas de façon fiable (camembert énorme et rogné sur écran
+    // étroit). On enveloppe donc le canevas dans un conteneur à taille FIXE.
+    const canvasHtml = isPie
+      ? `<div style="width:${CF_PIE_CANVAS_MAX}px;height:${CF_PIE_CANVAS_MAX}px;"><canvas id="cfchart-${field.id}"></canvas></div>`
+      : `<canvas id="cfchart-${field.id}"></canvas>`;
     card.innerHTML = `<div class="chart-header"><div class="chart-title" data-editable data-tvar="--cf-${field.id}-title" id="cftitle-${field.id}" style="color:var(--cf-${field.id}-title,#00e5a0)">${escapeHtml((field.colName || field.label).toUpperCase())}</div>${cfChartHeaderControlsHtml(field.id)}</div>
-      <div class="${bodyClass}" style="height:${bodyHeight}px"><canvas id="cfchart-${field.id}"${canvasStyle}></canvas></div>`;
+      <div class="${bodyClass}" style="height:${bodyHeight}px">${canvasHtml}</div>`;
     container.appendChild(card);
   }
   return card;
