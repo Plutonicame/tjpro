@@ -859,16 +859,20 @@ function cfEnsureChartsContainer() {
 #chartsContainer>*.sortable-ghost{opacity:.35;}
 #chartsContainer>*.sortable-drag{cursor:grabbing;}
 @media(max-width:700px){#cfBottomRow{grid-template-columns:1fr!important;}}
-/* Largeur MINIMUM du camembert, pas figée : flex-grow permet à un camembert
-   seul sur sa ligne de s'étirer pour occuper toute la place, et --cf-pie-basis
-   est recalculée en JS (cfApplyChartLayout) selon le mode d'affichage
-   (téléphone / PC vertical / PC normal / ultra wide). Les graphiques "barv"
-   (barres verticales) et "other" (barres horizontales) n'ont plus de classe
+/* Le camembert a une largeur FIXE (pas un pourcentage) et ne grossit jamais
+   (flex-grow:0) : un pourcentage du type 100/N% suppose que N camemberts
+   remplissent la ligne — avec moins que N présents, la carte grossissait
+   pour combler la place restante, donnant une zone grise démesurément
+   large en ultra wide (jusqu'à 6 attendus). Le nombre par ligne (N) est
+   désormais garanti par un retour à la ligne forcé toutes les N cartes
+   (cfApplyChartLayout), pas par un calcul de largeur. Les graphiques "barv"
+   (barres verticales) et "other" (barres horizontales) n'ont pas de classe
    fixe : leur largeur dépend de la série liée à laquelle ils appartiennent
    (voir cfApplyChartLayout — style.flex posé directement en JS, 100% par
-   défaut, 100/N% seulement pour une série explicitement liée à la main). */
+   défaut, 100/N% seulement pour une série explicitement liée à la main,
+   ce qui remplit alors exactement la ligne, sans place restante à combler). */
 .cf-flex-full{flex:1 1 100%;}
-.cf-flex-pie{flex:1 1 var(--cf-pie-basis,16.6667%);}
+.cf-flex-pie{flex:0 1 ${CF_PIE_CANVAS_MAX + 40}px!important;}
 .cf-row-break{flex-basis:100%;width:0;height:0;margin:0;padding:0;border:0;}
 `;
   document.head.appendChild(style);
@@ -1440,15 +1444,6 @@ function cfApplyChartLayout() {
   const container = document.getElementById('chartsContainer');
   if (!container) return;
   const maxes = CF_CHART_MAX_PER_ROW[cfScreenMode()] || CF_CHART_MAX_PER_ROW.normal;
-  // #chartsContainer a un gap:16px entre les cartes (voir cfEnsureChartsContainer) —
-  // un simple pourcentage (100/N%) ne le soustrait pas, donc N cartes
-  // débordaient de (N-1)*16px et une carte de trop était rejetée à la ligne
-  // suivante (6 camemberts prévus en ultra wide → seulement 5 tenaient).
-  // calc() soustrait explicitement la place prise par les (N-1) espaces.
-  container.style.setProperty(
-    '--cf-pie-basis',
-    'calc((100% - ' + (maxes.pie - 1) * 16 + 'px) / ' + maxes.pie + ')'
-  );
   container.querySelectorAll('.cf-row-break').forEach(el => el.remove());
   const children = Array.from(container.children);
   const links = cfCurrentLinks();
@@ -1457,8 +1452,11 @@ function cfApplyChartLayout() {
     el.style.removeProperty('flex');
     el.style.removeProperty('grid-column');
   });
-  // Les camemberts gardent leur regroupement automatique (classe + variable
-  // CSS, comme avant). Les "barv"/"other" sont traités par série CONSÉCUTIVE
+  // Les camemberts ont une largeur FIXE (cf-flex-pie, voir le style injecté
+  // plus haut) : ils ne grossissent jamais (flex-grow:0), donc jamais de
+  // zone démesurée quand il y en a moins que le maximum du mode — sauf en
+  // téléphone (max=1), où ils doivent au contraire prendre 100% comme tout
+  // le reste. Les "barv"/"other" sont traités par série CONSÉCUTIVE
   // explicitement liée : une série de taille 1 (par défaut) prend 100%, une
   // série liée de taille N prend 100/N% chacun — plafonnée au maximum du
   // mode pour ce groupe (une liaison ne peut jamais dépasser cette taille).
@@ -1467,7 +1465,7 @@ function cfApplyChartLayout() {
     const el = children[i];
     const group = cfChartGroup(el);
     if (group === 'pie') {
-      el.classList.add('cf-flex-pie');
+      el.classList.add(maxes.pie <= 1 ? 'cf-flex-full' : 'cf-flex-pie');
       i++;
       continue;
     }
@@ -1485,10 +1483,10 @@ function cfApplyChartLayout() {
         runEnd++;
       }
       const runSize = runEnd - i + 1;
-      // Même correctif de gap que pour les camemberts (voir plus haut) :
-      // sans lui, une série liée de 2 (50% chacun) ou 3 (33.33% chacun)
-      // débordait du (des) gap(s) de 16px et ne tenait jamais vraiment
-      // côte à côte malgré la liaison explicite.
+      // Une série liée remplit exactement sa ligne (100/N% * N = 100%, en
+      // tenant compte des gaps de 16px entre chaque élément de la série) —
+      // pas de place restante à combler, donc pas besoin d'une largeur fixe
+      // ici comme pour les camemberts.
       const basisPct =
         runSize > 1 ? 'calc((100% - ' + (runSize - 1) * 16 + 'px) / ' + runSize + ')' : '100%';
       for (let k = i; k <= runEnd; k++) {
@@ -1504,14 +1502,34 @@ function cfApplyChartLayout() {
   // invisible (flex-basis:100%, hauteur 0) : un élément à 100% de large
   // force forcément un retour à la ligne juste après lui, ce qui empêche
   // tout mélange entre groupes sans jamais limiter à un nombre fixe de
-  // lignes — il y en a exactement autant que nécessaire.
-  for (let i = children.length - 1; i >= 1; i--) {
-    if (cfChartGroup(children[i]) !== cfChartGroup(children[i - 1])) {
-      const spacer = document.createElement('div');
-      spacer.className = 'cf-row-break';
-      container.insertBefore(spacer, children[i]);
+  // lignes — il y en a exactement autant que nécessaire. Insère EN PLUS un
+  // retour à la ligne forcé toutes les maxes.pie cartes consécutives : avec
+  // une largeur fixe (pas un pourcentage), rien n'empêcherait naturellement
+  // plus de N camemberts de tenir sur une ligne assez large (l'ultra wide
+  // en a largement la place) — c'est ce retour forcé qui garantit le
+  // maximum par ligne, plus l'arithmétique de largeur.
+  const breakBefore = new Set();
+  let pieRun = 0;
+  for (let idx = 0; idx < children.length; idx++) {
+    const g = cfChartGroup(children[idx]);
+    if (idx > 0 && g !== cfChartGroup(children[idx - 1])) breakBefore.add(idx);
+    if (g === 'pie' && maxes.pie > 1) {
+      pieRun++;
+      if (pieRun >= maxes.pie) {
+        if (idx + 1 < children.length) breakBefore.add(idx + 1);
+        pieRun = 0;
+      }
+    } else {
+      pieRun = 0;
     }
   }
+  Array.from(breakBefore)
+    .sort((a, b) => b - a)
+    .forEach(idx => {
+      const spacer = document.createElement('div');
+      spacer.className = 'cf-row-break';
+      container.insertBefore(spacer, children[idx]);
+    });
 }
 
 // ── Intégration thème ──
