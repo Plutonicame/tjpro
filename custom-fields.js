@@ -759,8 +759,8 @@ function cfEnsureChartsContainer() {
   const winrateBody = document.getElementById('winrateBody');
   const pieCanvas = document.getElementById('cPie');
   if (winrateBody) {
-    winrateBody.classList.add('cf-pie-body');
-    winrateBody.style.height = CF_PIE_ZONE_HEIGHT + 'px';
+    winrateBody.classList.add('cf-pie-body', 'cf-pie-zone');
+    winrateBody.style.height = '';
     winrateBody.style.background = '';
   }
   if (pieCanvas && !pieCanvas.dataset.cfWrapped) {
@@ -768,8 +768,7 @@ function cfEnsureChartsContainer() {
     pieCanvas.style.maxWidth = '';
     pieCanvas.style.maxHeight = '';
     const wrap = document.createElement('div');
-    wrap.style.cssText =
-      'width:' + CF_PIE_CANVAS_MAX + 'px;height:' + CF_PIE_CANVAS_MAX + 'px;';
+    wrap.className = 'cf-pie-canvas-wrap';
     pieCanvas.parentNode.insertBefore(wrap, pieCanvas);
     wrap.appendChild(pieCanvas);
   }
@@ -841,6 +840,13 @@ function cfEnsureChartsContainer() {
 .cf-shape-circle{max-width:200px;aspect-ratio:1/1;border-radius:50%;margin:0 auto;}
 .cf-shape-rect{max-width:360px;min-height:90px;margin:0 auto;}
 .cf-pie-body{display:flex;align-items:center;justify-content:center;}
+/* !important à dessein : le Win Rate natif gardait une zone plus grande que
+   les camemberts custom malgré une valeur JS identique (winrateBody.style.height) —
+   une classe !important est la garantie la plus forte possible que rien
+   d'autre (règle CSS, style inline posé ailleurs, etc.) ne puisse plus
+   jamais la faire dévier. */
+.cf-pie-zone{height:${CF_PIE_ZONE_HEIGHT}px!important;}
+.cf-pie-canvas-wrap{width:${CF_PIE_CANVAS_MAX}px!important;height:${CF_PIE_CANVAS_MAX}px!important;}
 #chartsContainer>*{cursor:grab;}
 #chartsContainer>*.sortable-ghost{opacity:.35;}
 #chartsContainer>*.sortable-drag{cursor:grabbing;}
@@ -1112,17 +1118,19 @@ function cfEnsureChartNode(field) {
     card.dataset.chartId = field.id;
     card.style.background = 'var(--card)';
     const isPie = field.widget.kind === 'pie';
-    const bodyClass = isPie ? 'chart-body cf-pie-body' : 'chart-body';
-    const bodyHeight = isPie ? CF_PIE_ZONE_HEIGHT : 220;
+    const bodyClass = isPie ? 'chart-body cf-pie-body cf-pie-zone' : 'chart-body';
+    const bodyHeight = isPie ? '' : ' style="height:220px"';
     // Chart.js dimensionne un canevas "responsive" d'après son PARENT
     // DIRECT — un max-width/max-height posé sur le canevas lui-même ne le
     // contraint pas de façon fiable (camembert énorme et rogné sur écran
-    // étroit). On enveloppe donc le canevas dans un conteneur à taille FIXE.
+    // étroit). On enveloppe donc le canevas dans un conteneur à taille FIXE
+    // (même classe !important que le Win Rate natif, cf-pie-canvas-wrap,
+    // pour garantir une taille rigoureusement identique aux deux).
     const canvasHtml = isPie
-      ? `<div style="width:${CF_PIE_CANVAS_MAX}px;height:${CF_PIE_CANVAS_MAX}px;"><canvas id="cfchart-${field.id}"></canvas></div>`
+      ? `<div class="cf-pie-canvas-wrap"><canvas id="cfchart-${field.id}"></canvas></div>`
       : `<canvas id="cfchart-${field.id}"></canvas>`;
     card.innerHTML = `<div class="chart-header"><div class="chart-title" data-editable data-tvar="--cf-${field.id}-title" id="cftitle-${field.id}" style="color:var(--cf-${field.id}-title,#00e5a0)">${escapeHtml((field.colName || field.label).toUpperCase())}</div>${cfChartHeaderControlsHtml(field.id)}</div>
-      <div class="${bodyClass}" style="height:${bodyHeight}px">${canvasHtml}</div>`;
+      <div class="${bodyClass}"${bodyHeight}>${canvasHtml}</div>`;
     container.appendChild(card);
   }
   return card;
@@ -1415,7 +1423,15 @@ function cfApplyChartLayout() {
   const container = document.getElementById('chartsContainer');
   if (!container) return;
   const maxes = CF_CHART_MAX_PER_ROW[cfScreenMode()] || CF_CHART_MAX_PER_ROW.normal;
-  container.style.setProperty('--cf-pie-basis', 100 / maxes.pie + '%');
+  // #chartsContainer a un gap:16px entre les cartes (voir cfEnsureChartsContainer) —
+  // un simple pourcentage (100/N%) ne le soustrait pas, donc N cartes
+  // débordaient de (N-1)*16px et une carte de trop était rejetée à la ligne
+  // suivante (6 camemberts prévus en ultra wide → seulement 5 tenaient).
+  // calc() soustrait explicitement la place prise par les (N-1) espaces.
+  container.style.setProperty(
+    '--cf-pie-basis',
+    'calc((100% - ' + (maxes.pie - 1) * 16 + 'px) / ' + maxes.pie + ')'
+  );
   container.querySelectorAll('.cf-row-break').forEach(el => el.remove());
   const children = Array.from(container.children);
   const links = cfCurrentLinks();
@@ -1452,7 +1468,12 @@ function cfApplyChartLayout() {
         runEnd++;
       }
       const runSize = runEnd - i + 1;
-      const basisPct = runSize > 1 ? 100 / runSize + '%' : '100%';
+      // Même correctif de gap que pour les camemberts (voir plus haut) :
+      // sans lui, une série liée de 2 (50% chacun) ou 3 (33.33% chacun)
+      // débordait du (des) gap(s) de 16px et ne tenait jamais vraiment
+      // côte à côte malgré la liaison explicite.
+      const basisPct =
+        runSize > 1 ? 'calc((100% - ' + (runSize - 1) * 16 + 'px) / ' + runSize + ')' : '100%';
       for (let k = i; k <= runEnd; k++) {
         children[k].style.flex = '1 1 ' + basisPct;
       }
