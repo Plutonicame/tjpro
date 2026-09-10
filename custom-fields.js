@@ -744,6 +744,7 @@ function cfEnsureChartsContainer() {
 
   const twoColWrap = pieCard.parentElement;
   pieCard.dataset.chartId = 'pie';
+  pieCard.classList.add('cf-pie-card');
   // Le Win Rate natif avait ses propres dimensions (220px / canevas 195px)
   // et un fond dédié (--winrate-body-bg), différents du gabarit des
   // camemberts custom (cfEnsureChartNode) : on les aligne ici sur les mêmes
@@ -847,6 +848,13 @@ function cfEnsureChartsContainer() {
    jamais la faire dévier. */
 .cf-pie-zone{height:${CF_PIE_ZONE_HEIGHT}px!important;}
 .cf-pie-canvas-wrap{width:${CF_PIE_CANVAS_MAX}px!important;height:${CF_PIE_CANVAS_MAX}px!important;}
+/* Sans ça, une carte camembert s'étire (flex-grow) pour remplir toute la
+   place qui lui revient sur sa ligne dès qu'il y a moins de camemberts que
+   le maximum du mode (typiquement en ultra wide, jusqu'à 6 attendus) — la
+   zone grise devient alors démesurément large autour d'un anneau qui, lui,
+   reste à taille fixe (cf-pie-canvas-wrap). Le plafond laisse simplement de
+   la place vide sur la ligne plutôt que d'étirer la zone. */
+.cf-pie-card{max-width:${CF_PIE_CANVAS_MAX + 40}px!important;}
 #chartsContainer>*{cursor:grab;}
 #chartsContainer>*.sortable-ghost{opacity:.35;}
 #chartsContainer>*.sortable-drag{cursor:grabbing;}
@@ -1114,7 +1122,7 @@ function cfEnsureChartNode(field) {
   if (!card) {
     card = document.createElement('div');
     card.id = 'cfcard-' + field.id;
-    card.className = 'chart-card';
+    card.className = field.widget.kind === 'pie' ? 'chart-card cf-pie-card' : 'chart-card';
     card.dataset.chartId = field.id;
     card.style.background = 'var(--card)';
     const isPie = field.widget.kind === 'pie';
@@ -1279,7 +1287,16 @@ function cfDrawChart(field) {
       data: {
         labels: ks,
         datasets: [
-          {data, backgroundColor: palette, borderColor: '#0b0f1a', borderWidth: 3, hoverOffset: 5}
+          {
+            data,
+            backgroundColor: palette,
+            // Même variable de thème que le Win Rate natif (--winrate-slice-border,
+            // réglable dans Paramètres) — pas une couleur figée en dur, pour que
+            // les deux restent identiques même si cette couleur est personnalisée.
+            borderColor: gc('--winrate-slice-border') || '#0b0f1a',
+            borderWidth: 3,
+            hoverOffset: 5
+          }
         ]
       },
       options: {
