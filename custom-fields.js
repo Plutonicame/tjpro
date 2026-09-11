@@ -847,6 +847,16 @@ function cfEnsureChartsContainer() {
    jamais la faire dévier. */
 .cf-pie-zone{height:${CF_PIE_ZONE_HEIGHT}px!important;}
 .cf-pie-canvas-wrap{width:${CF_PIE_CANVAS_MAX}px!important;height:${CF_PIE_CANVAS_MAX}px!important;}
+/* .chart-card a un margin-bottom:16px par défaut (style.css) — pertinent
+   hors de #chartsContainer, mais ici l'espacement entre lignes est déjà
+   géré par le gap:16px du conteneur (voir cfEnsureChartsContainer). Sans ce
+   reset, les cartes natives (qui avaient margin-bottom:0 en dur depuis leur
+   ancien emplacement en grille .two-col) et les cartes custom (qui gardent
+   le 16px par défaut, jamais réinitialisé) n'avaient pas le même
+   espacement vertical total — 16px pour les unes, 32px (margin + gap) pour
+   les autres. Une seule règle, appliquée à TOUTES les cartes du conteneur
+   sans distinction, plutôt qu'un correctif carte par carte. */
+#chartsContainer>.chart-card{margin-bottom:0;}
 #chartsContainer>*{cursor:grab;}
 #chartsContainer>*.sortable-ghost{opacity:.35;}
 #chartsContainer>*.sortable-drag{cursor:grabbing;}
