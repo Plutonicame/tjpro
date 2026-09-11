@@ -1278,6 +1278,7 @@ function cfDrawChart(field) {
     // de catégories fasse varier la place disponible pour l'anneau — chaque
     // camembert garde ainsi le même rayon fixe (CF_PIE_RADIUS) quel que
     // soit le nombre de catégories.
+    const pieTotal = data.reduce((s, v) => s + v, 0);
     CH[field.id] = new Chart(ctx, {
       type: 'doughnut',
       data: {
@@ -1300,7 +1301,22 @@ function cfDrawChart(field) {
         maintainAspectRatio: true,
         cutout: '60%',
         radius: CF_PIE_RADIUS,
-        plugins: {legend: {display: false}}
+        // Les 2 paramètres suivants manquaient par rapport au Win Rate natif
+        // (repérés en comparant point par point) :
+        layout: {padding: {bottom: 8}},
+        plugins: {
+          legend: {display: false},
+          tooltip: {
+            callbacks: {
+              label: i =>
+                ' ' +
+                i.label +
+                ' : ' +
+                i.parsed +
+                (pieTotal ? ' (' + Math.round((i.parsed / pieTotal) * 100) + '%)' : '')
+            }
+          }
+        }
       }
     });
   }
