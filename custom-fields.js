@@ -857,9 +857,6 @@ function cfEnsureChartsContainer() {
    les autres. Une seule règle, appliquée à TOUTES les cartes du conteneur
    sans distinction, plutôt qu'un correctif carte par carte. */
 #chartsContainer>.chart-card{margin-bottom:0;}
-#chartsContainer>*{cursor:grab;}
-#chartsContainer>*.sortable-ghost{opacity:.35;}
-#chartsContainer>*.sortable-drag{cursor:grabbing;}
 @media(max-width:700px){#cfBottomRow{grid-template-columns:1fr!important;}}
 /* Un graphique doit toujours s'étirer pour occuper toute la place
    disponible sur sa ligne (2 camemberts seuls entre eux → 50% chacun, 3 →
@@ -879,215 +876,15 @@ function cfEnsureChartsContainer() {
 `;
   document.head.appendChild(style);
 
-  // Glisser-déposer direct des graphiques (comme réarranger des applis) :
-  // on saisit une carte n'importe où et on la dépose ailleurs, les autres
-  // cartes se décalent en direct (animation intégrée de Sortable.js). Les
-  // clics sur les boutons/inputs à l'intérieur (BT, périodes, stylo...)
-  // restent normaux grâce à "filter". Complémentaire à la liste "ORDRE DES
-  // GRAPHIQUES" des Paramètres (les deux écrivent dans
-  // APP.cfChartOrderByMode[mode actuel], donc restent toujours cohérents
-  // entre eux).
-  if (window.Sortable) {
-    new Sortable(container, {
-      animation: 200,
-      delay: 150,
-      delayOnTouchOnly: true,
-      touchStartThreshold: 5,
-      // forceFallback : sans ça, Sortable utilise le drag natif HTML5
-      // (dragstart/dragover), qui empêche la molette de scroller la page
-      // tant que le drag est actif dans la plupart des navigateurs. En
-      // simulant le drag via ses propres écouteurs souris/tactile, la
-      // molette continue de fonctionner normalement pendant qu'on tient un
-      // graphique.
-      forceFallback: true,
-      filter:
-        'canvas, input, button, select, textarea, .pbtn, .bt-toggle, [contenteditable="true"]',
-      preventOnFilter: false,
-      onMove: cfChartsSortableOnMove,
-      // Les zones haut/bas de cfChartsSortableOnMove déplacent la carte
-      // tenue juste avant/après la ligne entière d'une carte survolée, sans
-      // vérifier son groupe (c'est voulu : on peut déplacer une carte
-      // au-dessus/en dessous d'une ligne différente). Mais tant que le drag
-      // est en cours, les séparateurs de ligne (cf-row-break) restent à
-      // leur ancienne position : si la carte tenue n'est pas pleine largeur,
-      // rien ne force alors de retour à la ligne entre elle et une carte
-      // incompatible juste à côté → c'est ce qui recréait l'animation de
-      // fusion. onChange recalcule ces séparateurs à CHAQUE déplacement
-      // pendant le drag (pas juste à la fin), donc l'écart forcé entre
-      // groupes différents est toujours respecté, y compris en cours de
-      // glisser.
-      onChange: cfApplyChartLayout,
-      onStart: cfChartsSortableOnStart,
-      onEnd: cfChartsSortableOnEnd
-    });
-  }
-}
-// En flexbox avec retour à la ligne, Sortable.js ne fait par défaut pas la
-// différence entre "je veux insérer à côté" et "je veux insérer EN DESSOUS,
-// sur une nouvelle ligne" — il regarde surtout l'ordre dans le DOM. On
-// découpe donc la carte survolée en 4 zones selon où se trouve le
-// doigt/curseur PENDANT le survol :
-//  - bande du HAUT (20% du haut)   → nouvelle ligne AU-DESSUS de la ligne
-//    entière de la carte survolée (avant son tout premier voisin de ligne)
-//  - bande du BAS (20% du bas)     → nouvelle ligne EN DESSOUS (après son
-//    tout dernier voisin de ligne)
-//  - bande GAUCHE (20% gauche, hors bandes haut/bas) → juste à gauche de
-//    CETTE carte précise (côte à côte), seulement si elle est "compatible"
-//    (pas une carte pleine largeur, qui ne peut rien avoir à côté d'elle)
-//  - bande DROITE (20% droite, idem) → juste à droite de cette carte
-//  - au centre → comportement normal de Sortable
-// ⚠️ Ces seuils sont un réglage raisonnable mais pas testés en conditions
-// réelles (aucun navigateur disponible ici) — à ajuster si le geste est trop
-// ou pas assez sensible.
-// Liaison "déposé sur le côté" en cours de survol, en attente de
-// confirmation à la fin du glisser (cfChartsSortableOnEnd) — uniquement
-// pour barv/other, le camembert s'assemble déjà tout seul automatiquement.
-// Reflète toujours le DERNIER survol en date (réinitialisée à chaque appel,
-// reposée seulement si ce survol précis est un dépose sur le bord).
-let _cfPendingLink = null;
-function cfChartsSortableOnMove(evt) {
-  _cfPendingLink = null;
-  const related = evt.related,
-    dragged = evt.dragged;
-  if (!related || related === dragged || !evt.originalEvent) return true;
-  const oe = evt.originalEvent;
-  const pt = oe.touches && oe.touches[0] ? oe.touches[0] : oe;
-  const clientX = pt.clientX,
-    clientY = pt.clientY;
-  if (clientY == null || typeof related.getBoundingClientRect !== 'function') return true;
-  const rect = related.getBoundingClientRect();
-  if (!rect || !rect.height) return true;
-  const relativeY = (clientY - rect.top) / rect.height;
-  const container = related.parentNode;
-  if (!container) return true;
-  const siblings = Array.from(container.children).filter(
-    el => el !== dragged && !el.classList.contains('cf-row-break')
-  );
-  const idx = siblings.indexOf(related);
-  if (idx === -1) return true;
-  const relatedTop = Math.round(rect.top);
-
-  if (relativeY > 0.8) {
-    let lastSameRow = related;
-    for (let i = idx + 1; i < siblings.length; i++) {
-      const sRect = siblings[i].getBoundingClientRect();
-      if (Math.abs(Math.round(sRect.top) - relatedTop) <= 4) lastSameRow = siblings[i];
-      else break;
-    }
-    if (lastSameRow !== related) {
-      container.insertBefore(dragged, lastSameRow.nextSibling);
-      return false;
-    }
-    return true;
-  }
-  if (relativeY < 0.2) {
-    let firstSameRow = related;
-    for (let i = idx - 1; i >= 0; i--) {
-      const sRect = siblings[i].getBoundingClientRect();
-      if (Math.abs(Math.round(sRect.top) - relatedTop) <= 4) firstSameRow = siblings[i];
-      else break;
-    }
-    if (firstSameRow !== related) {
-      container.insertBefore(dragged, firstSameRow);
-      return false;
-    }
-    return true;
-  }
-  // Ni en haut ni en bas : on insérerait la carte tenue À CÔTÉ de CETTE
-  // carte précise, donc DANS sa ligne. Une carte pleine largeur force de
-  // toute façon son propre retour à la ligne (CSS), aucun risque de mélange
-  // — mais une carte camembert/comparaison PEUT partager sa ligne, et
-  // seulement avec des graphiques du même groupe (cf cfChartGroup) : si le
-  // graphique tenu est d'un groupe différent, on bloque tout aperçu ici, pour
-  // qu'aucune animation ne se déclenche sur des graphiques qui ne peuvent de
-  // toute façon pas l'accueillir sur leur ligne.
-  const relatedIsFull = related.classList.contains('cf-flex-full');
-  if (!relatedIsFull && cfChartGroup(dragged) !== cfChartGroup(related)) return false;
-  if (clientX != null && rect.width && !relatedIsFull) {
-    const relativeX = (clientX - rect.left) / rect.width;
-    const group = cfChartGroup(related);
-    const draggedId = dragged.dataset.chartId,
-      relatedId = related.dataset.chartId;
-    const linkable = (group === 'barv' || group === 'other') && draggedId && relatedId;
-    if (relativeX < 0.2) {
-      container.insertBefore(dragged, related);
-      if (linkable) _cfPendingLink = {a: draggedId, b: relatedId};
-      return false;
-    }
-    if (relativeX > 0.8) {
-      container.insertBefore(dragged, related.nextSibling);
-      if (linkable) _cfPendingLink = {a: relatedId, b: draggedId};
-      return false;
-    }
-  }
-  return true;
-}
-// Le mode stylo attache DEUX mécanismes de blocage sur les éléments
-// "data-editable" pendant qu'il est actif :
-//  1) un écouteur délégué sur document (phase de capture) qui coupe la
-//     propagation si la cible a l'attribut data-editable ;
-//  2) un écouteur touchend/click attaché DIRECTEMENT sur chaque élément
-//     data-editable lui-même (posé une fois par setupPencil(), référencé
-//     sur l'élément via el._ph), qui coupe aussi la propagation — et qui ne
-//     vérifie même pas l'attribut, seulement si le mode stylo est actif.
-// Retirer juste l'attribut ne suffit donc pas pour le 2) : il faut aussi
-// détacher cet écouteur précis le temps du glisser, puis le rattacher juste
-// après (sous peine de perdre définitivement l'édition au clic sur ce titre,
-// car setupPencil() ne réattache jamais un _ph déjà posé).
-function cfChartsSortableOnStart() {
-  _cfPendingLink = null;
-  const container = document.getElementById('chartsContainer');
-  if (!container) return;
-  container.querySelectorAll('[data-editable]').forEach(el => {
-    el.setAttribute('data-cf-had-editable', '1');
-    el.removeAttribute('data-editable');
-    if (el._ph) {
-      el.removeEventListener('touchend', el._ph);
-      el.removeEventListener('click', el._ph);
-      el.dataset.cfPhDetached = '1';
-    }
-  });
-}
-function cfChartsSortableOnEnd() {
-  const container = document.getElementById('chartsContainer');
-  if (!container) return;
-  container.querySelectorAll('[data-cf-had-editable]').forEach(el => {
-    el.setAttribute('data-editable', '');
-    el.removeAttribute('data-cf-had-editable');
-    if (el.dataset.cfPhDetached && el._ph) {
-      el.addEventListener('click', el._ph);
-      el.addEventListener('touchend', el._ph, {passive: false});
-      delete el.dataset.cfPhDetached;
-    }
-  });
-  const order = Array.from(container.children)
-    .map(el => el.dataset.chartId)
-    .filter(Boolean);
-  cfEnsureOrders();
-  const mode = cfScreenMode();
-  APP.cfChartOrderByMode[mode] = order;
-  // Reconstruit les liaisons valides : ne garde que celles où les 2
-  // graphiques sont encore immédiatement adjacents dans ce sens précis,
-  // puis ajoute la nouvelle liaison si le tout dernier survol avant le
-  // lâcher était un dépose explicite sur le bord (_cfPendingLink).
-  const oldLinks = new Set(APP.cfChartLinksByMode[mode] || []);
-  const newLinks = [];
-  for (let i = 0; i < order.length - 1; i++) {
-    const key = order[i] + '|' + order[i + 1];
-    if (oldLinks.has(key)) newLinks.push(key);
-  }
-  if (_cfPendingLink) {
-    const idx = order.indexOf(_cfPendingLink.a);
-    if (idx !== -1 && order[idx + 1] === _cfPendingLink.b) {
-      const key = _cfPendingLink.a + '|' + _cfPendingLink.b;
-      if (!newLinks.includes(key)) newLinks.push(key);
-    }
-  }
-  _cfPendingLink = null;
-  APP.cfChartLinksByMode[mode] = newLinks;
-  cfPersist();
-  cfApplyChartOrder();
-  cfApplyChartLayout();
+  // Glisser-déposer direct retiré à la demande de Paul : un clic sur un
+  // graphique (pour voir une info-bulle, cocher BT, changer de période...)
+  // ne doit plus jamais pouvoir être interprété comme un début de
+  // glissement. Seule la liste "ORDRE DES GRAPHIQUES" des Paramètres permet
+  // désormais de réordonner (elle écrit dans la même donnée,
+  // APP.cfChartOrderByMode[mode actuel], donc rien d'autre ne change).
+  // Conséquence acceptée : les paires côte-à-côte (barv/other) ne peuvent
+  // plus se CRÉER (ça ne se faisait que par un dépose sur le bord d'une
+  // carte) — celles déjà existantes restent affichées normalement.
 }
 // comportement par défaut de CSS Grid (align-items:stretch) — encore faut-il
 // que leur CONTENU (le corps du graphique) suive cet étirement au lieu de
@@ -1485,10 +1282,10 @@ function cfChartGroup(el) {
   return 'solo-' + id;
 }
 // Liaisons explicites (paires côte-à-côte) du mode actuel, sous forme d'un
-// Set de clés "idGauche|idDroite" — voir cfChartsSortableOnMove/OnEnd pour
-// comment elles se créent (dépose sur le bord gauche/droit d'un graphique
-// compatible) et cfEnsureOrders pour leur nettoyage (adjacence toujours
-// valide).
+// Set de clés "idGauche|idDroite" — ne se créent plus (le glisser-déposer
+// qui les posait a été retiré), ne servent plus qu'à afficher correctement
+// celles déjà existantes. cfEnsureOrders() les nettoie (adjacence toujours
+// valide, graphiques existants).
 function cfCurrentLinks() {
   cfEnsureOrders();
   return new Set(APP.cfChartLinksByMode[cfScreenMode()] || []);
