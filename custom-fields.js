@@ -1202,10 +1202,30 @@ function cfDrawChart(field) {
       options: {
         responsive: true,
         maintainAspectRatio: false,
-        plugins: {legend: {display: false}},
+        plugins: {
+          legend: {display: false},
+          // Manquait par rapport à Équity/P&L natifs : sans ça, l'info-bulle
+          // par défaut de Chart.js affiche la valeur brute, sans € ni
+          // séparateur de milliers.
+          tooltip: {
+            callbacks: {
+              label: i =>
+                ' ' +
+                (field.colName || field.label) +
+                ' : ' +
+                i.parsed.y.toLocaleString('fr-FR') +
+                '€'
+            }
+          }
+        },
         scales: {
-          x: {grid: {color: grC}, ticks: {color: axC, maxTicksLimit: 10, maxRotation: 30}},
-          y: {grid: {color: grC}, ticks: {color: axC}}
+          // maxTicksLimit aligné sur 12 comme Équity native (était 10)
+          x: {grid: {color: grC}, ticks: {color: axC, maxTicksLimit: 12, maxRotation: 30}},
+          y: {
+            grid: {color: grC},
+            // Même formatage € manquant que ci-dessus, sur l'axe cette fois
+            ticks: {color: axC, callback: v => v.toLocaleString('fr-FR') + '€'}
+          }
         }
       }
     });
@@ -1249,7 +1269,22 @@ function cfDrawChart(field) {
         responsive: true,
         maintainAspectRatio: false,
         indexAxis: kind === 'bar-h' ? 'y' : 'x',
-        plugins: {legend: {display: false}},
+        plugins: {
+          legend: {display: false},
+          // Manquait par rapport aux graphiques de comparaison natifs
+          // (Confluence, Paire...) : sans ça, l'info-bulle par défaut de
+          // Chart.js affiche la valeur brute, sans signe ni séparateur de
+          // milliers ni €.
+          tooltip: {
+            callbacks: {
+              label: i =>
+                ' ' +
+                (i.parsed[valueAxis] >= 0 ? '+' : '') +
+                i.parsed[valueAxis].toLocaleString('fr-FR') +
+                '€'
+            }
+          }
+        },
         scales
       }
     });
