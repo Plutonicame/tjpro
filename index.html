@@ -76,6 +76,7 @@
       <div class="profile-edit-hint" data-editable>Toucher la photo pour la changer</div>
     </div>
     <div class="fg"><label data-editable>Pseudo</label><input type="text" id="profileEditPseudoInput" maxlength="30" placeholder="Pseudo"></div>
+    <button class="btn" onclick="changePinFlow()" style="font-size:12px;background:var(--btn-pin-bg);color:var(--btn-pin-tx);border:2px solid var(--btn-pin-bd);border-radius:6px;padding:8px 16px;cursor:pointer;width:100%;margin:14px 0;">Changer mon code PIN</button>
     <div class="btn-row"><button class="btn btn-g" onclick="closeProfileModal()">ANNULER</button><button class="btn btn-p" onclick="saveProfileModal()">SAUVEGARDER</button></div>
   </div>
 </div>
@@ -481,15 +482,6 @@
 
 
 
-
-  <div class="card">
-    <div class="card-header">
-      <div class="card-title" data-editable data-tvar="--crt-securite" style="color:var(--crt-securite,#00e5a0)">SÉCURITÉ</div>
-    </div>
-    <div class="card-body">
-      <button class="btn" onclick="changePinFlow()" style="font-size:12px;background:var(--btn-pin-bg);color:var(--btn-pin-tx);border:2px solid var(--btn-pin-bd);border-radius:6px;padding:8px 16px;cursor:pointer;">Changer mon code PIN</button>
-    </div>
-  </div>
 
   <div class="card">
     <div class="card-header"><div class="card-title" data-editable data-tvar="--crt-sauvegarde" style="color:var(--crt-sauvegarde,#00e5a0)">SAUVEGARDE LOCALE</div></div>

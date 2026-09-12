@@ -2036,7 +2036,6 @@ const TITLE_DEFAULTS = {
   '--crt-historique': '#00e5a0',
   '--crt-capitalrisk': '#00e5a0',
   '--crt-riskreglages': '#00e5a0',
-  '--crt-securite': '#00e5a0',
   '--crt-sauvegarde': '#00e5a0',
   '--crt-themestylo': '#00e5a0',
   '--crt-resume': '#00e5a0'
@@ -4104,9 +4103,9 @@ function buildTV() {
     {v: '--tgl-off', l: 'Toggle off', page: 'Paramètres', section: 'Interrupteurs'},
     {v: '--tgl-on', l: 'Toggle on', page: 'Paramètres', section: 'Interrupteurs'},
     {v: '--tgl-thumb', l: 'Toggle rond', page: 'Paramètres', section: 'Interrupteurs'},
-    {v: '--btn-pin-bg', l: 'Changer PIN - fond', page: 'Paramètres', section: 'Sécurité'},
-    {v: '--btn-pin-bd', l: 'Changer PIN - bordure', page: 'Paramètres', section: 'Sécurité'},
-    {v: '--btn-pin-tx', l: 'Changer PIN - texte', page: 'Paramètres', section: 'Sécurité'},
+    {v: '--btn-pin-bg', l: 'Changer PIN - fond', page: 'Général', section: 'Profil'},
+    {v: '--btn-pin-bd', l: 'Changer PIN - bordure', page: 'Général', section: 'Profil'},
+    {v: '--btn-pin-tx', l: 'Changer PIN - texte', page: 'Général', section: 'Profil'},
     {v: '--btn-export-bg', l: 'Export - fond', page: 'Paramètres', section: 'Sauvegarde locale'},
     {v: '--btn-export-bd', l: 'Export - bordure', page: 'Paramètres', section: 'Sauvegarde locale'},
     {v: '--btn-export-tx', l: 'Export - texte', page: 'Paramètres', section: 'Sauvegarde locale'},
@@ -5077,7 +5076,6 @@ function buildTV() {
       page: 'Paramètres',
       section: 'Risk Management (réglages)'
     },
-    {v: '--crt-securite', l: 'Titre — Sécurité', page: 'Paramètres', section: 'Sécurité'},
     {
       v: '--crt-sauvegarde',
       l: 'Titre — Sauvegarde locale',
