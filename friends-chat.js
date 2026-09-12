@@ -37,6 +37,7 @@ const FC_PROFILES_TABLE = 'tjp_profiles';
 const FC_CONTACTS_TABLE = 'tjp_contacts';
 const FC_MESSAGES_TABLE = 'tjp_messages';
 const FC_REACTIONS_TABLE = 'tjp_message_reactions';
+const FC_READS_TABLE = 'tjp_chat_reads';
 const FC_AUDIO_BUCKET = 'chat-audio';
 const FC_REACT_EMOJIS = ['👍', '❤️', '😂', '😮', '😢', '🙏'];
 // FC_EMOJI_CATEGORIES est défini dans emoji-data.js (chargé juste avant ce
@@ -409,12 +410,53 @@ function fcSetLastRead(friendId, iso) {
   } catch (e) {}
 }
 function fcMarkRead(friendId) {
-  fcSetLastRead(friendId, new Date().toISOString());
+  const iso = new Date().toISOString();
+  fcApplyReadLocally(friendId, iso);
+  fcPushReadState(friendId, iso);
+}
+// Applique un "lu" déjà connu (venant de nous-même ou d'un autre de nos
+// appareils via le temps réel) à l'état local, sans re-déclencher de push.
+function fcApplyReadLocally(friendId, iso) {
+  fcSetLastRead(friendId, iso);
   if (fcUnreadSet.has(friendId)) {
     fcUnreadSet.delete(friendId);
     fcRenderContactList();
   }
   fcUpdateNavBadge();
+}
+// Publie ce "lu" vers le cloud pour que les autres appareils du même compte
+// fassent disparaître la notification en direct (voir fcStartRealtime).
+function fcPushReadState(friendId, iso) {
+  if (!currentUser || typeof sb === 'undefined') return;
+  sb.from(FC_READS_TABLE)
+    .upsert({user_id: currentUser.id, friend_id: friendId, last_read: iso}, {onConflict: 'user_id,friend_id'})
+    .then(({error}) => {
+      if (error && !fcIsMissingTableError(error)) console.warn('fcPushReadState:', error);
+    });
+}
+// Récupère au démarrage les "lu" déjà enregistrés dans le cloud (ex: lus sur
+// un autre appareil pendant que celui-ci était fermé) et les fusionne dans le
+// localStorage local avant le premier calcul des notifications non lues.
+async function fcSyncReadStateFromCloud() {
+  if (!currentUser || typeof sb === 'undefined') return;
+  try {
+    const {data, error} = await sb
+      .from(FC_READS_TABLE)
+      .select('friend_id,last_read')
+      .eq('user_id', currentUser.id);
+    if (error) return; // table pas encore migrée : on reste sur le comportement local existant
+    (data || []).forEach((r) => {
+      const local = fcGetLastRead(r.friend_id);
+      if (!local || r.last_read > local) fcSetLastRead(r.friend_id, r.last_read);
+    });
+  } catch (e) {}
+}
+// Un "lu" arrivé en direct depuis un autre de nos appareils (temps réel).
+function fcHandleRemoteRead(row) {
+  if (!row || !row.friend_id || !row.last_read) return;
+  const local = fcGetLastRead(row.friend_id);
+  if (local && row.last_read <= local) return; // déjà à jour ou plus récent localement
+  fcApplyReadLocally(row.friend_id, row.last_read);
 }
 function fcInjectNavBadges() {
   document.querySelectorAll('.nav-tab').forEach((btn) => {
@@ -1494,6 +1536,11 @@ function fcStartRealtime() {
       { event: '*', schema: 'public', table: FC_REACTIONS_TABLE },
       (payload) => fcHandleReactionChange(payload),
     )
+    .on(
+      'postgres_changes',
+      { event: '*', schema: 'public', table: FC_READS_TABLE, filter: 'user_id=eq.' + me },
+      (payload) => fcHandleRemoteRead(payload.new),
+    )
     .subscribe();
 }
 function fcStopRealtime() {
@@ -1558,7 +1605,7 @@ function fcInit() {
   fcBindResizeHandlers();
   fcResizeWrap();
   fcPublishProfile();
-  fcLoadContacts();
+  fcSyncReadStateFromCloud().then(fcLoadContacts);
   fcStartRealtime();
 }
 function fcReset() {
