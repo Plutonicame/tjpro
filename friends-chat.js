@@ -38,6 +38,11 @@ const FC_CONTACTS_TABLE = 'tjp_contacts';
 const FC_MESSAGES_TABLE = 'tjp_messages';
 const FC_REACTIONS_TABLE = 'tjp_message_reactions';
 const FC_READS_TABLE = 'tjp_chat_reads';
+const FC_PUSH_TABLE = 'tjp_push_subscriptions';
+// Clé publique VAPID (sans risque à exposer côté client, c'est fait pour).
+const FC_VAPID_PUBLIC_KEY =
+  'BNXA5IwEkW_17PhSBsNGid5-i8ESTs_4bwf7N2EPyMmrnHs1YY7QBifmiHZeAYVcy3jfhM5W6UwNS68umahwl7c';
+const FC_PUSH_SUPPORTED = 'serviceWorker' in navigator && 'PushManager' in window;
 const FC_AUDIO_BUCKET = 'chat-audio';
 const FC_REACT_EMOJIS = ['👍', '❤️', '😂', '😮', '😢', '🙏'];
 // FC_EMOJI_CATEGORIES est défini dans emoji-data.js (chargé juste avant ce
@@ -459,6 +464,124 @@ function fcHandleRemoteRead(row) {
   if (local && row.last_read <= local) return; // déjà à jour ou plus récent localement
   fcApplyReadLocally(row.friend_id, row.last_read);
 }
+
+// ===== Notifications push (icône hors app) =====================
+
+// Nécessaire pour transmettre la clé VAPID (format base64url) à
+// pushManager.subscribe(), qui attend un Uint8Array.
+function fcUrlB64ToUint8Array(base64String) {
+  const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
+  const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+  const rawData = atob(base64);
+  const outputArray = new Uint8Array(rawData.length);
+  for (let i = 0; i < rawData.length; i++) outputArray[i] = rawData.charCodeAt(i);
+  return outputArray;
+}
+async function fcRegisterServiceWorker() {
+  if (!FC_PUSH_SUPPORTED) return null;
+  try {
+    return (await navigator.serviceWorker.getRegistration()) || (await navigator.serviceWorker.register('sw.js'));
+  } catch (e) {
+    console.warn('fcRegisterServiceWorker:', e);
+    return null;
+  }
+}
+// 'unsupported' | 'denied' | 'inactive' | 'active'
+async function fcPushSubscriptionState() {
+  if (!FC_PUSH_SUPPORTED) return 'unsupported';
+  if (Notification.permission === 'denied') return 'denied';
+  const reg = await navigator.serviceWorker.getRegistration();
+  if (!reg) return 'inactive';
+  const sub = await reg.pushManager.getSubscription();
+  return sub ? 'active' : 'inactive';
+}
+async function fcEnablePush() {
+  if (!FC_PUSH_SUPPORTED) {
+    alert("Les notifications ne sont pas prises en charge sur cet appareil ou ce navigateur.");
+    return;
+  }
+  const perm = await Notification.requestPermission();
+  if (perm !== 'granted') {
+    fcRenderPushButton();
+    return;
+  }
+  const reg = await fcRegisterServiceWorker();
+  if (!reg) return;
+  let sub = await reg.pushManager.getSubscription();
+  if (!sub) {
+    try {
+      sub = await reg.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: fcUrlB64ToUint8Array(FC_VAPID_PUBLIC_KEY),
+      });
+    } catch (e) {
+      console.warn('fcEnablePush subscribe:', e);
+      fcRenderPushButton();
+      return;
+    }
+  }
+  await fcSavePushSubscription(sub);
+  fcRenderPushButton();
+}
+async function fcDisablePush() {
+  if (!FC_PUSH_SUPPORTED) return;
+  const reg = await navigator.serviceWorker.getRegistration();
+  if (!reg) return;
+  const sub = await reg.pushManager.getSubscription();
+  if (sub) {
+    await fcDeletePushSubscription(sub.endpoint);
+    await sub.unsubscribe();
+  }
+  fcRenderPushButton();
+}
+async function fcTogglePush() {
+  const state = await fcPushSubscriptionState();
+  if (state === 'active') fcDisablePush();
+  else fcEnablePush();
+}
+// Demande la permission notifications sur le tout premier tap après connexion,
+// au lieu d'attendre que la personne aille chercher le bouton dans Profil.
+// Obligatoire techniquement : un navigateur refuse d'afficher ce prompt en
+// dehors d'un vrai geste utilisateur (clic/tap), impossible de le déclencher
+// tout seul sans interaction.
+function fcArmAutoPushPrompt() {
+  if (!FC_PUSH_SUPPORTED) return;
+  document.addEventListener('click', fcEnablePush, {once: true, capture: true});
+}
+async function fcSavePushSubscription(sub) {
+  if (!currentUser || typeof sb === 'undefined') return;
+  const json = sub.toJSON();
+  const {error} = await sb
+    .from(FC_PUSH_TABLE)
+    .upsert(
+      {endpoint: sub.endpoint, user_id: currentUser.id, p256dh: json.keys.p256dh, auth: json.keys.auth},
+      {onConflict: 'endpoint'},
+    );
+  if (error && !fcIsMissingTableError(error)) console.warn('fcSavePushSubscription:', error);
+}
+async function fcDeletePushSubscription(endpoint) {
+  if (!currentUser || typeof sb === 'undefined') return;
+  const {error} = await sb.from(FC_PUSH_TABLE).delete().eq('endpoint', endpoint);
+  if (error && !fcIsMissingTableError(error)) console.warn('fcDeletePushSubscription:', error);
+}
+async function fcRenderPushButton() {
+  const btn = document.getElementById('fcPushBtn');
+  if (!btn) return;
+  const state = await fcPushSubscriptionState();
+  btn.disabled = false;
+  if (state === 'unsupported') {
+    btn.textContent = '🔕 Notifications non disponibles sur cet appareil';
+    btn.disabled = true;
+  } else if (state === 'denied') {
+    btn.textContent = '🔕 Notifications bloquées (à autoriser dans les réglages du navigateur)';
+    btn.disabled = true;
+  } else if (state === 'active') {
+    btn.textContent = '🔔 Notifications activées (toucher pour désactiver)';
+  } else {
+    btn.textContent = '🔔 Activer les notifications';
+  }
+}
+
 function fcInjectNavBadges() {
   document.querySelectorAll('.nav-tab').forEach((btn) => {
     const oc = btn.getAttribute('onclick') || '';
@@ -490,6 +613,13 @@ function fcUpdateNavBadge() {
       dot.style.display = 'flex';
     }
   });
+  // Badge natif de l'icône (écran d'accueil / barre des tâches / dock) —
+  // volontairement sans chiffre : l'API ne permet de toute façon pas de le
+  // colorer, et Paul a choisi le point simple plutôt qu'un nombre ici.
+  if (navigator && 'setAppBadge' in navigator) {
+    if (total > 0) navigator.setAppBadge().catch(() => {});
+    else if ('clearAppBadge' in navigator) navigator.clearAppBadge().catch(() => {});
+  }
 }
 
 async function fcRefreshActivityOrder() {
@@ -1629,6 +1759,8 @@ function fcInit() {
   fcResizeWrap();
   fcPublishProfile();
   fcSyncReadStateFromCloud().then(fcLoadContacts);
+  fcRegisterServiceWorker().then(fcRenderPushButton);
+  fcArmAutoPushPrompt();
   fcStartRealtime();
 }
 function fcReset() {

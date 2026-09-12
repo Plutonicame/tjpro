@@ -628,6 +628,7 @@ function openProfileModal() {
   // jamais être interprétée comme du balisage, quelle que soit sa provenance.
   setAvatarPhoto(avatarEl, profile.photo);
   modalEl.classList.add('open');
+  if (typeof fcRenderPushButton === 'function') fcRenderPushButton();
 }
 function closeProfileModal() {
   document.getElementById('profileModal').classList.remove('open');
@@ -4106,6 +4107,9 @@ function buildTV() {
     {v: '--btn-pin-bg', l: 'Changer PIN - fond', page: 'Général', section: 'Profil'},
     {v: '--btn-pin-bd', l: 'Changer PIN - bordure', page: 'Général', section: 'Profil'},
     {v: '--btn-pin-tx', l: 'Changer PIN - texte', page: 'Général', section: 'Profil'},
+    {v: '--btn-push-bg', l: 'Activer notifications - fond', page: 'Général', section: 'Profil'},
+    {v: '--btn-push-bd', l: 'Activer notifications - bordure', page: 'Général', section: 'Profil'},
+    {v: '--btn-push-tx', l: 'Activer notifications - texte', page: 'Général', section: 'Profil'},
     {v: '--btn-export-bg', l: 'Export - fond', page: 'Paramètres', section: 'Sauvegarde locale'},
     {v: '--btn-export-bd', l: 'Export - bordure', page: 'Paramètres', section: 'Sauvegarde locale'},
     {v: '--btn-export-tx', l: 'Export - texte', page: 'Paramètres', section: 'Sauvegarde locale'},
