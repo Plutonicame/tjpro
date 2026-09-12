@@ -69,7 +69,7 @@ let fcActiveFriendId = null;
 let fcMessages = [];
 let fcChannel = null;
 let fcActivityMap = {}; // friendId -> dernier created_at (tri de la liste)
-let fcUnreadSet = new Set(); // friendId -> a un message non lu
+let fcUnreadCounts = {}; // friendId -> nombre de messages non lus de cet ami
 let fcInitDone = false;
 let fcSetupNoticeShown = false;
 let fcSearchDebounce = null;
@@ -151,6 +151,7 @@ const FC_CSS = `
 .fc-contact-avatar-wrap{position:relative;flex-shrink:0;}
 .fc-contact-unread-dot{position:absolute;top:-2px;right:-2px;width:10px;height:10px;border-radius:50%;background:var(--fc-unread-dot-color,var(--red));border:2px solid var(--fc-sidebar-bg,var(--surface));}
 .fc-nav-badge{display:none;position:absolute;top:4px;right:2px;width:8px;height:8px;border-radius:50%;background:var(--fc-unread-dot-color,var(--red));box-shadow:0 0 0 2px var(--nav-bg,var(--bg));}
+.fc-contact-unread-dot.fc-badge-count,.fc-nav-badge.fc-badge-count{width:auto;min-width:15px;height:15px;padding:0 3px;align-items:center;justify-content:center;color:#fff;font-size:9px;font-family:var(--mono);line-height:1;}
 .fc-chat{flex:1;display:flex;flex-direction:column;min-width:0;}
 .fc-chat-empty{flex:1;display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:13px;padding:20px;text-align:center;}
 .fc-chat-active{flex:1;display:flex;flex-direction:column;min-height:0;}
@@ -418,8 +419,8 @@ function fcMarkRead(friendId) {
 // appareils via le temps réel) à l'état local, sans re-déclencher de push.
 function fcApplyReadLocally(friendId, iso) {
   fcSetLastRead(friendId, iso);
-  if (fcUnreadSet.has(friendId)) {
-    fcUnreadSet.delete(friendId);
+  if (fcUnreadCounts[friendId]) {
+    delete fcUnreadCounts[friendId];
     fcRenderContactList();
   }
   fcUpdateNavBadge();
@@ -473,9 +474,21 @@ function fcUpdateNavBadge() {
   // temps) avant de basculer sa visibilité — sinon la notification ne
   // remonte qu'au rechargement de la page au lieu d'apparaître en direct.
   fcInjectNavBadges();
-  const show = fcUnreadSet.size > 0;
+  const total = Object.values(fcUnreadCounts).reduce((s, n) => s + n, 0);
   document.querySelectorAll('.fc-nav-badge').forEach((dot) => {
-    dot.style.display = show ? 'block' : 'none';
+    if (total <= 0) {
+      dot.style.display = 'none';
+      dot.classList.remove('fc-badge-count');
+      dot.textContent = '';
+    } else if (total === 1) {
+      dot.classList.remove('fc-badge-count');
+      dot.textContent = '';
+      dot.style.display = 'block';
+    } else {
+      dot.classList.add('fc-badge-count');
+      dot.textContent = total > 99 ? '99+' : String(total);
+      dot.style.display = 'flex';
+    }
   });
 }
 
@@ -494,17 +507,21 @@ async function fcRefreshActivityOrder() {
       .limit(400);
     if (!error && data) {
       fcActivityMap = {};
-      const lastFromFriend = {};
+      const incomingByFriend = {};
       data.forEach((m) => {
         const other = m.sender_id === me ? m.receiver_id : m.sender_id;
         if (!fcActivityMap[other]) fcActivityMap[other] = m.created_at;
-        if (m.sender_id === other && !lastFromFriend[other]) lastFromFriend[other] = m.created_at;
+        if (m.sender_id === other) {
+          if (!incomingByFriend[other]) incomingByFriend[other] = [];
+          incomingByFriend[other].push(m.created_at);
+        }
       });
-      fcUnreadSet = new Set();
-      Object.keys(lastFromFriend).forEach((fid) => {
+      fcUnreadCounts = {};
+      Object.keys(incomingByFriend).forEach((fid) => {
         if (fid === fcActiveFriendId) return; // conversation ouverte : jamais "non lu"
         const lastRead = fcGetLastRead(fid);
-        if (!lastRead || lastFromFriend[fid] > lastRead) fcUnreadSet.add(fid);
+        const count = incomingByFriend[fid].filter((ts) => !lastRead || ts > lastRead).length;
+        if (count > 0) fcUnreadCounts[fid] = count;
       });
       fcUpdateNavBadge();
     }
@@ -530,11 +547,17 @@ function fcRenderContactList() {
   }
   list.innerHTML = fcContacts
     .map((c) => {
-      const unread = fcUnreadSet.has(c.friendId);
+      const unreadCount = fcUnreadCounts[c.friendId] || 0;
+      const unreadDot =
+        unreadCount === 1
+          ? '<span class="fc-contact-unread-dot"></span>'
+          : unreadCount > 1
+            ? `<span class="fc-contact-unread-dot fc-badge-count">${unreadCount > 99 ? '99+' : unreadCount}</span>`
+            : '';
       return `<div class="fc-contact-item${c.friendId === fcActiveFriendId ? ' active' : ''}" data-friend-id="${fcEsc(c.friendId)}" onclick="fcOpenConversation(this.dataset.friendId)">
       <div class="fc-contact-avatar-wrap">
         ${fcAvatarHtml(c.photo, c.pseudo)}
-        ${unread ? '<span class="fc-contact-unread-dot"></span>' : ''}
+        ${unreadDot}
       </div>
       <div class="fc-contact-name">${fcEsc(c.pseudo)}</div>
     </div>`;
@@ -1615,7 +1638,7 @@ function fcReset() {
   fcMessages = [];
   fcActiveFriendId = null;
   fcActivityMap = {};
-  fcUnreadSet = new Set();
+  fcUnreadCounts = {};
   fcReactionsMap = {};
   fcReactPickerTargetId = null;
   fcSetupNoticeShown = false;
