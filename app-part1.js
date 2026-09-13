@@ -5100,6 +5100,12 @@ function buildTV() {
       section: 'Points Clés'
     },
     {v: '--pt-ami', l: 'Titre de la page', page: 'Ami', section: 'Titre de page'},
+    {
+      v: '--fc-unread-text-color',
+      l: 'Badge messages non lus - texte',
+      page: 'Ami',
+      section: 'Notifications'
+    },
     ...getAccounts().flatMap((acc, i) => [
       {
         v: `--acc-item-bg-${i + 1}`,
@@ -5200,18 +5206,24 @@ function teOCP(v) {
   openCP(l, hex, newHex => {
     teHist.push({...teVals});
     teVals[v] = alpha !== null ? hexToRgbaWithAlpha(newHex, alpha) : newHex;
+    previewTheme(); // aperçu en direct uniquement — la sauvegarde/synchro attend le clic sur "✓ APPLIQUER"
     renderTE();
-    applyTheme(); // applique + sauvegarde + synchronise tout de suite, pas besoin d'un clic "Appliquer" séparé
   });
 }
-function applyTheme() {
+// Applique les couleurs courantes de teVals à l'écran SANS rien sauvegarder
+// ni synchroniser — utilisé pour l'aperçu en direct (teOCP) et l'annulation
+// (undoTheme). Rien n'est écrit tant que applyTheme() n'a pas été appelée.
+function previewTheme() {
   Object.entries(teVals).forEach(([v, c]) => document.documentElement.style.setProperty(v, c));
-  lss('tj_theme_vars', teVals);
   try {
     refreshAllCharts();
   } catch (e) {
-    console.warn('refreshAllCharts a échoué (sauvegarde/synchro non bloquées) :', e);
+    console.warn('refreshAllCharts a échoué (aperçu non bloqué) :', e);
   }
+}
+function applyTheme() {
+  previewTheme();
+  lss('tj_theme_vars', teVals);
   if (typeof currentUser !== 'undefined' && currentUser && !_isSyncing) {
     schedulePush(300);
   }
@@ -5219,8 +5231,8 @@ function applyTheme() {
 function undoTheme() {
   if (!teHist.length) return;
   teVals = teHist.pop();
+  previewTheme();
   renderTE();
-  applyTheme();
 }
 function askResetTheme() {
   showConfirm('Réinitialiser', 'Supprimer toutes les personnalisations ?', () => {

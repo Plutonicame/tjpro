@@ -156,7 +156,7 @@ const FC_CSS = `
 .fc-contact-avatar-wrap{position:relative;flex-shrink:0;}
 .fc-contact-unread-dot{position:absolute;top:-2px;right:-2px;width:10px;height:10px;border-radius:50%;background:var(--fc-unread-dot-color,var(--red));border:2px solid var(--fc-sidebar-bg,var(--surface));}
 .fc-nav-badge{display:none;position:absolute;top:4px;right:2px;width:8px;height:8px;border-radius:50%;background:var(--fc-unread-dot-color,var(--red));box-shadow:0 0 0 2px var(--nav-bg,var(--bg));}
-.fc-contact-unread-dot.fc-badge-count,.fc-nav-badge.fc-badge-count{width:auto;min-width:15px;height:15px;padding:0 3px;align-items:center;justify-content:center;color:#fff;font-size:9px;font-family:var(--mono);line-height:1;}
+.fc-contact-unread-dot.fc-badge-count,.fc-nav-badge.fc-badge-count{width:auto;min-width:15px;height:15px;padding:0 3px;align-items:center;justify-content:center;color:var(--fc-unread-text-color,#fff);font-size:9px;font-family:var(--mono);line-height:1;}
 .fc-chat{flex:1;display:flex;flex-direction:column;min-width:0;}
 .fc-chat-empty{flex:1;display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:13px;padding:20px;text-align:center;}
 .fc-chat-active{flex:1;display:flex;flex-direction:column;min-height:0;}
@@ -570,15 +570,15 @@ async function fcRenderPushButton() {
   const state = await fcPushSubscriptionState();
   btn.disabled = false;
   if (state === 'unsupported') {
-    btn.textContent = '🔕 Notifications non disponibles sur cet appareil';
+    btn.textContent = 'Notifications non disponibles sur cet appareil';
     btn.disabled = true;
   } else if (state === 'denied') {
-    btn.textContent = '🔕 Notifications bloquées (à autoriser dans les réglages du navigateur)';
+    btn.textContent = 'Notifications bloquées (à autoriser dans les réglages du navigateur)';
     btn.disabled = true;
   } else if (state === 'active') {
-    btn.textContent = '🔔 Notifications activées (toucher pour désactiver)';
+    btn.textContent = 'Notifications activées (toucher pour désactiver)';
   } else {
-    btn.textContent = '🔔 Activer les notifications';
+    btn.textContent = 'Activer les notifications';
   }
 }
 

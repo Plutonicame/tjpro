@@ -1220,12 +1220,38 @@ function cfApplyChartOrder() {
 // est local à CET appareil (pas synchronisé cloud, exprès — un forçage n'a de
 // sens que sur l'appareil dont l'écran est mal détecté) et prend le dessus
 // sur toute détection automatique.
+// Le forçage est propre à CHAQUE ÉCRAN PHYSIQUE (identifié par sa résolution
+// native, indépendante du zoom ou de la taille de la fenêtre) : un mode forcé
+// sur un moniteur ne s'applique plus quand la fenêtre passe sur un autre
+// écran — celui-ci retombe sur "auto" tant qu'aucun forçage ne lui est
+// propre.
+function cfScreenKey() {
+  try {
+    return `${screen.width}x${screen.height}`;
+  } catch (e) {
+    return 'default';
+  }
+}
+function cfModeOverrideMap() {
+  const map = ls('tj_mode_override_by_screen', null);
+  if (map) return map;
+  // Migration depuis l'ancien réglage unique (avant le correctif du
+  // 12/09/2026, un seul écran géré à la fois) : repris pour l'écran actuel.
+  const legacy = ls('tj_mode_override', 'auto');
+  const migrated = {};
+  if (CF_SCREEN_MODES.includes(legacy)) migrated[cfScreenKey()] = legacy;
+  lss('tj_mode_override_by_screen', migrated);
+  return migrated;
+}
 function cfModeOverride() {
-  const v = ls('tj_mode_override', 'auto');
+  const v = cfModeOverrideMap()[cfScreenKey()];
   return CF_SCREEN_MODES.includes(v) ? v : 'auto';
 }
 function cfSetModeOverride(v) {
-  lss('tj_mode_override', CF_SCREEN_MODES.includes(v) ? v : 'auto');
+  const map = cfModeOverrideMap();
+  if (CF_SCREEN_MODES.includes(v)) map[cfScreenKey()] = v;
+  else delete map[cfScreenKey()];
+  lss('tj_mode_override_by_screen', map);
   cfRecomputeLayout();
 }
 function cfScreenMode() {

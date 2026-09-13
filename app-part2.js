@@ -949,12 +949,12 @@ async function manualSyncSave() {
   const btns = [document.getElementById('mobileSyncBtn')].filter(Boolean);
   btns.forEach(b => {
     b.dataset.orig = b.textContent;
-    b.textContent = stripDecoEmoji('💾 Sauvegarde en cours...');
+    b.textContent = 'Sauvegarde en cours...';
     b.disabled = true;
   });
   await pushToCloud({force: true});
   btns.forEach(b => {
-    b.textContent = '✓ Sauvegardé !';
+    b.textContent = 'Sauvegardé !';
     setTimeout(() => {
       b.textContent = b.dataset.orig;
       b.disabled = false;
