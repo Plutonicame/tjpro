@@ -260,6 +260,14 @@ const FC_CSS = `
   .fc-avatar{width:56px;height:56px;font-size:19px;margin:0 auto;}
   .fc-msg-inner{max-width:82%;}
 }
+.fc-bubble-deleted{color:var(--muted);font-style:italic;}
+.fc-bubble-edited{font-size:9px;color:var(--muted);margin-left:5px;}
+.fc-msg-menu{position:fixed;background:var(--surface);border:1px solid var(--border);border-radius:8px;z-index:4200;min-width:190px;box-shadow:0 6px 18px rgba(0,0,0,.35);overflow:hidden;}
+.fc-msg-menu button{display:block;width:100%;text-align:left;background:none;border:none;color:var(--text);font-family:var(--mono);font-size:11px;padding:10px 14px;cursor:pointer;}
+.fc-msg-menu button:hover{background:var(--hover,rgba(255,255,255,.06));}
+.fc-msg-menu button.fc-msg-menu-danger{color:#ef4444;}
+.fc-edit-modal-box{width:408px;}
+.fc-edit-textarea{width:100%;min-height:90px;background:var(--surface);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:inherit;font-size:13px;padding:10px;resize:vertical;box-sizing:border-box;}
 `;
 
 function fcInjectStyles() {
@@ -316,6 +324,16 @@ const FC_MODALS_HTML = `
     <input type="text" class="fc-search-input" id="fcPseudoSearchInput" placeholder="Pseudo…" oninput="fcOnPseudoSearchInput()">
     <div class="fc-search-results" id="fcSearchResults"></div>
     <div class="btn-row" style="margin-top:12px;"><button class="btn btn-g" onclick="fcCloseAddContact()">FERMER</button></div>
+  </div>
+</div>
+<div class="confirm-modal" id="fcEditMsgModal">
+  <div class="confirm-box fc-modal-box fc-edit-modal-box">
+    <div class="fc-modal-title">Modifier le message</div>
+    <textarea class="fc-edit-textarea" id="fcEditMsgInput" rows="4"></textarea>
+    <div class="btn-row" style="margin-top:12px;">
+      <button class="btn btn-g" onclick="fcCloseEditModal()">ANNULER</button>
+      <button class="btn btn-p" onclick="fcSaveEditedMessage()">ENREGISTRER</button>
+    </div>
   </div>
 </div>
 <div class="confirm-modal" id="fcTradeModal">
@@ -895,6 +913,9 @@ function fcAudioBubbleHtml(m, avatarUrl) {
   </div>`;
 }
 function fcRenderBubbleContent(m, mine) {
+  if (m.deleted) {
+    return `<div class="fc-bubble-text fc-bubble-deleted">Message supprimé</div>`;
+  }
   if (m.msg_type === 'audio') {
     const myProfile = typeof getProfile === 'function' ? getProfile() : null;
     const avatarUrl = mine
@@ -904,7 +925,8 @@ function fcRenderBubbleContent(m, mine) {
   }
   if (m.msg_type === 'trade' && m.trade_data) return fcBuildTradeCardHtml(m.trade_data);
   const text = fcEsc(m.content || '').replace(/\n/g, '<br>');
-  return `<div class="fc-bubble-text">${text}</div>`;
+  const editedTag = m.edited_at ? '<span class="fc-bubble-edited">(modifié)</span>' : '';
+  return `<div class="fc-bubble-text">${text}${editedTag}</div>`;
 }
 function fcRenderMessageRow(m, me) {
   const mine = m.sender_id === me;
@@ -913,8 +935,12 @@ function fcRenderMessageRow(m, me) {
   const badgesHtml = reactions.length
     ? `<div class="fc-react-badges">${reactions.map((r) => `<span class="fc-react-badge">${fcEsc(r.emoji)}</span>`).join('')}</div>`
     : '';
+  // Clic droit (ou appui long sur mobile, qui déclenche aussi contextmenu) —
+  // uniquement sur ses propres messages non supprimés : modifier/supprimer.
+  const ctxAttr =
+    mine && !m.deleted ? ` oncontextmenu="fcOpenMessageMenu(event, ${m.id}); return false;"` : '';
   const bubbleHtml = `<div class="fc-bubble-wrap">
-      <div class="fc-bubble">${fcRenderBubbleContent(m, mine)}<div class="fc-bubble-time">${fcFmtTime(m.created_at)}</div></div>
+      <div class="fc-bubble"${ctxAttr}>${fcRenderBubbleContent(m, mine)}<div class="fc-bubble-time">${fcFmtTime(m.created_at)}</div></div>
       ${badgesHtml}
     </div>`;
   const inner = mine ? triggerHtml + bubbleHtml : bubbleHtml + triggerHtml;
@@ -937,6 +963,139 @@ function fcRenderMessages() {
   }
   box.innerHTML = fcMessages.map((m) => fcRenderMessageRow(m, me)).join('');
   box.scrollTop = box.scrollHeight;
+}
+
+// ══ Modifier / supprimer un message (uniquement les siens) ══
+let fcEditingMsgId = null;
+
+function fcCloseMsgMenu() {
+  document.getElementById('fcMsgMenu')?.remove();
+}
+function fcOpenMessageMenu(e, msgId) {
+  e.preventDefault();
+  e.stopPropagation();
+  fcCloseMsgMenu();
+  const m = fcMessages.find((x) => x.id === msgId);
+  if (!m || !currentUser || m.sender_id !== currentUser.id || m.deleted) return;
+  const menu = document.createElement('div');
+  menu.id = 'fcMsgMenu';
+  menu.className = 'fc-msg-menu';
+  const editBtn =
+    m.msg_type === 'text'
+      ? `<button onclick="fcCloseMsgMenu();fcOpenEditMessage(${m.id})">Modifier</button>`
+      : '';
+  menu.innerHTML = `${editBtn}<button class="fc-msg-menu-danger" onclick="fcCloseMsgMenu();fcAskDeleteMessage(${m.id})">Supprimer pour tout le monde</button>`;
+  document.body.appendChild(menu);
+  const x = e.touches ? e.touches[0].clientX : e.clientX;
+  const y = e.touches ? e.touches[0].clientY : e.clientY;
+  const menuW = 200;
+  menu.style.left = Math.max(6, Math.min(x, window.innerWidth - menuW)) + 'px';
+  menu.style.top = Math.max(6, Math.min(y, window.innerHeight - 100)) + 'px';
+  setTimeout(() => {
+    document.addEventListener(
+      'click',
+      function h() {
+        fcCloseMsgMenu();
+        document.removeEventListener('click', h);
+      },
+      {once: true}
+    );
+  }, 30);
+}
+
+function fcOpenEditMessage(msgId) {
+  const m = fcMessages.find((x) => x.id === msgId);
+  if (!m || !currentUser || m.sender_id !== currentUser.id || m.msg_type !== 'text' || m.deleted)
+    return;
+  fcEditingMsgId = msgId;
+  const modal = document.getElementById('fcEditMsgModal');
+  const input = document.getElementById('fcEditMsgInput');
+  if (!modal || !input) return;
+  input.value = m.content || '';
+  modal.classList.add('open');
+  setTimeout(() => input.focus(), 50);
+}
+function fcCloseEditModal() {
+  document.getElementById('fcEditMsgModal')?.classList.remove('open');
+  fcEditingMsgId = null;
+}
+async function fcSaveEditedMessage() {
+  const input = document.getElementById('fcEditMsgInput');
+  const newContent = (input?.value || '').trim();
+  const msgId = fcEditingMsgId;
+  if (!msgId || !newContent || typeof sb === 'undefined') {
+    fcCloseEditModal();
+    return;
+  }
+  try {
+    const {data, error} = await sb
+      .from(FC_MESSAGES_TABLE)
+      .update({content: newContent, edited_at: new Date().toISOString()})
+      .eq('id', msgId)
+      .eq('sender_id', currentUser.id)
+      .select()
+      .single();
+    if (error) throw error;
+    const idx = fcMessages.findIndex((x) => x.id === msgId);
+    if (idx !== -1) fcMessages[idx] = data;
+    fcRenderMessages();
+  } catch (e) {
+    console.warn('fcSaveEditedMessage:', e);
+    if (typeof showSync === 'function') showSync('⚠ Modification du message échouée', '#ef4444');
+  } finally {
+    fcCloseEditModal();
+  }
+}
+
+function fcAskDeleteMessage(msgId) {
+  const m = fcMessages.find((x) => x.id === msgId);
+  if (!m || !currentUser || m.sender_id !== currentUser.id) return;
+  const doDelete = () => fcDeleteMessageForEveryone(msgId);
+  if (typeof showConfirm === 'function') {
+    showConfirm(
+      'Supprimer le message',
+      'Le supprimer pour tout le monde, même si déjà vu par l’autre personne ?',
+      doDelete
+    );
+  } else {
+    doDelete();
+  }
+}
+async function fcDeleteMessageForEveryone(msgId) {
+  if (typeof sb === 'undefined' || !currentUser) return;
+  try {
+    const {data, error} = await sb
+      .from(FC_MESSAGES_TABLE)
+      .update({
+        deleted: true,
+        content: null,
+        audio_url: null,
+        audio_duration: null,
+        trade_data: null
+      })
+      .eq('id', msgId)
+      .eq('sender_id', currentUser.id)
+      .select()
+      .single();
+    if (error) throw error;
+    const idx = fcMessages.findIndex((x) => x.id === msgId);
+    if (idx !== -1) fcMessages[idx] = data;
+    fcRenderMessages();
+  } catch (e) {
+    console.warn('fcDeleteMessageForEveryone:', e);
+    if (typeof showSync === 'function') showSync('⚠ Suppression du message échouée', '#ef4444');
+  }
+}
+// Reçoit les modifications/suppressions faites par l'autre personne (ou par
+// soi-même depuis un autre appareil) en temps réel — voir fcStartRealtime().
+function fcHandleMessageUpdate(m) {
+  if (!m || !currentUser) return;
+  const me = currentUser.id;
+  const other = m.sender_id === me ? m.receiver_id : m.sender_id;
+  const idx = fcMessages.findIndex((x) => x.id === m.id);
+  if (idx === -1) return;
+  fcMessages[idx] = m;
+  if (fcActiveFriendId === other) fcRenderMessages();
 }
 
 // ══ Réactions emoji (un seul emoji par personne et par message) ══
@@ -1668,6 +1827,21 @@ function fcStartRealtime() {
       'postgres_changes',
       { event: 'INSERT', schema: 'public', table: FC_MESSAGES_TABLE, filter: 'sender_id=eq.' + me },
       (payload) => fcHandleIncomingMessage(payload.new),
+    )
+    .on(
+      'postgres_changes',
+      {
+        event: 'UPDATE',
+        schema: 'public',
+        table: FC_MESSAGES_TABLE,
+        filter: 'receiver_id=eq.' + me,
+      },
+      (payload) => fcHandleMessageUpdate(payload.new),
+    )
+    .on(
+      'postgres_changes',
+      { event: 'UPDATE', schema: 'public', table: FC_MESSAGES_TABLE, filter: 'sender_id=eq.' + me },
+      (payload) => fcHandleMessageUpdate(payload.new),
     )
     .on(
       'postgres_changes',

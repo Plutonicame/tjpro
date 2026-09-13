@@ -352,29 +352,33 @@ const ACTIVE_ACC_KEY = 'tjp_active_acc'; // id du compte actif
 
 function getAccounts() {
   try {
-    return JSON.parse(localStorage.getItem(ACCOUNTS_KEY) || '[]');
+    return JSON.parse(localStorage.getItem(profileKey(ACCOUNTS_KEY)) || '[]');
   } catch (e) {
     return [];
   }
 }
 function saveAccounts(accs) {
-  localStorage.setItem(ACCOUNTS_KEY, JSON.stringify(accs));
+  localStorage.setItem(profileKey(ACCOUNTS_KEY), JSON.stringify(accs));
 }
 function getActiveAccId() {
-  const id = localStorage.getItem(ACTIVE_ACC_KEY);
+  const id = localStorage.getItem(profileKey(ACTIVE_ACC_KEY));
   const accs = getAccounts();
   if (id && accs.find(a => a.id === id)) return id;
   if (accs.length) return accs[0].id;
   return 'acc_1';
 }
 function setActiveAccId(id) {
-  localStorage.setItem(ACTIVE_ACC_KEY, id);
+  localStorage.setItem(profileKey(ACTIVE_ACC_KEY), id);
 }
 
-// Clé préfixée selon le compte actif (transparente pour le reste du code)
+// Clé préfixée selon le compte actif (transparente pour le reste du code).
+// Passe aussi par profileKey() : les sous-comptes de trading (acc_1, acc_2...)
+// sont eux-mêmes propres à CHAQUE compte de connexion (voir profileKey plus
+// bas) — sans quoi deux comptes Google différents utilisés sur le même
+// appareil partageraient le même "acc_1" et donc les mêmes trades.
 let _currentAccId = null; // sera initialisé après connexion Google
 function accKey(k) {
-  return _currentAccId ? `${k}__${_currentAccId}` : k;
+  return profileKey(_currentAccId ? `${k}__${_currentAccId}` : k);
 }
 
 // Initialise les comptes si aucun n'existe encore (migration depuis version sans comptes)
@@ -422,7 +426,7 @@ function initAccountsIfNeeded() {
 // Valeurs par défaut pour un nouveau compte
 function defaultAccSettings(sourceAccId) {
   // Hérite les listes du compte source (le thème, lui, est global — voir plus bas)
-  const srcKey = k => (sourceAccId ? `${k}__${sourceAccId}` : k);
+  const srcKey = k => profileKey(sourceAccId ? `${k}__${sourceAccId}` : k);
   return {
     trades: [],
     nextId: 9000,
@@ -462,7 +466,7 @@ function createAccount(sourcAccId) {
   saveAccounts(accs);
   // Initialiser localStorage du nouveau compte avec valeurs par défaut
   const defs = defaultAccSettings(sourcAccId);
-  const k = key => `${key}__${newId}`;
+  const k = key => profileKey(`${key}__${newId}`);
   localStorage.setItem(k('tj_trades'), JSON.stringify(defs.trades));
   localStorage.setItem(k('tj_nextId'), JSON.stringify(defs.nextId));
   localStorage.setItem(k('tj_capital'), defs.capital);
@@ -518,8 +522,104 @@ function _doSwitchAccount(accId) {
     pullGlobalChatData();
 }
 
+// Migration unique : avant ce correctif, TOUT (comptes de trading, trades,
+// thème, config IA...) était stocké sans distinction de compte de connexion
+// Google — un seul espace partagé par appareil. Deux comptes Google
+// différents utilisés sur le même appareil pouvaient donc se retrouver avec
+// les mêmes trades. On reprend cette ancienne base UNE SEULE FOIS, pour le
+// premier compte qui se connecte après la mise à jour (c'est lui l'historique
+// réel), puis on l'efface : ainsi aucun autre compte connecté plus tard sur
+// ce même appareil ne peut en hériter à son tour.
+function migrateToPerUserStorageIfNeeded() {
+  if (typeof currentUser === 'undefined' || !currentUser || !currentUser.id) return;
+  const legacyAccountsRaw = localStorage.getItem(ACCOUNTS_KEY);
+  if (legacyAccountsRaw && !localStorage.getItem(profileKey(ACCOUNTS_KEY))) {
+    localStorage.setItem(profileKey(ACCOUNTS_KEY), legacyAccountsRaw);
+    const legacyActive = localStorage.getItem(ACTIVE_ACC_KEY);
+    if (legacyActive) localStorage.setItem(profileKey(ACTIVE_ACC_KEY), legacyActive);
+    try {
+      const legacyAccounts = JSON.parse(legacyAccountsRaw) || [];
+      const perAccKeys = [
+        'tj_trades',
+        'tj_lists',
+        'tj_nextId',
+        'tj_capital',
+        'tj_risk',
+        'tj_smart_risk',
+        'tj_risk_max',
+        'tj_risk_decimal',
+        'tj_payouts',
+        'tj_pencil_edits',
+        'tj_cf_config',
+        'tj_last_backup_hash',
+        'tjp_images_migrated',
+        'tjp_last_updated_at',
+        'tj_rm_up_trigger',
+        'tj_rm_up_trades',
+        'tj_rm_up_pct',
+        'tj_rm_up_var_type',
+        'tj_rm_up_var_val',
+        'tj_rm_down_trigger',
+        'tj_rm_down_trades',
+        'tj_rm_down_pct',
+        'tj_rm_down_var_type',
+        'tj_rm_down_var_val'
+      ];
+      legacyAccounts.forEach(acc => {
+        perAccKeys.forEach(k => {
+          const rawKey = `${k}__${acc.id}`;
+          const v = localStorage.getItem(rawKey);
+          if (v !== null) {
+            localStorage.setItem(profileKey(rawKey), v);
+            localStorage.removeItem(rawKey);
+          }
+        });
+      });
+    } catch (e) {
+      console.warn('Migration des comptes vers le stockage par compte de connexion a échoué :', e);
+    }
+    localStorage.removeItem(ACCOUNTS_KEY);
+    localStorage.removeItem(ACTIVE_ACC_KEY);
+  }
+  // Réglages partagés entre tous les sous-comptes d'un même compte de
+  // connexion (thème, config IA, historique récap, conversations IA).
+  const globalKeys = [
+    'tj_theme_vars',
+    'tjp_ia_config',
+    'tjp_recap_history',
+    'tjp_pc_active_conv',
+    'tjp_pc_chat',
+    'tjp_pc_conversations',
+    'tjp_pc_history'
+  ];
+  globalKeys.forEach(k => {
+    const legacy = localStorage.getItem(k);
+    if (legacy !== null) {
+      if (localStorage.getItem(profileKey(k)) === null) localStorage.setItem(profileKey(k), legacy);
+      localStorage.removeItem(k);
+    }
+  });
+}
+
+// Appelée juste après confirmation du compte de connexion (PIN validé, voir
+// afterPinValidated dans app-part2.js). Tant que currentUser était inconnu,
+// l'app avait démarré de façon optimiste avec les clés non liées à un compte
+// précis (pour s'afficher sans attendre le réseau) — potentiellement celles
+// d'un AUTRE compte déjà utilisé sur cet appareil. On réancre donc tout
+// l'état local sur les clés propres à CE compte avant de poursuivre vers le
+// pull cloud, en réutilisant _doSwitchAccount() (qui recharge déjà
+// trades/lists/thème ET tout ce qui s'y est greffé depuis, ex. la config des
+// champs personnalisés dans custom-fields.js) plutôt que de dupliquer cette
+// logique : ainsi TOUS les réglages du compte repartent bien à zéro pour un
+// compte flambant neuf, pas seulement les trades et le thème.
+function reanchorToCurrentUser() {
+  migrateToPerUserStorageIfNeeded();
+  initAccountsIfNeeded();
+  _doSwitchAccount(_currentAccId);
+}
+
 function getAccCapital(accId) {
-  const k = key => `${key}__${accId}`;
+  const k = key => profileKey(`${key}__${accId}`);
   const trades = JSON.parse(localStorage.getItem(k('tj_trades')) || '[]').filter(t => !t.backtest);
   const capital = parseFloat(localStorage.getItem(k('tj_capital')) || '1000');
   const payouts = JSON.parse(localStorage.getItem(k('tj_payouts')) || '[]').reduce(
@@ -627,6 +727,11 @@ function openProfileModal() {
   // profile.photo (venue du cloud) est ainsi affectée à la propriété .src sans
   // jamais être interprétée comme du balisage, quelle que soit sa provenance.
   setAvatarPhoto(avatarEl, profile.photo);
+  // Sert de valeur de référence pour saveProfileModal() : si l'utilisateur ne
+  // touche pas à la photo, on resauvegarde CELLE-CI (pas une valeur vide) —
+  // avant ce correctif, dataset.photo restait vide tant qu'aucune nouvelle
+  // photo n'était choisie, et sauvegarder effaçait alors la photo existante.
+  avatarEl.dataset.photo = profile.photo || '';
   modalEl.classList.add('open');
   if (typeof fcRenderPushButton === 'function') fcRenderPushButton();
 }
@@ -950,7 +1055,7 @@ function deleteAccount(accId) {
     'tj_rm_down_var_type',
     'tj_rm_down_var_val'
   ];
-  keys.forEach(k => localStorage.removeItem(`${k}__${accId}`));
+  keys.forEach(k => localStorage.removeItem(profileKey(`${k}__${accId}`)));
   // Marquer ce compte comme supprimé dans le cloud : même mécanisme que les
   // trades (upsert, déjà autorisé par les policies existantes), pas un DELETE
   // SQL brut — les policies RLS actuelles n'ont jamais prévu de permission de
@@ -1246,7 +1351,7 @@ function applyPencilStyle() {
     // le changement de la variable sur :root se répercute automatiquement dessus.
     document.documentElement.style.setProperty(themeVar, pencilColor);
     teVals[themeVar] = pencilColor;
-    lss('tj_theme_vars', teVals);
+    lss(profileKey('tj_theme_vars'), teVals);
     if (typeof currentUser !== 'undefined' && currentUser && !_isSyncing) {
       schedulePush(300);
     }
@@ -5144,6 +5249,16 @@ function renderTE() {
 
   const query = (document.getElementById('teSearch')?.value || '').trim().toLowerCase();
 
+  // Mémorise quelles pages (Général, Ami, Connexion...) étaient dépliées AVANT
+  // de tout reconstruire : sans ça, choisir une seule couleur repliait la
+  // page en cours (teOCP()/undoTheme() appellent renderTE() après chaque
+  // changement, qui régénère tout le HTML des <details> à l'état fermé).
+  const openPages = new Set(
+    [...document.querySelectorAll('#teGrid details.te-page[open]')].map(
+      d => d.querySelector('summary')?.textContent || ''
+    )
+  );
+
   // page -> section -> [tv...], en conservant l'ordre d'apparition dans TV
   const pages = new Map();
   TV.forEach(tv => {
@@ -5164,7 +5279,7 @@ function renderTE() {
         })
         .filter(([, items]) => items.length);
       if (query && !sectionEntries.length) return '';
-      const openAttr = query ? 'open' : '';
+      const openAttr = query || openPages.has(page) ? 'open' : '';
       return `<details class="te-page" ${openAttr}>
       <summary class="te-page-title">${page}</summary>
       <div class="te-grid-inner">
@@ -5206,13 +5321,12 @@ function teOCP(v) {
   openCP(l, hex, newHex => {
     teHist.push({...teVals});
     teVals[v] = alpha !== null ? hexToRgbaWithAlpha(newHex, alpha) : newHex;
-    previewTheme(); // aperçu en direct uniquement — la sauvegarde/synchro attend le clic sur "✓ APPLIQUER"
     renderTE();
+    applyTheme(); // applique + sauvegarde + synchronise tout de suite, pas besoin d'un clic "Appliquer" séparé
   });
 }
-// Applique les couleurs courantes de teVals à l'écran SANS rien sauvegarder
-// ni synchroniser — utilisé pour l'aperçu en direct (teOCP) et l'annulation
-// (undoTheme). Rien n'est écrit tant que applyTheme() n'a pas été appelée.
+// Applique à l'écran les couleurs courantes de teVals (utilisé par
+// applyTheme() et au rechargement, voir loadSavedTheme()).
 function previewTheme() {
   Object.entries(teVals).forEach(([v, c]) => document.documentElement.style.setProperty(v, c));
   try {
@@ -5223,7 +5337,7 @@ function previewTheme() {
 }
 function applyTheme() {
   previewTheme();
-  lss('tj_theme_vars', teVals);
+  lss(profileKey('tj_theme_vars'), teVals);
   if (typeof currentUser !== 'undefined' && currentUser && !_isSyncing) {
     schedulePush(300);
   }
@@ -5231,13 +5345,13 @@ function applyTheme() {
 function undoTheme() {
   if (!teHist.length) return;
   teVals = teHist.pop();
-  previewTheme();
   renderTE();
+  applyTheme();
 }
 function askResetTheme() {
   showConfirm('Réinitialiser', 'Supprimer toutes les personnalisations ?', () => {
     teVals = {};
-    lss('tj_theme_vars', {});
+    lss(profileKey('tj_theme_vars'), {});
     document.documentElement.removeAttribute('style');
     renderTE();
     refreshAllCharts();
@@ -5247,11 +5361,13 @@ function askResetTheme() {
   });
 }
 function loadSavedTheme() {
-  const s = ls('tj_theme_vars', null);
-  if (s) {
-    Object.entries(s).forEach(([v, c]) => document.documentElement.style.setProperty(v, c));
-    teVals = s;
-  }
+  // Repart d'une base neutre avant d'appliquer le thème de CE compte : sans
+  // ça, changer de compte de connexion (ou de sous-compte sans thème propre)
+  // garderait à l'écran les couleurs du compte/sous-compte précédent.
+  document.documentElement.removeAttribute('style');
+  const s = ls(profileKey('tj_theme_vars'), null);
+  teVals = s || {};
+  Object.entries(teVals).forEach(([v, c]) => document.documentElement.style.setProperty(v, c));
   ensureMgmtThemeDefaults();
   ensureTitleThemeDefaults();
 }

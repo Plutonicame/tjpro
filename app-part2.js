@@ -285,6 +285,15 @@ async function afterPinValidated() {
     if (data?.session?.user) currentUser = data.session.user;
   } catch (e) {}
 
+  // Au tout premier chargement de page, l'app affiche instantanément les
+  // données déjà en localStorage (avant même de savoir qui est connecté, pour
+  // ne pas bloquer sur le réseau) — potentiellement celles d'un AUTRE compte
+  // déjà utilisé sur cet appareil. Maintenant que currentUser est confirmé,
+  // on réancre tout l'état local (comptes, trades, thème...) sur les clés
+  // propres à CE compte avant de continuer, sans quoi un compte flambant
+  // neuf hériterait des trades/réglages du compte précédent sur ce PC.
+  if (typeof reanchorToCurrentUser === 'function') reanchorToCurrentUser();
+
   // Pull initial (avec tentatives), puis démarrage du temps réel + sondage périodique
   const pulled = await initialPullWithRetry();
   pullGlobalChatData();
@@ -331,7 +340,7 @@ function exportLocalBackup() {
     const accs = getAccounts();
     const list = accs.length ? accs : [{id: _currentAccId || 'acc_1', name: 'Compte 1'}];
     const exportAccounts = list.map(acc => {
-      const k = key => `${key}__${acc.id}`;
+      const k = key => profileKey(`${key}__${acc.id}`);
       return {
         id: acc.id,
         name: acc.name,
@@ -365,13 +374,13 @@ function exportLocalBackup() {
       exportedAt: new Date().toISOString(),
       activeAccId: _currentAccId,
       accounts: exportAccounts,
-      theme: localStorage.getItem('tj_theme_vars'),
-      iaConfig: localStorage.getItem('tjp_ia_config'),
-      recapHistory: localStorage.getItem('tjp_recap_history'),
+      theme: localStorage.getItem(profileKey('tj_theme_vars')),
+      iaConfig: localStorage.getItem(profileKey('tjp_ia_config')),
+      recapHistory: localStorage.getItem(profileKey('tjp_recap_history')),
       iaChatData: {
-        conversations: localStorage.getItem('tjp_pc_conversations'),
-        activeConv: localStorage.getItem('tjp_pc_active_conv'),
-        history: localStorage.getItem('tjp_pc_history')
+        conversations: localStorage.getItem(profileKey('tjp_pc_conversations')),
+        activeConv: localStorage.getItem(profileKey('tjp_pc_active_conv')),
+        history: localStorage.getItem(profileKey('tjp_pc_history'))
       }
     };
     const blob = new Blob([JSON.stringify(backup, null, 2)], {type: 'application/json'});
@@ -404,7 +413,7 @@ async function importLocalBackup(event) {
     let backupCount = 0;
     backup.accounts.forEach(acc => {
       if (!acc.id) return;
-      const k = key => `${key}__${acc.id}`;
+      const k = key => profileKey(`${key}__${acc.id}`);
       localStorage.setItem(k('tj_trades'), JSON.stringify(acc.trades || []));
       backupCount += (acc.trades || []).length;
       if (acc.lists) localStorage.setItem(k('tj_lists'), JSON.stringify(acc.lists));
@@ -442,16 +451,16 @@ async function importLocalBackup(event) {
         saveAccounts(accs);
       }
     });
-    if (backup.theme) localStorage.setItem('tj_theme_vars', backup.theme);
-    if (backup.iaConfig) localStorage.setItem('tjp_ia_config', backup.iaConfig);
-    if (backup.recapHistory) localStorage.setItem('tjp_recap_history', backup.recapHistory);
+    if (backup.theme) localStorage.setItem(profileKey('tj_theme_vars'), backup.theme);
+    if (backup.iaConfig) localStorage.setItem(profileKey('tjp_ia_config'), backup.iaConfig);
+    if (backup.recapHistory) localStorage.setItem(profileKey('tjp_recap_history'), backup.recapHistory);
     if (backup.iaChatData) {
       if (backup.iaChatData.conversations)
-        localStorage.setItem('tjp_pc_conversations', backup.iaChatData.conversations);
+        localStorage.setItem(profileKey('tjp_pc_conversations'), backup.iaChatData.conversations);
       if (backup.iaChatData.activeConv)
-        localStorage.setItem('tjp_pc_active_conv', backup.iaChatData.activeConv);
+        localStorage.setItem(profileKey('tjp_pc_active_conv'), backup.iaChatData.activeConv);
       if (backup.iaChatData.history)
-        localStorage.setItem('tjp_pc_history', backup.iaChatData.history);
+        localStorage.setItem(profileKey('tjp_pc_history'), backup.iaChatData.history);
     }
     const targetAcc = backup.activeAccId || backup.accounts[0]?.id;
     if (targetAcc) {
@@ -504,6 +513,13 @@ async function _doResetPin() {
   stopRealtime();
   stopPolling();
   currentUser = null;
+  _currentAccId = null;
+  // Vide l'état en mémoire du compte qui vient de se déconnecter : la
+  // prochaine connexion (même appareil, compte différent) repart de zéro le
+  // temps que reanchorToCurrentUser() recharge les bonnes clés.
+  APP.trades = [];
+  APP.lists = DEF;
+  APP.nextId = 9000;
   localStorage.removeItem('tjp_last_uid');
   await sb.auth.signOut();
   showOverlay('overlayGoogle');
@@ -746,6 +762,13 @@ function pcHideSyncFailureWarning() {
 // uniquement sans qu'on s'en rende compte.
 function buildSyncPayload(trades) {
   const now = new Date().toISOString();
+  // Pseudo/photo : n'écrase la valeur cloud que si CET appareil a une valeur
+  // locale connue (même vide, si volontairement effacée). Si la clé locale
+  // n'existe pas du tout (jamais reçue sur cet appareil — sync pas encore
+  // arrivée, appareil différent, etc.), on omet le champ du payload pour ne
+  // jamais effacer une photo/pseudo bien réel côté cloud avec du vide local.
+  const _localPseudo = localStorage.getItem(profileKey('tjp_profile_pseudo'));
+  const _localPhoto = localStorage.getItem(profileKey('tjp_profile_photo'));
   return {
     user_id: currentUser.id,
     acc_id: _currentAccId, // isole les trades/réglages de CE sous-compte local des autres
@@ -758,9 +781,9 @@ function buildSyncPayload(trades) {
     smart_risk: localStorage.getItem(accKey('tj_smart_risk')),
     risk_max: localStorage.getItem(accKey('tj_risk_max')),
     risk_decimal: localStorage.getItem(accKey('tj_risk_decimal')),
-    theme: localStorage.getItem('tj_theme_vars'), // thème global, partagé entre tous les comptes
-    profile_pseudo: localStorage.getItem(profileKey('tjp_profile_pseudo')) || '', // profil global, lié au compte (pas à un sous-compte de trading)
-    profile_photo: localStorage.getItem(profileKey('tjp_profile_photo')) || '',
+    theme: localStorage.getItem(profileKey('tj_theme_vars')), // thème global, partagé entre tous les comptes
+    ...(_localPseudo != null ? {profile_pseudo: _localPseudo} : {}), // profil global, lié au compte (pas à un sous-compte de trading)
+    ...(_localPhoto != null ? {profile_photo: _localPhoto} : {}),
     pencil_edits: (() => {
       try {
         const edits = JSON.parse(localStorage.getItem(accKey('tj_pencil_edits')) || '{}');
@@ -773,8 +796,8 @@ function buildSyncPayload(trades) {
         return localStorage.getItem(accKey('tj_pencil_edits'));
       }
     })(),
-    ia_config: localStorage.getItem('tjp_ia_config'),
-    recap_history: localStorage.getItem('tjp_recap_history'),
+    ia_config: localStorage.getItem(profileKey('tjp_ia_config')),
+    recap_history: localStorage.getItem(profileKey('tjp_recap_history')),
     payouts: localStorage.getItem(accKey('tj_payouts')),
     cf_config: localStorage.getItem(accKey('tj_cf_config')), // config des champs personnalisés (custom-fields.js)
     rm_config: JSON.stringify({
@@ -989,9 +1012,9 @@ function applyIaChatData(iaChatDataStr) {
   try {
     const chat = JSON.parse(iaChatDataStr);
     if (chat.conversations != null)
-      localStorage.setItem('tjp_pc_conversations', chat.conversations);
-    if (chat.active_conv != null) localStorage.setItem('tjp_pc_active_conv', chat.active_conv);
-    if (chat.history != null) localStorage.setItem('tjp_pc_history', chat.history);
+      localStorage.setItem(profileKey('tjp_pc_conversations'), chat.conversations);
+    if (chat.active_conv != null) localStorage.setItem(profileKey('tjp_pc_active_conv'), chat.active_conv);
+    if (chat.history != null) localStorage.setItem(profileKey('tjp_pc_history'), chat.history);
     // pcConversations/pcActiveConvId sont chargées UNE SEULE FOIS au tout premier
     // chargement du script (avant que ce pull cloud, asynchrone, n'ait eu le temps
     // d'arriver) — sans ce recalage, la conversation restaurée reste invisible à
@@ -1013,9 +1036,9 @@ async function pushGlobalChatData() {
       user_id: currentUser.id,
       acc_id: GLOBAL_SYNC_ACC_ID,
       ia_chat_data: JSON.stringify({
-        conversations: localStorage.getItem('tjp_pc_conversations'),
-        active_conv: localStorage.getItem('tjp_pc_active_conv'),
-        history: localStorage.getItem('tjp_pc_history')
+        conversations: localStorage.getItem(profileKey('tjp_pc_conversations')),
+        active_conv: localStorage.getItem(profileKey('tjp_pc_active_conv')),
+        history: localStorage.getItem(profileKey('tjp_pc_history'))
       }),
       updated_at: new Date().toISOString()
     };
@@ -1230,7 +1253,7 @@ function _applyCloudDataDirect(data, cloudTrades) {
   if (typeof renderAccountMenu === 'function') renderAccountMenu();
 
   if (data.theme) {
-    localStorage.setItem('tj_theme_vars', data.theme);
+    localStorage.setItem(profileKey('tj_theme_vars'), data.theme);
     try {
       const v = JSON.parse(data.theme);
       Object.entries(v).forEach(([k, c]) => document.documentElement.style.setProperty(k, c));
@@ -1268,8 +1291,8 @@ function _applyCloudDataDirect(data, cloudTrades) {
     }
   }
 
-  if (data.ia_config) localStorage.setItem('tjp_ia_config', data.ia_config);
-  if (data.recap_history) localStorage.setItem('tjp_recap_history', data.recap_history);
+  if (data.ia_config) localStorage.setItem(profileKey('tjp_ia_config'), data.ia_config);
+  if (data.recap_history) localStorage.setItem(profileKey('tjp_recap_history'), data.recap_history);
 
   if (data.rm_config) {
     try {
@@ -1942,7 +1965,7 @@ function renderTop5() {
 // ══════════════════════════════════════
 
 function renderPcHistory() {
-  const history = JSON.parse(localStorage.getItem('tjp_pc_history') || '[]');
+  const history = JSON.parse(localStorage.getItem(profileKey('tjp_pc_history')) || '[]');
   const wrap = document.getElementById('pcHistory');
   if (!wrap) return;
   if (!history.length) {
@@ -1962,14 +1985,14 @@ function renderPcHistory() {
 }
 
 function loadPcFromHistory(i) {
-  const history = JSON.parse(localStorage.getItem('tjp_pc_history') || '[]');
+  const history = JSON.parse(localStorage.getItem(profileKey('tjp_pc_history')) || '[]');
   if (history[i]) renderPcCards(history[i].cards);
 }
 
 function deletePcHistory(i) {
-  const history = JSON.parse(localStorage.getItem('tjp_pc_history') || '[]');
+  const history = JSON.parse(localStorage.getItem(profileKey('tjp_pc_history')) || '[]');
   history.splice(i, 1);
-  localStorage.setItem('tjp_pc_history', JSON.stringify(history));
+  localStorage.setItem(profileKey('tjp_pc_history'), JSON.stringify(history));
   renderPcHistory();
   if (typeof scheduleGlobalChatPush === 'function') scheduleGlobalChatPush();
 }
@@ -2323,10 +2346,10 @@ async function generatePointsCles() {
   renderPcCards(result);
 
   // Sauvegarder
-  const history = JSON.parse(localStorage.getItem('tjp_pc_history') || '[]');
+  const history = JSON.parse(localStorage.getItem(profileKey('tjp_pc_history')) || '[]');
   history.unshift({date: new Date().toLocaleString('fr-FR'), cards: result});
   if (history.length > 10) history.pop();
-  localStorage.setItem('tjp_pc_history', JSON.stringify(history));
+  localStorage.setItem(profileKey('tjp_pc_history'), JSON.stringify(history));
   renderPcHistory();
   if (typeof scheduleGlobalChatPush === 'function') scheduleGlobalChatPush();
 
@@ -2342,20 +2365,20 @@ async function generatePointsCles() {
 
 function pcLoadConversations() {
   try {
-    return JSON.parse(localStorage.getItem('tjp_pc_conversations') || '[]');
+    return JSON.parse(localStorage.getItem(profileKey('tjp_pc_conversations')) || '[]');
   } catch (e) {
     return [];
   }
 }
 function pcSaveConversations(convs) {
-  localStorage.setItem('tjp_pc_conversations', JSON.stringify(convs));
+  localStorage.setItem(profileKey('tjp_pc_conversations'), JSON.stringify(convs));
   if (typeof scheduleGlobalChatPush === 'function') scheduleGlobalChatPush();
 }
 function pcGetActiveConvId() {
-  return localStorage.getItem('tjp_pc_active_conv') || null;
+  return localStorage.getItem(profileKey('tjp_pc_active_conv')) || null;
 }
 function pcSetActiveConvId(id) {
-  localStorage.setItem('tjp_pc_active_conv', id || '');
+  localStorage.setItem(profileKey('tjp_pc_active_conv'), id || '');
   if (typeof scheduleGlobalChatPush === 'function') scheduleGlobalChatPush();
 }
 
@@ -2365,7 +2388,7 @@ let pcActiveConvId = pcGetActiveConvId();
 // Migration douce : si l'ancien format mono-conversation existe et qu'il n'y a pas encore
 // de conversations dans le nouveau système, on le convertit en première conversation.
 (function pcMigrateOldChat() {
-  const old = localStorage.getItem('tjp_pc_chat');
+  const old = localStorage.getItem(profileKey('tjp_pc_chat'));
   if (old && !pcConversations.length) {
     try {
       const oldMsgs = JSON.parse(old).filter(m => !/pc-thinking/.test(m.text));
@@ -2382,7 +2405,7 @@ let pcActiveConvId = pcGetActiveConvId();
         pcSetActiveConvId(conv.id);
       }
     } catch (e) {}
-    localStorage.removeItem('tjp_pc_chat');
+    localStorage.removeItem(profileKey('tjp_pc_chat'));
   }
 })();
 
