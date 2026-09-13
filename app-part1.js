@@ -1995,6 +1995,87 @@ function executeDeleteAllTrades() {
   pcUpdateUndoBtnVisibility();
   showSync('✓ Tous les trades supprimés', '#ef4444');
 }
+
+// Réinitialise ENTIÈREMENT le compte de trading actif : trades, réglages
+// (capital, risque, gestion auto, payouts, champs personnalisés...) ET le
+// thème — tout ce qui est listé dans la modale de confirmation. Ne touche
+// pas aux autres comptes de trading locaux ni au compte de connexion
+// lui-même. Protégé par le code PIN, comme "Supprimer tous les trades".
+function askResetAccount() {
+  document.getElementById('resetAccountErr').style.display = 'none';
+  document.getElementById('resetAccountModal').classList.add('open');
+  buildPad(
+    'resetAccountPad',
+    'resetAccountDots',
+    async (val, reset) => {
+      const stored = currentUser ? localStorage.getItem(pinKey(currentUser.id)) : null;
+      const attempt = currentUser ? await localPinHash(val, currentUser.id) : null;
+      if (!stored || (attempt !== stored && val !== stored)) {
+        const err = document.getElementById('resetAccountErr');
+        err.textContent = 'Code PIN incorrect.';
+        err.style.display = 'block';
+        reset(true);
+        return;
+      }
+      executeResetAccount();
+    },
+    'resetAccountErr'
+  );
+}
+function closeResetAccountModal() {
+  document.getElementById('resetAccountModal').classList.remove('open');
+}
+function executeResetAccount() {
+  markUserAction();
+  window._intentionalBulkDelete = true;
+  APP.trades.forEach(t => deleteAllTradeImages(t));
+  APP.trades = [];
+  APP.lists = DEF;
+  APP.nextId = 9000;
+  saveState();
+  // Réglages du compte (capital, risque, gestion auto, payouts, champs
+  // personnalisés) : on efface les clés locales pour repartir sur les
+  // valeurs par défaut.
+  [
+    'tj_capital',
+    'tj_risk',
+    'tj_smart_risk',
+    'tj_risk_max',
+    'tj_risk_decimal',
+    'tj_payouts',
+    'tj_pencil_edits',
+    'tj_cf_config',
+    'tj_rm_up_trigger',
+    'tj_rm_up_trades',
+    'tj_rm_up_pct',
+    'tj_rm_up_var_type',
+    'tj_rm_up_var_val',
+    'tj_rm_down_trigger',
+    'tj_rm_down_trades',
+    'tj_rm_down_pct',
+    'tj_rm_down_var_type',
+    'tj_rm_down_var_val'
+  ].forEach(k => localStorage.removeItem(accKey(k)));
+  if (typeof cfLoad === 'function') cfLoad();
+  if (typeof cfEnsureOrders === 'function') cfEnsureOrders();
+  // Thème
+  teVals = {};
+  lss(profileKey('tj_theme_vars'), {});
+  document.documentElement.removeAttribute('style');
+  ensureMgmtThemeDefaults();
+  ensureTitleThemeDefaults();
+  renderTable();
+  updateNavBadges();
+  updateKPIs();
+  refreshAllCharts();
+  renderTop5();
+  if (document.getElementById('page-modifs')?.classList.contains('active')) renderModifs();
+  closeResetAccountModal();
+  closeProfileModal();
+  schedulePush(250, {force: true});
+  showSync('✓ Compte réinitialisé', '#ef4444');
+}
+
 function pcShowUndoToast() {
   let toast = document.getElementById('undoToast');
   if (!toast) {
@@ -2929,31 +3010,13 @@ function buildLabels(tr, period) {
 
 function updateKPIs() {
   const t = BT_STATE.kpi ? APP.trades : realTrades();
-  if (!t.length) return;
-  const gains = t.filter(x => x.res > 0),
-    pertes = t.filter(x => x.res < 0);
-  const pnl = t.reduce((s, x) => s + (x.res || 0), 0),
-    wr = (gains.length / t.length) * 100;
-  const rrArr = t.map(x => computeRR(x));
-  const rrMoy = rrArr.length ? rrArr.reduce((a, b) => a + b) / rrArr.length : 0;
-  const sumG = gains.reduce((s, x) => s + x.res, 0),
-    sumP = Math.abs(pertes.reduce((s, x) => s + x.res, 0));
-  const pf = sumP > 0 ? sumG / sumP : sumG > 0 ? 99 : 0;
-  const rp = BT_STATE.kpi ? computeRiskHistory(true).finalRp : getCurrentRiskPct();
-  const worst = computeWorstLose(BT_STATE.kpi);
-  const fr = n => n.toLocaleString('fr-FR', {minimumFractionDigits: 2, maximumFractionDigits: 2});
   const totalPO0 = lsAcc('tj_payouts', []).reduce((s, p) => s + (p.amount || 0), 0);
   const dispCap = CAPITAL() + t.reduce((s, x) => s + (x.res || 0), 0) - totalPO0;
+  const rp = BT_STATE.kpi ? computeRiskHistory(true).finalRp : getCurrentRiskPct();
   const re = Math.round(((dispCap * rp) / 100) * 100) / 100;
+  const fr = n => n.toLocaleString('fr-FR', {minimumFractionDigits: 2, maximumFractionDigits: 2});
   document.getElementById('k0').textContent = fr(dispCap) + '€';
   const k1 = document.getElementById('k1');
-  const pnlPct = CAPITAL() > 0 ? (pnl / CAPITAL()) * 100 : 0;
-  k1.textContent =
-    (pnl >= 0 ? '+' : '') + fr(pnl) + '€ (' + (pnlPct >= 0 ? '+' : '') + pnlPct.toFixed(1) + '%)';
-  k1.style.color = pnl >= 0 ? 'var(--green)' : 'var(--red)';
-  document.getElementById('k2').textContent = wr.toFixed(1) + '%';
-  document.getElementById('k3').textContent = rrMoy.toFixed(2) + 'R';
-  document.getElementById('k4').textContent = pf.toFixed(2);
   {
     const k5el = document.getElementById('k5');
     if (k5el) {
@@ -2975,8 +3038,37 @@ function updateKPIs() {
           : '');
   document.getElementById('k7').textContent =
     re.toLocaleString('fr-FR') + '€ (' + fmtRiskPct(rp) + ')';
-  document.getElementById('k8').textContent =
-    worst + ' T (' + computeMaxDrawdown(BT_STATE.kpi).toFixed(1) + '%)';
+  // Stats de performance : vides sans aucun trade (sinon 0% de réussite,
+  // 0.00R... auraient l'air de vraies statistiques alors qu'il n'y a rien à
+  // calculer). Capital/payouts/risque actuel ci-dessus restent affichés.
+  if (!t.length) {
+    k1.textContent = '';
+    k1.style.color = '';
+    document.getElementById('k2').textContent = '';
+    document.getElementById('k3').textContent = '';
+    document.getElementById('k4').textContent = '';
+    document.getElementById('k8').textContent = '';
+  } else {
+    const gains = t.filter(x => x.res > 0),
+      pertes = t.filter(x => x.res < 0);
+    const pnl = t.reduce((s, x) => s + (x.res || 0), 0),
+      wr = (gains.length / t.length) * 100;
+    const rrArr = t.map(x => computeRR(x));
+    const rrMoy = rrArr.length ? rrArr.reduce((a, b) => a + b) / rrArr.length : 0;
+    const sumG = gains.reduce((s, x) => s + x.res, 0),
+      sumP = Math.abs(pertes.reduce((s, x) => s + x.res, 0));
+    const pf = sumP > 0 ? sumG / sumP : sumG > 0 ? 99 : 0;
+    const worst = computeWorstLose(BT_STATE.kpi);
+    const pnlPct = CAPITAL() > 0 ? (pnl / CAPITAL()) * 100 : 0;
+    k1.textContent =
+      (pnl >= 0 ? '+' : '') + fr(pnl) + '€ (' + (pnlPct >= 0 ? '+' : '') + pnlPct.toFixed(1) + '%)';
+    k1.style.color = pnl >= 0 ? 'var(--green)' : 'var(--red)';
+    document.getElementById('k2').textContent = wr.toFixed(1) + '%';
+    document.getElementById('k3').textContent = rrMoy.toFixed(2) + 'R';
+    document.getElementById('k4').textContent = pf.toFixed(2);
+    document.getElementById('k8').textContent =
+      worst + ' T (' + computeMaxDrawdown(BT_STATE.kpi).toFixed(1) + '%)';
+  }
   for (let i = 1; i <= 9; i++) {
     const c = gc(`--kpi${i}`);
     const bar = document.getElementById('kb' + i);
@@ -4215,6 +4307,9 @@ function buildTV() {
     {v: '--btn-push-bg', l: 'Activer notifications - fond', page: 'Général', section: 'Profil'},
     {v: '--btn-push-bd', l: 'Activer notifications - bordure', page: 'Général', section: 'Profil'},
     {v: '--btn-push-tx', l: 'Activer notifications - texte', page: 'Général', section: 'Profil'},
+    {v: '--btn-reset-bg', l: 'Réinitialiser le compte - fond', page: 'Général', section: 'Profil'},
+    {v: '--btn-reset-bd', l: 'Réinitialiser le compte - bordure', page: 'Général', section: 'Profil'},
+    {v: '--btn-reset-tx', l: 'Réinitialiser le compte - texte', page: 'Général', section: 'Profil'},
     {v: '--btn-export-bg', l: 'Export - fond', page: 'Paramètres', section: 'Sauvegarde locale'},
     {v: '--btn-export-bd', l: 'Export - bordure', page: 'Paramètres', section: 'Sauvegarde locale'},
     {v: '--btn-export-tx', l: 'Export - texte', page: 'Paramètres', section: 'Sauvegarde locale'},

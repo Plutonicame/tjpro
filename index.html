@@ -78,7 +78,22 @@
     <div class="fg"><label data-editable>Pseudo</label><input type="text" id="profileEditPseudoInput" maxlength="30" placeholder="Pseudo"></div>
     <button class="btn" onclick="changePinFlow()" style="font-size:12px;background:var(--btn-pin-bg);color:var(--btn-pin-tx);border:2px solid var(--btn-pin-bd);border-radius:6px;padding:8px 16px;cursor:pointer;width:100%;margin:14px 0;">Changer mon code PIN</button>
     <button class="btn" id="fcPushBtn" onclick="fcTogglePush()" style="font-size:12px;background:var(--btn-push-bg);color:var(--btn-push-tx);border:2px solid var(--btn-push-bd);border-radius:6px;padding:8px 16px;cursor:pointer;width:100%;margin:0 0 14px;">Activer les notifications</button>
+    <button class="btn" onclick="askResetAccount()" style="font-size:12px;background:var(--btn-reset-bg);color:var(--btn-reset-tx);border:2px solid var(--btn-reset-bd);border-radius:6px;padding:8px 16px;cursor:pointer;width:100%;margin:0 0 14px;">Réinitialiser le compte</button>
     <div class="btn-row"><button class="btn btn-g" onclick="closeProfileModal()">ANNULER</button><button class="btn btn-p" onclick="saveProfileModal()">SAUVEGARDER</button></div>
+  </div>
+</div>
+
+<!-- MODALE RÉINITIALISER LE COMPTE -->
+<div class="confirm-modal" id="resetAccountModal">
+  <div class="confirm-box">
+    <h3>Réinitialiser le compte</h3>
+    <p>Action irréversible : supprime tous les trades, les réglages (capital, risque, champs personnalisés...) et le thème de ce compte. Entre ton code PIN pour confirmer.</p>
+    <div class="pin-dots" id="resetAccountDots" style="justify-content:center;margin:14px auto;">
+      <div class="pin-dot"></div><div class="pin-dot"></div><div class="pin-dot"></div><div class="pin-dot"></div>
+    </div>
+    <p id="resetAccountErr" class="auth-err" style="display:none;">Code PIN incorrect.</p>
+    <div class="pin-pad" id="resetAccountPad" style="margin:10px auto;"></div>
+    <div class="btn-row"><button class="btn btn-g" onclick="closeResetAccountModal()">ANNULER</button></div>
   </div>
 </div>
 
@@ -331,7 +346,7 @@
         <thead><tr><th>Date</th><th>Heure</th><th>Session</th><th>Paire</th><th>Dir.</th><th>TF</th><th>Confluences</th><th>RR Cible</th><th>RR Réalisé</th><th>Résultat</th><th>%</th><th>Mgmt</th><th>Reprend.</th><th>Note</th><th>📷</th><th></th></tr></thead>
         <tbody id="tradeTable"></tbody>
       </table>
-      <div class="empty-state" id="emptyState"><span class="deco-emoji">📋</span> Aucun trade.</div>
+      <div class="empty-state" id="emptyState">Aucun trade.</div>
     </div>
   </div>
 </div>

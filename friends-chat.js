@@ -594,7 +594,7 @@ async function fcRenderPushButton() {
     btn.textContent = 'Notifications bloquées (à autoriser dans les réglages du navigateur)';
     btn.disabled = true;
   } else if (state === 'active') {
-    btn.textContent = 'Notifications activées (toucher pour désactiver)';
+    btn.textContent = 'Notifications activées';
   } else {
     btn.textContent = 'Activer les notifications';
   }
