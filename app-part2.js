@@ -244,7 +244,7 @@ function setupEnterPinRemote() {
         localStorage.setItem(emailKey(currentUser.id), currentUser.email);
         localStorage.setItem(uidByEmailKey(email), currentUser.id);
         localStorage.setItem('tjp_last_uid', currentUser.id);
-        localStorage.setItem(pinKey(currentUser.id), await localPinHash(val, currentUser.id));
+        localStorage.setItem('tjp_last_theme_uid', currentUser.id);
         pinAttempts = 0;
         afterPinValidated();
       } catch (e) {
@@ -610,6 +610,7 @@ async function initAuth() {
     localStorage.setItem(emailKey(currentUser.id), currentUser.email);
     localStorage.setItem(uidByEmailKey(currentUser.email.toLowerCase()), currentUser.id);
     localStorage.setItem('tjp_last_uid', currentUser.id);
+    localStorage.setItem('tjp_last_theme_uid', currentUser.id);
     history.replaceState(null, '', window.location.pathname);
     // Applique tout de suite le thème de CE compte (déjà connu sur cet
     // appareil) — sans ça, l'écran du code PIN (fond, touches) s'affichait
@@ -1343,6 +1344,7 @@ function _applyCloudDataDirect(data, cloudTrades) {
     applyPencilEdits();
   }, 200);
   localStorage.setItem('tjp_last_uid', currentUser.id);
+  localStorage.setItem('tjp_last_theme_uid', currentUser.id);
   if (data.updated_at) localStorage.setItem(accKey('tjp_last_updated_at'), data.updated_at);
   setTimeout(() => {
     _isSyncing = false;

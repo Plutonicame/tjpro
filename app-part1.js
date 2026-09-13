@@ -855,6 +855,13 @@ function markUserAction() {
 // Initialiser le système multi-comptes AVANT de charger l'état
 // (accKey() dépend de _currentAccId qui est défini dans initAccountsIfNeeded)
 initAccountsIfNeeded();
+// Applique dès que possible le thème du dernier compte connecté sur CET
+// appareil — avant même la vérification de session ou l'écran de connexion —
+// pour que l'écran de connexion lui-même (fond, touches PIN) ne montre
+// jamais les couleurs par défaut, y compris après une déconnexion.
+if (typeof previewThemeForUid === 'function') {
+  previewThemeForUid(localStorage.getItem('tjp_last_theme_uid'));
+}
 const APP = loadState();
 // Trades réels uniquement (hors backtest) — utilisé pour tous les calculs financiers :
 // P&L, capital, risk intelligent, séries de gains/pertes, calendrier.
