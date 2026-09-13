@@ -591,6 +591,13 @@ async function submitReturnEmail() {
   // se fait entièrement côté serveur dans setupEnterPinRemote, en une seule étape.
   window._returnEmail = email;
   document.getElementById('enterPinSub').textContent = email;
+  // Le compte n'est confirmé que côté serveur (voir setupEnterPinRemote),
+  // mais on connaît déjà l'uid associé à cet email sur CET appareil depuis
+  // une connexion précédente — assez pour styliser l'écran du code PIN
+  // avant même de l'avoir saisi (sinon fond/touches par défaut le temps du
+  // chargement).
+  const cachedUid = localStorage.getItem(uidByEmailKey(email));
+  if (cachedUid && typeof previewThemeForUid === 'function') previewThemeForUid(cachedUid);
   showOverlay('overlayEnterPin');
   setupEnterPinRemote();
 }
@@ -604,6 +611,10 @@ async function initAuth() {
     localStorage.setItem(uidByEmailKey(currentUser.email.toLowerCase()), currentUser.id);
     localStorage.setItem('tjp_last_uid', currentUser.id);
     history.replaceState(null, '', window.location.pathname);
+    // Applique tout de suite le thème de CE compte (déjà connu sur cet
+    // appareil) — sans ça, l'écran du code PIN (fond, touches) s'affichait
+    // avec les couleurs par défaut le temps de valider le code.
+    if (typeof loadSavedTheme === 'function') loadSavedTheme();
     const pin = localStorage.getItem(pinKey(currentUser.id));
     if (pin) {
       document.getElementById('enterPinSub').textContent = currentUser.email;

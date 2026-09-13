@@ -1780,9 +1780,15 @@ function computePctBefore(tid) {
 
 // ══ NAV ══
 function showPage(id, btn) {
-  // Fermer le thème éditeur automatiquement quand on change de page
+  // Fermer le thème éditeur automatiquement quand on change de page — ainsi
+  // que ses sections internes (Général, Ami, Connexion...), sinon elles
+  // réapparaissaient encore ouvertes la prochaine fois qu'on rouvre "Thème"
+  // (renderTE() se souvient de leur état ouvert/fermé, voir openPages).
   const te = document.getElementById('themeEditor');
-  if (te && te.style.display !== 'none') te.style.display = 'none';
+  if (te && te.style.display !== 'none') {
+    te.style.display = 'none';
+    document.querySelectorAll('#teGrid details.te-page[open]').forEach(d => d.removeAttribute('open'));
+  }
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
   document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
   const pg = document.getElementById('page-' + id);
@@ -5465,6 +5471,22 @@ function loadSavedTheme() {
   Object.entries(teVals).forEach(([v, c]) => document.documentElement.style.setProperty(v, c));
   ensureMgmtThemeDefaults();
   ensureTitleThemeDefaults();
+}
+// Applique par avance le thème d'un compte identifié par son uid, SANS le
+// considérer connecté (currentUser n'est pas touché) — utilisé sur l'écran
+// "Saisis ton adresse email" (reconnexion rapide) : à ce stade le compte
+// n'est pas encore confirmé (la vérification email+PIN se fait côté
+// serveur), mais on connaît déjà l'uid associé à cet email sur CET appareil
+// depuis une connexion précédente, ce qui suffit à styliser l'écran du code
+// PIN avant même de l'avoir saisi.
+function previewThemeForUid(uid) {
+  if (!uid) return;
+  try {
+    document.documentElement.removeAttribute('style');
+    const raw = localStorage.getItem(`tj_theme_vars__${uid}`);
+    const vals = raw ? JSON.parse(raw) : null;
+    if (vals) Object.entries(vals).forEach(([v, c]) => document.documentElement.style.setProperty(v, c));
+  } catch (e) {}
 }
 
 // ══ INIT ══
