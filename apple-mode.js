@@ -32,10 +32,10 @@ html.tjp-apple-mode {
   --am-elevated: rgba(255,255,255,0.055);
   --am-elevated-2: rgba(255,255,255,0.09);
   --am-border: rgba(255,255,255,0.14);
-  --am-blue: #0A84FF;
-  --am-green: #30D158;
-  --am-red: #FF453A;
-  --am-orange: #FF9F0A;
+  --am-blue: #4DA6FF;
+  --am-green: #3DE070;
+  --am-red: #FF6259;
+  --am-orange: #FFAA2B;
   --am-label: #F5F5F7;
   --am-label-2: #98989D;
   --am-radius-lg: 22px;
@@ -82,7 +82,6 @@ html.tjp-apple-mode .fg label {
 /* Verre dépoli — cartes & panneaux */
 html.tjp-apple-mode .card,
 html.tjp-apple-mode .chart-card,
-html.tjp-apple-mode .kpi-card,
 html.tjp-apple-mode .cp-modal,
 html.tjp-apple-mode .confirm-box,
 html.tjp-apple-mode .pc-conv-panel,
@@ -150,7 +149,7 @@ html.tjp-apple-mode select:focus,
 html.tjp-apple-mode textarea:focus {
   outline: none !important;
   border-color: var(--am-blue) !important;
-  box-shadow: 0 0 0 3px rgba(10,132,255,0.25) !important;
+  box-shadow: 0 0 0 3px rgba(77,166,255,0.3) !important;
 }
 
 /* Interrupteurs façon iOS */
@@ -165,8 +164,8 @@ html.tjp-apple-mode .chip {
 }
 html.tjp-apple-mode .chip.sel { background: var(--am-blue) !important; border-color: var(--am-blue) !important; color: #fff !important; }
 html.tjp-apple-mode .tag { border-radius: 999px !important; }
-html.tjp-apple-mode .tag-long, html.tjp-apple-mode .tag-oui { background: rgba(48,209,88,0.18) !important; color: var(--am-green) !important; }
-html.tjp-apple-mode .tag-short, html.tjp-apple-mode .tag-non { background: rgba(255,69,58,0.18) !important; color: var(--am-red) !important; }
+html.tjp-apple-mode .tag-long, html.tjp-apple-mode .tag-oui { background: rgba(61,224,112,0.18) !important; color: var(--am-green) !important; }
+html.tjp-apple-mode .tag-short, html.tjp-apple-mode .tag-non { background: rgba(255,98,89,0.18) !important; color: var(--am-red) !important; }
 
 /* Navigation — barre translucide */
 html.tjp-apple-mode .nav,
@@ -206,7 +205,7 @@ html.tjp-apple-mode .pin-dot.filled { background: var(--am-blue) !important; bor
 
 /* Chat Ami — bulles façon iMessage */
 html.tjp-apple-mode .fc-msg-row.mine .fc-bubble {
-  background: linear-gradient(180deg,#0A84FF,#0077E6) !important;
+  background: linear-gradient(180deg,#4DA6FF,#2E8FEF) !important;
   color: #fff !important; border: none !important; border-radius: 20px 20px 4px 20px !important;
 }
 html.tjp-apple-mode .fc-msg-row:not(.mine) .fc-bubble {
@@ -220,7 +219,7 @@ html.tjp-apple-mode .fc-input-bar {
 
 /* Chat IA — même traitement */
 html.tjp-apple-mode .pc-msg-user {
-  background: linear-gradient(180deg,#0A84FF,#0077E6) !important;
+  background: linear-gradient(180deg,#4DA6FF,#2E8FEF) !important;
   color: #fff !important; border: none !important; border-radius: 18px 18px 4px 18px !important;
 }
 html.tjp-apple-mode .pc-msg-bot {
@@ -228,18 +227,39 @@ html.tjp-apple-mode .pc-msg-bot {
   color: var(--am-label) !important; border: none !important; border-radius: 18px 18px 18px 4px !important;
 }
 
-/* KPI */
+/* KPI — le verre habille la bande entière (comme un groupe de réglages
+   iOS), pas chaque case individuellement (ça donnait 9 bulles arrondies
+   collées les unes aux autres, moche) */
+html.tjp-apple-mode .kpi-strip {
+  background: var(--am-border) !important;
+  border: 1px solid var(--am-border) !important;
+  border-radius: var(--am-radius-md) !important;
+  backdrop-filter: blur(28px) saturate(180%) !important;
+  -webkit-backdrop-filter: blur(28px) saturate(180%) !important;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.08) !important;
+}
+html.tjp-apple-mode .kpi-card { background: var(--am-elevated) !important; }
 html.tjp-apple-mode .kpi-value { font-weight: 700 !important; letter-spacing: -0.01em !important; }
 html.tjp-apple-mode .kpi-label { text-transform: none !important; letter-spacing: 0 !important; color: var(--am-label-2) !important; }
 
-/* Calendrier — cases arrondies */
+/* Gain / perte — partout dans l'app (tableau de trades, KPI, etc.) */
+html.tjp-apple-mode .rp { color: var(--am-green) !important; }
+html.tjp-apple-mode .rn { color: var(--am-red) !important; }
+
+/* Calendrier — cases arrondies + couleurs gain/perte vives */
 html.tjp-apple-mode .cal-day { border-radius: var(--am-radius-sm) !important; }
+html.tjp-apple-mode .cal-day.pos { background: rgba(61,224,112,0.22) !important; border-color: transparent !important; }
+html.tjp-apple-mode .cal-day.neg { background: rgba(255,98,89,0.22) !important; border-color: transparent !important; }
+html.tjp-apple-mode .cal-day.pos .cal-day-num,
+html.tjp-apple-mode .cal-day.pos .cal-pnl { color: var(--am-green) !important; }
+html.tjp-apple-mode .cal-day.neg .cal-day-num,
+html.tjp-apple-mode .cal-day.neg .cal-pnl { color: var(--am-red) !important; }
 
 /* Défilement & sélection façon macOS */
 html.tjp-apple-mode ::-webkit-scrollbar { width: 8px; height: 8px; }
 html.tjp-apple-mode ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.25); border-radius: 8px; }
 html.tjp-apple-mode ::-webkit-scrollbar-track { background: transparent; }
-html.tjp-apple-mode ::selection { background: rgba(10,132,255,0.35); }
+html.tjp-apple-mode ::selection { background: rgba(77,166,255,0.35); }
 `;
 
   var styleTag = document.createElement('style');
