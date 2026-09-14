@@ -5500,7 +5500,22 @@ function previewThemeForUid(uid) {
 // ── INIT inside DOMContentLoaded ──
 document.addEventListener('DOMContentLoaded', function () {
   initColorPicker();
-  loadSavedTheme();
+  // Si un compte est déjà identifié (session valide déjà restaurée avant ce
+  // point), on charge son thème normalement. Sinon (cas courant : la
+  // vérification de session est encore en cours, ou l'écran de reconnexion
+  // n'est pas encore rempli), on NE TOUCHE PAS au style déjà posé un peu
+  // plus haut par previewThemeForUid(tjp_last_theme_uid) — loadSavedTheme()
+  // ferait document.documentElement.removeAttribute('style') puis
+  // rechargerait via profileKey(), qui retombe sur la clé générique
+  // (non scopée) tant que currentUser est vide, effaçant l'aperçu du
+  // dernier compte connu pour revenir aux couleurs par défaut jusqu'à la
+  // connexion complète. On complète juste les valeurs manquantes.
+  if (typeof currentUser !== 'undefined' && currentUser) {
+    loadSavedTheme();
+  } else {
+    ensureMgmtThemeDefaults();
+    ensureTitleThemeDefaults();
+  }
   buildCompCharts();
   bindPBtns();
   renderPayouts();
