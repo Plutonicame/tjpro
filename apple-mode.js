@@ -1,25 +1,45 @@
 // ═══════════════════════════════════════════════════════════════════════
 // APPLE MODE — TJP · module additif, zéro-édition (monkey-patch uniquement)
 // ═══════════════════════════════════════════════════════════════════════
-// Ajoute un interrupteur "Apple" dans Paramètres > THÈME & MODE STYLO, à
-// droite de ✓ APPLIQUER / ↺ RÉINITIALISER / ▲ REPLIER LES COULEURS.
-// Une fois activé, repeint TOUTE l'interface avec une direction artistique
-// façon iOS/macOS : police système (-apple-system/SF Pro), courbes très
-// généreuses, verre dépoli (liquid glass : flou + saturation + reflet),
-// accents iOS (bleu système, vert, rouge), bulles de chat façon iMessage,
-// pavé PIN circulaire, et un rebond "spring" à l'appui sur chaque bouton.
+// Reconstruit d'après les vraies specs iOS 26 / Liquid Glass publiées sur
+// developer.apple.com/design/human-interface-guidelines :
 //
-// Purement visuel : aucune donnée ni logique métier n'est touchée, tout
-// repose sur une classe CSS (.tjp-apple-mode) posée sur <html> — réversible
-// instantanément en décochant l'interrupteur. N'édite aucun fichier
-// existant : une seule ligne à ajouter dans index.html pour charger ce
-// fichier, comme pour custom-fields.js / friends-chat.js.
+//  • Couleurs système EXACTES (mode sombre) : Blue #0A84FF, Green #30D158,
+//    Red #FF453A, Orange #FF9F0A, Purple #BF5AF2 ; fonds systemBackground
+//    #000000 / secondarySystemBackground #1C1C1E / tertiary #2C2C2E ;
+//    label #FFFFFF, secondaryLabel à 60% d'opacité. Fonds teintés toujours
+//    à 15% d'opacité (convention HIG).
+//  • Liquid Glass = UNIQUEMENT la couche de navigation (barre de nav,
+//    menus flottants, pavé PIN, boutons d'action). Le contenu (listes,
+//    cartes KPI, tableaux, bulles de chat) reste PLAT et opaque — les
+//    guidelines sont explicites : "Liquid Glass is not applied to content
+//    layers like lists". C'est ce qui rendait les cases KPI moches avant.
+//  • Boutons : "glassProminent" (opaque, plein) pour les actions
+//    primaires/destructives, "glass" (translucide) pour le reste —
+//    exactement la distinction faite par Apple entre les deux styles de
+//    bouton.
+//  • Typographie : échelle SF Pro réelle (Title 28/700, Headline 17/600,
+//    Footnote 13, Caption2 11) ; plus d'écriture forcée en majuscules sur
+//    les titres (changement explicite d'iOS 26).
+//  • Coins "continous" façon squircle via la propriété CSS corner-shape
+//    là où le navigateur la supporte (dégradation silencieuse sinon).
+//  • Une touche "Apple Intelligence" (liseré dégradé bleu→violet→corail
+//    animé) sur l'en-tête et l'indicateur de saisie du Chat IA — le violet
+//    est la couleur sémantique qu'Apple réserve à l'IA/au premium.
+//  • Respecte prefers-reduced-motion : les animations de rebond et le
+//    dégradé IA sont coupés si l'utilisateur l'a demandé au système.
 //
-// Stockage : scopé par compte comme le reste du thème (via profileKey()),
-// avec la même logique "aperçu au démarrage puis confirmation" que le
-// thème de couleurs (tjp_last_theme_uid / previewThemeForUid) : on
-// applique la meilleure estimation dès le chargement, puis on se resynchronise
-// à chaque loadSavedTheme() une fois le compte réellement identifié.
+// Limites assumées : impossible d'embarquer les vraies glyphes SF Symbols
+// (police propriétaire Apple, licence non redistribuable) ni le logo
+// Apple (marque déposée) — non utilisés ici. Les emojis, eux, n'ont rien
+// à faire : sur un appareil Apple, chaque emoji Unicode s'affiche déjà
+// avec les dessins natifs d'Apple, c'est le système qui s'en charge, pas
+// cette page.
+//
+// Purement visuel, réversible instantanément (classe .tjp-apple-mode sur
+// <html>), scopé par compte comme le reste du thème. N'édite aucun
+// fichier existant : une seule ligne ajoutée dans index.html pour charger
+// ce fichier.
 // ═══════════════════════════════════════════════════════════════════════
 
 (function () {
@@ -27,80 +47,83 @@
 
   // ── 1. Feuille de style ────────────────────────────────────────────
   var CSS = `
+/* ── Jetons — valeurs officielles HIG (mode sombre) ── */
 html.tjp-apple-mode {
-  --am-bg: #000000;
-  --am-elevated: rgba(255,255,255,0.055);
-  --am-elevated-2: rgba(255,255,255,0.09);
-  --am-border: rgba(255,255,255,0.14);
-  --am-blue: #4DA6FF;
-  --am-green: #3DE070;
-  --am-red: #FF6259;
-  --am-orange: #FFAA2B;
-  --am-label: #F5F5F7;
-  --am-label-2: #98989D;
-  --am-radius-lg: 22px;
-  --am-radius-md: 16px;
-  --am-radius-sm: 12px;
+  --am-bg: #000000;              /* systemBackground */
+  --am-bg-2: #1C1C1E;            /* secondarySystemBackground */
+  --am-bg-3: #2C2C2E;            /* tertiarySystemBackground */
+  --am-fill-4: #3A3A3C;          /* quaternary fill / séparateurs */
+  --am-label: #FFFFFF;
+  --am-label-2: rgba(235,235,245,0.6);   /* secondaryLabel */
+  --am-label-3: rgba(235,235,245,0.3);   /* tertiaryLabel */
+  --am-separator: rgba(84,84,88,0.6);
+
+  --am-blue: #0A84FF;    /* systemBlue (dark) — actions primaires, sélection */
+  --am-green: #30D158;   /* systemGreen (dark) — succès, gains */
+  --am-red: #FF453A;     /* systemRed (dark) — destructif, pertes */
+  --am-orange: #FF9F0A;  /* systemOrange (dark) — avertissement */
+  --am-purple: #BF5AF2;  /* systemPurple (dark) — IA / premium */
+
+  --am-r-small: 8px;     /* petits éléments */
+  --am-r-control: 12px;  /* boutons, champs, lignes */
+  --am-r-card: 16px;     /* cartes */
+  --am-r-sheet: 20px;    /* feuilles / modales */
   --am-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
-/* Police système + rendu global */
+/* ── Typographie système — SF Pro partout, plus de mono, plus de
+   majuscules forcées sur les titres (changement iOS 26) ── */
 html.tjp-apple-mode,
-html.tjp-apple-mode body,
-html.tjp-apple-mode .card-title,
-html.tjp-apple-mode .page-title,
-html.tjp-apple-mode .page-sub,
-html.tjp-apple-mode .btn,
-html.tjp-apple-mode button,
-html.tjp-apple-mode .chip,
-html.tjp-apple-mode input,
-html.tjp-apple-mode select,
-html.tjp-apple-mode textarea,
-html.tjp-apple-mode .pbtn,
-html.tjp-apple-mode .fg label,
-html.tjp-apple-mode .kpi-label,
-html.tjp-apple-mode .kpi-value,
-html.tjp-apple-mode .tag {
+html.tjp-apple-mode * {
   font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", "Helvetica Neue", Inter, system-ui, sans-serif !important;
   -webkit-font-smoothing: antialiased !important;
   text-rendering: optimizeLegibility !important;
 }
-html.tjp-apple-mode body { font-size: 15.5px !important; background: var(--am-bg) !important; color: var(--am-label) !important; }
+html.tjp-apple-mode body { font-size: 15px !important; background: var(--am-bg) !important; color: var(--am-label) !important; }
 html.tjp-apple-mode .page-title {
-  font-size: 30px !important; font-weight: 700 !important; letter-spacing: -0.02em !important;
+  font-size: 28px !important; font-weight: 700 !important; letter-spacing: -0.02em !important;
   text-transform: none !important; color: var(--am-label) !important;
 }
-html.tjp-apple-mode .page-sub { color: var(--am-label-2) !important; font-size: 14px !important; letter-spacing: 0 !important; }
+html.tjp-apple-mode .page-sub { color: var(--am-label-2) !important; font-size: 14px !important; letter-spacing: 0 !important; text-transform: none !important; }
 html.tjp-apple-mode .card-title {
-  font-size: 14px !important; font-weight: 600 !important; letter-spacing: -0.01em !important;
+  font-size: 15px !important; font-weight: 600 !important; letter-spacing: -0.01em !important;
   text-transform: none !important; color: var(--am-label) !important;
 }
 html.tjp-apple-mode .fg label {
-  font-size: 12px !important; letter-spacing: 0 !important; text-transform: none !important; color: var(--am-label-2) !important;
+  font-size: 13px !important; letter-spacing: 0 !important; text-transform: none !important; color: var(--am-label-2) !important;
+}
+html.tjp-apple-mode .kpi-label { font-size: 11px !important; text-transform: none !important; letter-spacing: 0 !important; color: var(--am-label-2) !important; }
+html.tjp-apple-mode .kpi-value { font-size: 15px !important; font-weight: 700 !important; letter-spacing: -0.01em !important; }
+html.tjp-apple-mode .chip, html.tjp-apple-mode .tag { text-transform: none !important; letter-spacing: 0 !important; }
+html.tjp-apple-mode .btn, html.tjp-apple-mode button, html.tjp-apple-mode .pbtn { text-transform: none !important; letter-spacing: 0 !important; font-weight: 600 !important; }
+
+/* ── Coins continus façon squircle, dégradation silencieuse sinon ── */
+@supports (corner-shape: squircle) {
+  html.tjp-apple-mode .card, html.tjp-apple-mode .kpi-strip, html.tjp-apple-mode .chart-card,
+  html.tjp-apple-mode .btn, html.tjp-apple-mode button, html.tjp-apple-mode input,
+  html.tjp-apple-mode select, html.tjp-apple-mode .confirm-box, html.tjp-apple-mode .cp-modal,
+  html.tjp-apple-mode .mod-col, html.tjp-apple-mode .fc-modal-box {
+    corner-shape: squircle !important;
+  }
 }
 
-/* Verre dépoli — cartes & panneaux */
-html.tjp-apple-mode .card,
-html.tjp-apple-mode .chart-card,
-html.tjp-apple-mode .cp-modal,
-html.tjp-apple-mode .confirm-box,
-html.tjp-apple-mode .pc-conv-panel,
-html.tjp-apple-mode .mod-col,
-html.tjp-apple-mode .cal-outer,
-html.tjp-apple-mode .acc-menu,
-html.tjp-apple-mode .fc-modal-box,
-html.tjp-apple-mode .fc-edit-modal-box {
-  background: var(--am-elevated) !important;
-  border: 1px solid var(--am-border) !important;
-  border-radius: var(--am-radius-lg) !important;
-  backdrop-filter: blur(28px) saturate(180%) !important;
-  -webkit-backdrop-filter: blur(28px) saturate(180%) !important;
-  box-shadow: 0 12px 36px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.09) !important;
+/* ── Liquid Glass — RÉSERVÉ à la couche de navigation (nav, menus
+   flottants, pavé PIN, boutons d'action). Jamais sur le contenu : les
+   guidelines sont explicites là-dessus. ── */
+html.tjp-apple-mode .nav,
+html.tjp-apple-mode .nav-mobile,
+html.tjp-apple-mode .mobile-menu,
+html.tjp-apple-mode .acc-menu {
+  background: rgba(28,28,30,0.72) !important;
+  border-color: var(--am-separator) !important;
+  backdrop-filter: blur(30px) saturate(180%) !important;
+  -webkit-backdrop-filter: blur(30px) saturate(180%) !important;
 }
-html.tjp-apple-mode .card-header { background: transparent !important; border-bottom: 1px solid var(--am-border) !important; }
-html.tjp-apple-mode .card-body { padding: 16px !important; }
+html.tjp-apple-mode .nav-tab.active { color: var(--am-blue) !important; }
 
-/* Boutons — verre + accents iOS + rebond "spring" à l'appui */
+/* Boutons — "glassProminent" (opaque) pour primaire/destructif,
+   "glass" (translucide) pour le reste. Rebond spring à l'appui,
+   cible tactile confortable, respect de prefers-reduced-motion. */
 html.tjp-apple-mode .btn,
 html.tjp-apple-mode button,
 html.tjp-apple-mode .pbtn,
@@ -108,158 +131,165 @@ html.tjp-apple-mode .acc-opt-btn,
 html.tjp-apple-mode .change-pin-btn,
 html.tjp-apple-mode .google-btn,
 html.tjp-apple-mode .pc-icon-btn {
-  border-radius: var(--am-radius-sm) !important;
-  border: 1px solid var(--am-border) !important;
-  background: var(--am-elevated-2) !important;
+  border-radius: var(--am-r-control) !important;
+  border: 1px solid var(--am-separator) !important;
+  background: rgba(255,255,255,0.08) !important;
   backdrop-filter: blur(20px) saturate(160%) !important;
   -webkit-backdrop-filter: blur(20px) saturate(160%) !important;
   color: var(--am-label) !important;
-  font-weight: 600 !important;
-  letter-spacing: 0 !important;
-  text-transform: none !important;
+  min-height: 38px !important;
   transition: transform 0.18s var(--am-spring), background 0.2s ease, opacity 0.2s ease !important;
 }
 html.tjp-apple-mode .pc-icon-btn { border-radius: 50% !important; }
-html.tjp-apple-mode .btn-p { background: var(--am-blue) !important; border-color: var(--am-blue) !important; color: #fff !important; }
-html.tjp-apple-mode .btn-d { background: var(--am-red) !important; border-color: var(--am-red) !important; color: #fff !important; }
-html.tjp-apple-mode .pbtn.active { background: var(--am-blue) !important; border-color: var(--am-blue) !important; color: #fff !important; }
-html.tjp-apple-mode .btn:active,
-html.tjp-apple-mode button:active,
-html.tjp-apple-mode .pbtn:active,
-html.tjp-apple-mode .chip:active,
-html.tjp-apple-mode .acc-opt-btn:active {
-  transform: scale(0.94) !important;
-  opacity: 0.85 !important;
+html.tjp-apple-mode .btn-p, html.tjp-apple-mode .pbtn.active {
+  background: var(--am-blue) !important; border-color: var(--am-blue) !important; color: #fff !important;
+  backdrop-filter: none !important; -webkit-backdrop-filter: none !important;
+}
+html.tjp-apple-mode .btn-d {
+  background: var(--am-red) !important; border-color: var(--am-red) !important; color: #fff !important;
+  backdrop-filter: none !important; -webkit-backdrop-filter: none !important;
+}
+@media (prefers-reduced-motion: no-preference) {
+  html.tjp-apple-mode .btn:active, html.tjp-apple-mode button:active,
+  html.tjp-apple-mode .pbtn:active, html.tjp-apple-mode .chip:active,
+  html.tjp-apple-mode .acc-opt-btn:active {
+    transform: scale(0.94) !important; opacity: 0.85 !important;
+  }
 }
 
-/* Champs de saisie */
+/* ── Contenu — PLAT, opaque, hiérarchie par paliers de gris (comme une
+   liste groupée iOS), aucun flou : Liquid Glass n'est pas fait pour ça. ── */
+html.tjp-apple-mode .card,
+html.tjp-apple-mode .chart-card,
+html.tjp-apple-mode .kpi-strip,
+html.tjp-apple-mode .mod-col,
+html.tjp-apple-mode .cal-outer,
+html.tjp-apple-mode .pc-conv-panel {
+  background: var(--am-bg-2) !important;
+  border: 1px solid var(--am-separator) !important;
+  border-radius: var(--am-r-card) !important;
+  backdrop-filter: none !important; -webkit-backdrop-filter: none !important;
+  box-shadow: none !important;
+}
+html.tjp-apple-mode .kpi-card { background: var(--am-bg-3) !important; }
+html.tjp-apple-mode .card-header { background: transparent !important; border-bottom: 1px solid var(--am-separator) !important; }
+html.tjp-apple-mode .card-body { padding: 16px !important; }
+
+/* ── Champs de saisie — plats, anneau de focus bleu ── */
 html.tjp-apple-mode input,
 html.tjp-apple-mode select,
 html.tjp-apple-mode textarea,
 html.tjp-apple-mode .cp-hex,
 html.tjp-apple-mode .mod-add input,
 html.tjp-apple-mode .te-search {
-  background: var(--am-elevated) !important;
-  border: 1px solid var(--am-border) !important;
-  border-radius: var(--am-radius-sm) !important;
+  background: var(--am-bg-3) !important;
+  border: 1px solid var(--am-separator) !important;
+  border-radius: var(--am-r-control) !important;
   color: var(--am-label) !important;
 }
 html.tjp-apple-mode input:focus,
 html.tjp-apple-mode select:focus,
 html.tjp-apple-mode textarea:focus {
-  outline: none !important;
-  border-color: var(--am-blue) !important;
-  box-shadow: 0 0 0 3px rgba(77,166,255,0.3) !important;
+  outline: none !important; border-color: var(--am-blue) !important;
+  box-shadow: 0 0 0 3px rgba(10,132,255,0.3) !important;
 }
 
-/* Interrupteurs façon iOS */
-html.tjp-apple-mode .tgl-track { background: rgba(120,120,128,0.32) !important; border-radius: 999px !important; transition: background 0.2s var(--am-spring) !important; }
+/* ── Interrupteurs iOS ── */
+html.tjp-apple-mode .tgl-track { background: rgba(120,120,128,0.32) !important; border-radius: 999px !important; }
 html.tjp-apple-mode .tgl-track.on { background: var(--am-green) !important; }
-html.tjp-apple-mode .tgl-thumb { background: #fff !important; box-shadow: 0 2px 6px rgba(0,0,0,0.35) !important; transition: left 0.2s var(--am-spring) !important; }
+html.tjp-apple-mode .tgl-thumb { background: #fff !important; box-shadow: 0 2px 6px rgba(0,0,0,0.35) !important; }
 
-/* Puces / chips / tags — capsules pleines iOS */
-html.tjp-apple-mode .chip {
-  border-radius: 999px !important; text-transform: none !important; letter-spacing: 0 !important;
-  background: var(--am-elevated) !important; border: 1px solid var(--am-border) !important;
-}
+/* ── Puces / tags — capsules, fond teinté à 15% (convention HIG) ── */
+html.tjp-apple-mode .chip { border-radius: 999px !important; background: rgba(255,255,255,0.08) !important; border: 1px solid var(--am-separator) !important; }
 html.tjp-apple-mode .chip.sel { background: var(--am-blue) !important; border-color: var(--am-blue) !important; color: #fff !important; }
 html.tjp-apple-mode .tag { border-radius: 999px !important; }
-html.tjp-apple-mode .tag-long, html.tjp-apple-mode .tag-oui { background: rgba(61,224,112,0.18) !important; color: var(--am-green) !important; }
-html.tjp-apple-mode .tag-short, html.tjp-apple-mode .tag-non { background: rgba(255,98,89,0.18) !important; color: var(--am-red) !important; }
+html.tjp-apple-mode .tag-long, html.tjp-apple-mode .tag-oui { background: rgba(48,209,88,0.15) !important; color: var(--am-green) !important; }
+html.tjp-apple-mode .tag-short, html.tjp-apple-mode .tag-non { background: rgba(255,69,58,0.15) !important; color: var(--am-red) !important; }
 
-/* Navigation — barre translucide */
-html.tjp-apple-mode .nav,
-html.tjp-apple-mode .nav-mobile,
-html.tjp-apple-mode .mobile-menu {
-  background: rgba(20,20,22,0.72) !important;
+/* ── Gain / perte partout dans l'app ── */
+html.tjp-apple-mode .rp { color: var(--am-green) !important; }
+html.tjp-apple-mode .rn { color: var(--am-red) !important; }
+
+/* ── Calendrier ── */
+html.tjp-apple-mode .cal-day { border-radius: var(--am-r-small) !important; }
+html.tjp-apple-mode .cal-day.pos { background: rgba(48,209,88,0.15) !important; border-color: transparent !important; }
+html.tjp-apple-mode .cal-day.neg { background: rgba(255,69,58,0.15) !important; border-color: transparent !important; }
+html.tjp-apple-mode .cal-day.pos .cal-day-num, html.tjp-apple-mode .cal-day.pos .cal-pnl { color: var(--am-green) !important; }
+html.tjp-apple-mode .cal-day.neg .cal-day-num, html.tjp-apple-mode .cal-day.neg .cal-pnl { color: var(--am-red) !important; }
+
+/* ── Feuilles / modales — matériau "regular" sur la boîte, voile
+   d'estompage derrière (tâche qui interrompt le fil principal) ── */
+html.tjp-apple-mode .confirm-box, html.tjp-apple-mode .cp-modal, html.tjp-apple-mode .fc-modal-box, html.tjp-apple-mode .fc-edit-modal-box {
+  background: rgba(28,28,30,0.85) !important;
+  border: 1px solid var(--am-separator) !important;
+  border-radius: var(--am-r-sheet) !important;
   backdrop-filter: blur(30px) saturate(180%) !important;
   -webkit-backdrop-filter: blur(30px) saturate(180%) !important;
-  border-color: var(--am-border) !important;
 }
-html.tjp-apple-mode .nav-tab.active { color: var(--am-blue) !important; }
-
-/* Fenêtres modales / superpositions */
-html.tjp-apple-mode .confirm-modal,
-html.tjp-apple-mode .cp-overlay,
-html.tjp-apple-mode .auth-overlay,
-html.tjp-apple-mode .pc-conv-overlay {
+html.tjp-apple-mode .confirm-modal, html.tjp-apple-mode .cp-overlay, html.tjp-apple-mode .auth-overlay, html.tjp-apple-mode .pc-conv-overlay {
   background: rgba(0,0,0,0.5) !important;
-  backdrop-filter: blur(8px) !important;
-  -webkit-backdrop-filter: blur(8px) !important;
+  backdrop-filter: blur(8px) !important; -webkit-backdrop-filter: blur(8px) !important;
 }
 
-/* Pavé code PIN — touches circulaires en verre */
+/* ── Pavé PIN — touches circulaires en verre (couche de contrôle) ── */
 html.tjp-apple-mode .pin-btn {
-  background: var(--am-elevated-2) !important;
-  border: 1px solid var(--am-border) !important;
+  background: rgba(255,255,255,0.08) !important;
+  border: 1px solid var(--am-separator) !important;
   border-radius: 50% !important;
   backdrop-filter: blur(20px) saturate(160%) !important;
   -webkit-backdrop-filter: blur(20px) saturate(160%) !important;
   color: var(--am-label) !important;
-  font-weight: 500 !important;
   transition: transform 0.15s var(--am-spring), background 0.15s ease !important;
 }
-html.tjp-apple-mode .pin-btn:active { transform: scale(0.9) !important; background: rgba(255,255,255,0.18) !important; }
-html.tjp-apple-mode .pin-dot { border-radius: 50% !important; border-color: var(--am-border) !important; }
+@media (prefers-reduced-motion: no-preference) {
+  html.tjp-apple-mode .pin-btn:active { transform: scale(0.9) !important; background: rgba(255,255,255,0.18) !important; }
+}
+html.tjp-apple-mode .pin-dot { border-radius: 50% !important; border-color: var(--am-separator) !important; }
 html.tjp-apple-mode .pin-dot.filled { background: var(--am-blue) !important; border-color: var(--am-blue) !important; }
 
-/* Chat Ami — bulles façon iMessage */
+/* ── Chat Ami — bulles façon iMessage (contenu : reste plat) ── */
 html.tjp-apple-mode .fc-msg-row.mine .fc-bubble {
-  background: linear-gradient(180deg,#4DA6FF,#2E8FEF) !important;
-  color: #fff !important; border: none !important; border-radius: 20px 20px 4px 20px !important;
+  background: linear-gradient(180deg,#0A84FF,#0077E6) !important; color: #fff !important;
+  border: none !important; border-radius: 20px 20px 4px 20px !important;
 }
 html.tjp-apple-mode .fc-msg-row:not(.mine) .fc-bubble {
-  background: rgba(120,120,128,0.24) !important;
-  color: var(--am-label) !important; border: none !important; border-radius: 20px 20px 20px 4px !important;
+  background: rgba(120,120,128,0.24) !important; color: var(--am-label) !important;
+  border: none !important; border-radius: 20px 20px 20px 4px !important;
 }
-html.tjp-apple-mode .fc-input-bar {
-  background: var(--am-elevated) !important; border-color: var(--am-border) !important;
-  border-radius: var(--am-radius-lg) !important;
-}
+html.tjp-apple-mode .fc-input-bar { background: var(--am-bg-3) !important; border-color: var(--am-separator) !important; border-radius: var(--am-r-card) !important; }
 
-/* Chat IA — même traitement */
+/* ── Chat IA — le violet est la couleur qu'Apple réserve à l'IA/au
+   premium ; touche "Apple Intelligence" en liseré dégradé animé. ── */
 html.tjp-apple-mode .pc-msg-user {
-  background: linear-gradient(180deg,#4DA6FF,#2E8FEF) !important;
-  color: #fff !important; border: none !important; border-radius: 18px 18px 4px 18px !important;
+  background: linear-gradient(180deg,#0A84FF,#0077E6) !important; color: #fff !important;
+  border: none !important; border-radius: 18px 18px 4px 18px !important;
 }
 html.tjp-apple-mode .pc-msg-bot {
-  background: rgba(120,120,128,0.24) !important;
-  color: var(--am-label) !important; border: none !important; border-radius: 18px 18px 18px 4px !important;
+  background: rgba(191,90,242,0.14) !important; border: 1px solid rgba(191,90,242,0.28) !important;
+  color: var(--am-label) !important; border-radius: 18px 18px 18px 4px !important;
 }
-
-/* KPI — le verre habille la bande entière (comme un groupe de réglages
-   iOS), pas chaque case individuellement (ça donnait 9 bulles arrondies
-   collées les unes aux autres, moche) */
-html.tjp-apple-mode .kpi-strip {
-  background: var(--am-border) !important;
-  border: 1px solid var(--am-border) !important;
-  border-radius: var(--am-radius-md) !important;
-  backdrop-filter: blur(28px) saturate(180%) !important;
-  -webkit-backdrop-filter: blur(28px) saturate(180%) !important;
-  box-shadow: 0 10px 30px rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.08) !important;
+html.tjp-apple-mode .pc-chat-title-bar { position: relative !important; }
+html.tjp-apple-mode .pc-chat-title-bar::after {
+  content: ''; position: absolute; left: 0; right: 0; bottom: -1px; height: 2px;
+  background: linear-gradient(90deg,#0A84FF,#BF5AF2,#FF453A,#FF9F0A,#0A84FF);
+  background-size: 300% 100%; opacity: 0.85;
 }
-html.tjp-apple-mode .kpi-card { background: var(--am-elevated) !important; }
-html.tjp-apple-mode .kpi-value { font-weight: 700 !important; letter-spacing: -0.01em !important; }
-html.tjp-apple-mode .kpi-label { text-transform: none !important; letter-spacing: 0 !important; color: var(--am-label-2) !important; }
+html.tjp-apple-mode .pc-thinking {
+  background: linear-gradient(90deg,#0A84FF,#BF5AF2,#FF453A,#0A84FF) !important;
+  background-size: 300% 100% !important;
+  -webkit-background-clip: text !important; background-clip: text !important; color: transparent !important;
+}
+@media (prefers-reduced-motion: no-preference) {
+  html.tjp-apple-mode .pc-chat-title-bar::after { animation: am-ai-glow 6s ease-in-out infinite; }
+  html.tjp-apple-mode .pc-thinking { animation: am-ai-glow 3s ease-in-out infinite; }
+}
+@keyframes am-ai-glow { 0%, 100% { background-position: 0% 50%; } 50% { background-position: 100% 50%; } }
 
-/* Gain / perte — partout dans l'app (tableau de trades, KPI, etc.) */
-html.tjp-apple-mode .rp { color: var(--am-green) !important; }
-html.tjp-apple-mode .rn { color: var(--am-red) !important; }
-
-/* Calendrier — cases arrondies + couleurs gain/perte vives */
-html.tjp-apple-mode .cal-day { border-radius: var(--am-radius-sm) !important; }
-html.tjp-apple-mode .cal-day.pos { background: rgba(61,224,112,0.22) !important; border-color: transparent !important; }
-html.tjp-apple-mode .cal-day.neg { background: rgba(255,98,89,0.22) !important; border-color: transparent !important; }
-html.tjp-apple-mode .cal-day.pos .cal-day-num,
-html.tjp-apple-mode .cal-day.pos .cal-pnl { color: var(--am-green) !important; }
-html.tjp-apple-mode .cal-day.neg .cal-day-num,
-html.tjp-apple-mode .cal-day.neg .cal-pnl { color: var(--am-red) !important; }
-
-/* Défilement & sélection façon macOS */
+/* ── Défilement & sélection façon macOS ── */
 html.tjp-apple-mode ::-webkit-scrollbar { width: 8px; height: 8px; }
 html.tjp-apple-mode ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.25); border-radius: 8px; }
 html.tjp-apple-mode ::-webkit-scrollbar-track { background: transparent; }
-html.tjp-apple-mode ::selection { background: rgba(77,166,255,0.35); }
+html.tjp-apple-mode ::selection { background: rgba(10,132,255,0.35); }
 `;
 
   var styleTag = document.createElement('style');
@@ -267,7 +297,8 @@ html.tjp-apple-mode ::selection { background: rgba(77,166,255,0.35); }
   styleTag.textContent = CSS;
   document.head.appendChild(styleTag);
 
-  // ── 2. Clés de stockage (même logique "aperçu / confirmé" que le thème) ──
+  // ── 2. Clés de stockage (aperçu au démarrage puis confirmation, même
+  // logique que tjp_last_theme_uid pour le thème de couleurs) ──
   function amKeyGuess() {
     var uid = localStorage.getItem('tjp_last_theme_uid');
     return uid ? 'tjp_apple_mode__' + uid : 'tjp_apple_mode';
@@ -276,16 +307,10 @@ html.tjp-apple-mode ::selection { background: rgba(77,166,255,0.35); }
     return typeof profileKey === 'function' ? profileKey('tjp_apple_mode') : amKeyGuess();
   }
   function amRead(key) {
-    try {
-      return JSON.parse(localStorage.getItem(key) || 'false');
-    } catch (e) {
-      return false;
-    }
+    try { return JSON.parse(localStorage.getItem(key) || 'false'); } catch (e) { return false; }
   }
   function amWrite(key, v) {
-    try {
-      localStorage.setItem(key, JSON.stringify(v));
-    } catch (e) {}
+    try { localStorage.setItem(key, JSON.stringify(v)); } catch (e) {}
   }
 
   // ── 3. Application / bascule ──────────────────────────────────────
@@ -300,19 +325,12 @@ html.tjp-apple-mode ::selection { background: rgba(77,166,255,0.35); }
     amApply(next);
     amWrite(amKeyConfirmed(), next);
     if (typeof refreshAllCharts === 'function') {
-      try {
-        refreshAllCharts();
-      } catch (e) {}
+      try { refreshAllCharts(); } catch (e) {}
     }
   };
 
-  // Aperçu immédiat dès le chargement, avant même la connexion confirmée
-  // (comme previewThemeForUid pour les couleurs).
   amApply(amRead(amKeyGuess()));
 
-  // Resynchronisation avec la clé du compte réellement identifié, à chaque
-  // fois que le reste du thème se recharge (connexion confirmée, changement
-  // de sous-compte, restauration de sauvegarde...).
   if (typeof window.loadSavedTheme === 'function') {
     var _amOrigLoadSavedTheme = window.loadSavedTheme;
     window.loadSavedTheme = function () {
@@ -326,7 +344,7 @@ html.tjp-apple-mode ::selection { background: rgba(77,166,255,0.35); }
   function amInjectToggle() {
     var editor = document.getElementById('themeEditor');
     if (!editor || document.getElementById('appleModeToggle')) return;
-    var row = editor.lastElementChild; // ligne Appliquer / Réinitialiser / Replier
+    var row = editor.lastElementChild;
     if (!row) return;
     var wrap = document.createElement('div');
     wrap.className = 'tgl-wrap';
