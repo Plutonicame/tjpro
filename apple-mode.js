@@ -79,18 +79,6 @@ html.tjp-apple-mode .kpi-value { font-size: 15px !important; font-weight: 700 !i
 html.tjp-apple-mode .chip, html.tjp-apple-mode .tag { text-transform: none !important; letter-spacing: 0 !important; }
 html.tjp-apple-mode .btn, html.tjp-apple-mode .pbtn { text-transform: none !important; letter-spacing: 0 !important; font-weight: 600 !important; }
 
-/* ── Filet de sécurité — l'app a des dizaines de variables --crt-* posées
-   au cas par cas qu'il est impossible de toutes cataloguer une par une.
-   Sans ce filet, un élément non repris plus bas garde son ancienne
-   couleur perso → zones incohérentes. Les règles plus bas, plus
-   spécifiques, reprennent la main normalement (une classe bat *). ── */
-html.tjp-apple-mode * {
-  background-color: transparent !important;
-  background-image: none !important;
-  color: var(--am-label) !important;
-  border-color: var(--am-separator) !important;
-}
-
 /* ── Liquid Glass — navigation + TOUS les contrôles ronds/ovales
    (pavé PIN, icônes du chat IA, puces, interrupteurs, boutons pilule,
    hamburger). Jamais sur le contenu (cartes/listes/KPI/tableaux). ── */
@@ -118,18 +106,23 @@ html.tjp-apple-mode .pc-icon-btn,
 html.tjp-apple-mode .hamburger,
 html.tjp-apple-mode .pin-btn,
 html.tjp-apple-mode .tgl-track,
-html.tjp-apple-mode .chip {
+html.tjp-apple-mode .chip,
+html.tjp-apple-mode .fc-react-trigger,
+html.tjp-apple-mode .fc-react-more-btn,
+html.tjp-apple-mode .fc-react-badges,
+html.tjp-apple-mode .fc-react-picker {
   position: relative;
   overflow: hidden;
   border-radius: var(--am-r-control) !important;
   border: 1px solid var(--am-separator) !important;
-  background: rgba(120,120,128,0.12) !important;
-  backdrop-filter: blur(20px) saturate(180%) !important;
-  -webkit-backdrop-filter: blur(20px) saturate(180%) !important;
+  background: rgba(120,120,128,0.16) !important;
+  backdrop-filter: blur(24px) saturate(180%) !important;
+  -webkit-backdrop-filter: blur(24px) saturate(180%) !important;
+  box-shadow: 0 2px 10px rgba(0,0,0,0.08) !important;
   color: var(--am-label) !important;
   transition: transform 0.18s var(--am-spring), background 0.2s ease, opacity 0.2s ease !important;
 }
-/* le reflet — la touche "verre qui capte la lumière" au clic */
+/* le reflet — doux, façon bulle de réaction, pas un flash agressif */
 html.tjp-apple-mode .btn::after,
 html.tjp-apple-mode .pbtn::after,
 html.tjp-apple-mode .acc-opt-btn::after,
@@ -137,16 +130,20 @@ html.tjp-apple-mode .pc-icon-btn::after,
 html.tjp-apple-mode .hamburger::after,
 html.tjp-apple-mode .pin-btn::after,
 html.tjp-apple-mode .tgl-track::after,
-html.tjp-apple-mode .chip::after {
+html.tjp-apple-mode .chip::after,
+html.tjp-apple-mode .fc-react-trigger::after,
+html.tjp-apple-mode .fc-react-more-btn::after {
   content: '';
   position: absolute; inset: 0;
-  background: radial-gradient(circle at 50% 0%, rgba(255,255,255,0.85), transparent 65%);
+  background: radial-gradient(circle at 50% 0%, rgba(255,255,255,0.55), transparent 70%);
   opacity: 0;
-  transition: opacity 0.25s ease;
+  transition: opacity 0.3s ease;
   pointer-events: none;
 }
-html.tjp-apple-mode .pc-icon-btn, html.tjp-apple-mode .pin-btn { border-radius: 50% !important; }
-html.tjp-apple-mode .tgl-track, html.tjp-apple-mode .chip, html.tjp-apple-mode .tag { border-radius: 999px !important; }
+html.tjp-apple-mode .pc-icon-btn, html.tjp-apple-mode .pin-btn,
+html.tjp-apple-mode .fc-react-trigger, html.tjp-apple-mode .fc-react-more-btn { border-radius: 50% !important; }
+html.tjp-apple-mode .tgl-track, html.tjp-apple-mode .chip, html.tjp-apple-mode .tag,
+html.tjp-apple-mode .fc-react-badges { border-radius: 999px !important; }
 html.tjp-apple-mode .btn-p, html.tjp-apple-mode .pbtn.active {
   background: var(--am-blue) !important; border-color: var(--am-blue) !important; color: #fff !important;
 }
@@ -160,14 +157,16 @@ html.tjp-apple-mode .tgl-thumb { background: #fff !important; box-shadow: 0 2px 
   html.tjp-apple-mode .btn:active, html.tjp-apple-mode .pbtn:active,
   html.tjp-apple-mode .chip:active, html.tjp-apple-mode .acc-opt-btn:active,
   html.tjp-apple-mode .hamburger:active, html.tjp-apple-mode .pc-icon-btn:active,
-  html.tjp-apple-mode .pin-btn:active {
+  html.tjp-apple-mode .pin-btn:active, html.tjp-apple-mode .fc-react-trigger:active,
+  html.tjp-apple-mode .fc-react-more-btn:active {
     transform: scale(0.92) !important; opacity: 0.88 !important;
   }
   html.tjp-apple-mode .tgl-track:active { transform: scale(0.94) !important; }
   html.tjp-apple-mode .btn:active::after, html.tjp-apple-mode .pbtn:active::after,
   html.tjp-apple-mode .acc-opt-btn:active::after, html.tjp-apple-mode .pc-icon-btn:active::after,
   html.tjp-apple-mode .hamburger:active::after, html.tjp-apple-mode .pin-btn:active::after,
-  html.tjp-apple-mode .tgl-track:active::after, html.tjp-apple-mode .chip:active::after {
+  html.tjp-apple-mode .tgl-track:active::after, html.tjp-apple-mode .chip:active::after,
+  html.tjp-apple-mode .fc-react-trigger:active::after, html.tjp-apple-mode .fc-react-more-btn:active::after {
     opacity: 1;
   }
 }
