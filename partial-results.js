@@ -16,6 +16,12 @@
 // total l'est) : en rouvrant un trade pour l'éditer, on repart d'une case
 // unique pré-remplie avec le total.
 //
+// Le bouton "+" a l'apparence d'une case assortie à la case Résultat
+// (mêmes coins arrondis / bordure / fond), avec ses 3 couleurs (fond,
+// bordure, texte) réglables dans Paramètres → Thème → Journal de trading
+// → Formulaire nouveau trade — ajoutées au thème par monkey-patch de
+// buildTV(), donc toujours sans éditer app-part1.js.
+//
 // N'édite aucun fichier existant : une seule ligne ajoutée dans
 // index.html pour charger ce fichier.
 // ═══════════════════════════════════════════════════════════════════════
@@ -24,17 +30,43 @@
   'use strict';
 
   // ── 1. Style — masque les flèches natives, met en forme les lignes ──
+  // Les 3 couleurs du bouton "+" (--pf-add-bg/bd/tx) ont pour valeur de
+  // départ celle de la case Résultat (mêmes hex que --fg-input-fg-select-
+  // fg-textarea-*), pour un rendu identique dès l'installation ; ce sont
+  // des variables indépendantes, donc modifiables séparément ensuite sans
+  // toucher au style des autres champs.
   var CSS = `
 .pf-input::-webkit-inner-spin-button, .pf-input::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
 .pf-input { -moz-appearance: textfield; }
 .pf-wrap { display: flex; flex-direction: column; gap: 6px; }
 .pf-row { display: flex; align-items: center; gap: 6px; }
 .pf-row .pf-input { flex: 1; min-width: 0; }
-.pf-add-btn, .pf-remove-btn {
+.pf-remove-btn {
   flex-shrink: 0; width: 28px; height: 28px; min-width: 28px;
   padding: 0 !important; border-radius: 50% !important;
   display: flex; align-items: center; justify-content: center;
   font-size: 16px; line-height: 1; font-weight: 700;
+}
+:root {
+  --pf-add-bg: #111827;
+  --pf-add-bd: #1e2d45;
+  --pf-add-tx: #e2e8f0;
+}
+.pf-add-box {
+  flex-shrink: 0; min-width: 36px;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--pf-add-bg);
+  border: 1px solid var(--pf-add-bd);
+  border-radius: 5px;
+  color: var(--pf-add-tx);
+  font-family: var(--sans);
+  font-size: 16px; font-weight: 700; line-height: 1;
+  letter-spacing: normal; text-transform: none; white-space: nowrap;
+  padding: 7px 9px;
+  transition: border-color 0.15s;
+}
+.pf-add-box:hover {
+  border-color: var(--pf-add-tx);
 }
 `;
   var styleTag = document.createElement('style');
@@ -43,9 +75,10 @@
   document.head.appendChild(styleTag);
 
   // ── 2. Construction des lignes ──────────────────────────────────────
-  // Réutilise les classes .btn.btn-p / .btn.btn-d de l'app : le + / le -
-  // suivent automatiquement le thème actif (par défaut, personnalisé, ou
-  // Apple Mode), sans rien redéfinir ici.
+  // Le "−" réutilise la classe .btn.btn-d de l'app (rond, suit le thème
+  // actif comme avant) ; le "+" utilise sa propre classe .pf-add-box
+  // (case assortie au champ Résultat, couleurs réglables séparément —
+  // voir section 3).
   function pfMakeBtn(cls, label, title, onClick) {
     var b = document.createElement('button');
     b.type = 'button';
@@ -85,7 +118,7 @@
     row.className = 'pf-row';
     row.appendChild(input);
     var add = pfMakeBtn(
-      'btn-p pf-add-btn',
+      'pf-add-box',
       '+',
       'Ajouter un résultat partiel (prise de profits partielle sur ce trade)',
       function () {
@@ -130,7 +163,42 @@
     pfInit();
   }
 
-  // ── 3. Accroche sur les vraies sauvegardes/ouvertures ────────────────
+  // ── 3. Intégration au thème ───────────────────────────────────────
+  // Ajoute les 3 nouvelles couleurs (fond/bordure/texte du bouton "+") à
+  // la liste que l'éditeur de thème affiche, sans toucher à app-part1.js :
+  // buildTV() reste appelé normalement, on complète juste le tableau
+  // qu'il retourne. Elles apparaissent dans Paramètres → Thème → Journal
+  // de trading → Formulaire nouveau trade, se sauvegardent/synchronisent
+  // comme toutes les autres couleurs du thème (mécanisme déjà générique).
+  if (typeof window.buildTV === 'function') {
+    var _origBuildTV = window.buildTV;
+    window.buildTV = function () {
+      var tv = _origBuildTV.apply(this, arguments);
+      tv.push(
+        {
+          v: '--pf-add-bg',
+          l: 'Ajouter résultat partiel - fond',
+          page: 'Journal de trading',
+          section: 'Formulaire nouveau trade'
+        },
+        {
+          v: '--pf-add-bd',
+          l: 'Ajouter résultat partiel - bordure',
+          page: 'Journal de trading',
+          section: 'Formulaire nouveau trade'
+        },
+        {
+          v: '--pf-add-tx',
+          l: 'Ajouter résultat partiel - texte',
+          page: 'Journal de trading',
+          section: 'Formulaire nouveau trade'
+        }
+      );
+      return tv;
+    };
+  }
+
+  // ── 4. Accroche sur les vraies sauvegardes/ouvertures ────────────────
   // addTrade() lit simplement la valeur de f-res : on y met le total
   // juste avant qu'il ne la lise. resetForm() n'est appelé par addTrade()
   // qu'en cas de succès réel (date renseignée) — on ne retire les cases
