@@ -2471,6 +2471,15 @@ function cfRefreshPrefsCard() {
   if (sel) sel.value = cfModeOverride();
   const modeLbl = document.getElementById('cfNavModeLbl');
   if (modeLbl) modeLbl.textContent = CF_MODE_LABELS[cfScreenMode()] || cfScreenMode();
+  // Le toggle "Menu de navigation en colonne (PC)" n'a d'effet qu'en mode
+  // PC normal/ultra wide : en téléphone et PC vertical, le menu mobile
+  // s'affiche déjà nativement quel que soit son état, donc le masquer pour
+  // ne pas laisser un réglage sans effet visible (16/09/2026).
+  const row = document.getElementById('cfNavColumnRow');
+  if (row) {
+    const mode = cfScreenMode();
+    row.style.display = mode === 'phone' || mode === 'vertical' ? 'none' : '';
+  }
   const tgl = document.getElementById('cfTglNavColumn');
   const lbl = document.getElementById('cfNavColumnLbl');
   if (tgl && lbl) {
@@ -2518,7 +2527,7 @@ function cfEnsureNavToggleCard() {
         </select>
       </div>
       <div style="font-size:10px;color:var(--muted);margin:-6px 0 10px;">Réglage propre au mode actif : <b id="cfNavModeLbl">—</b></div>
-      <div class="tgl-row">
+      <div class="tgl-row" id="cfNavColumnRow">
         <span data-editable>Menu de navigation en colonne (PC) :</span>
         <div class="tgl-track" id="cfTglNavColumn" onclick="cfToggleNavColumn()"><div class="tgl-thumb"></div></div>
         <span id="cfNavColumnLbl" style="color:var(--muted)">Désactivé</span>
