@@ -20,7 +20,9 @@
 // (mêmes coins arrondis / bordure / fond), avec ses 3 couleurs (fond,
 // bordure, texte) réglables dans Paramètres → Thème → Journal de trading
 // → Formulaire nouveau trade — ajoutées au thème par monkey-patch de
-// buildTV(), donc toujours sans éditer app-part1.js.
+// buildTV(), donc toujours sans éditer app-part1.js. Le bouton "−" reprend
+// le même design (case, plus le rond) avec ses 3 propres couleurs,
+// indépendantes de celles du "+".
 //
 // N'édite aucun fichier existant : une seule ligne ajoutée dans
 // index.html pour charger ce fichier.
@@ -30,43 +32,51 @@
   'use strict';
 
   // ── 1. Style — masque les flèches natives, met en forme les lignes ──
-  // Les 3 couleurs du bouton "+" (--pf-add-bg/bd/tx) ont pour valeur de
-  // départ celle de la case Résultat (mêmes hex que --fg-input-fg-select-
-  // fg-textarea-*), pour un rendu identique dès l'installation ; ce sont
-  // des variables indépendantes, donc modifiables séparément ensuite sans
-  // toucher au style des autres champs.
+  // Les couleurs des boutons "+" (--pf-add-*) et "−" (--pf-remove-*) ont
+  // pour valeur de départ celle de la case Résultat (mêmes hex que
+  // --fg-input-fg-select-fg-textarea-*), pour un rendu identique dès
+  // l'installation ; ce sont des variables indépendantes les unes des
+  // autres, donc modifiables séparément ensuite sans se toucher entre
+  // elles ni toucher au style des autres champs.
   var CSS = `
 .pf-input::-webkit-inner-spin-button, .pf-input::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
 .pf-input { -moz-appearance: textfield; }
 .pf-wrap { display: flex; flex-direction: column; gap: 6px; }
 .pf-row { display: flex; align-items: center; gap: 6px; }
 .pf-row .pf-input { flex: 1; min-width: 0; }
-.pf-remove-btn {
-  flex-shrink: 0; width: 28px; height: 28px; min-width: 28px;
-  padding: 0 !important; border-radius: 50% !important;
-  display: flex; align-items: center; justify-content: center;
-  font-size: 16px; line-height: 1; font-weight: 700;
-}
 :root {
   --pf-add-bg: #111827;
   --pf-add-bd: #1e2d45;
   --pf-add-tx: #e2e8f0;
+  --pf-remove-bg: #111827;
+  --pf-remove-bd: #1e2d45;
+  --pf-remove-tx: #e2e8f0;
 }
-.pf-add-box {
+.pf-add-box, .pf-remove-box {
   flex-shrink: 0; min-width: 36px;
   display: flex; align-items: center; justify-content: center;
-  background: var(--pf-add-bg);
-  border: 1px solid var(--pf-add-bd);
   border-radius: 5px;
-  color: var(--pf-add-tx);
   font-family: var(--sans);
   font-size: 16px; font-weight: 700; line-height: 1;
   letter-spacing: normal; text-transform: none; white-space: nowrap;
   padding: 7px 9px;
   transition: border-color 0.15s;
 }
+.pf-add-box {
+  background: var(--pf-add-bg);
+  border: 1px solid var(--pf-add-bd);
+  color: var(--pf-add-tx);
+}
 .pf-add-box:hover {
   border-color: var(--pf-add-tx);
+}
+.pf-remove-box {
+  background: var(--pf-remove-bg);
+  border: 1px solid var(--pf-remove-bd);
+  color: var(--pf-remove-tx);
+}
+.pf-remove-box:hover {
+  border-color: var(--pf-remove-tx);
 }
 `;
   var styleTag = document.createElement('style');
@@ -75,10 +85,8 @@
   document.head.appendChild(styleTag);
 
   // ── 2. Construction des lignes ──────────────────────────────────────
-  // Le "−" réutilise la classe .btn.btn-d de l'app (rond, suit le thème
-  // actif comme avant) ; le "+" utilise sa propre classe .pf-add-box
-  // (case assortie au champ Résultat, couleurs réglables séparément —
-  // voir section 3).
+  // Le "+" et le "−" ont chacun leur propre case (.pf-add-box / .pf-
+  // remove-box), même design, couleurs réglables séparément (section 3).
   function pfMakeBtn(cls, label, title, onClick) {
     var b = document.createElement('button');
     b.type = 'button';
@@ -96,7 +104,7 @@
     input.type = 'number';
     input.className = 'pf-input';
     input.placeholder = 'Partiel ' + (wrap.querySelectorAll('.pf-row').length + 1);
-    var rm = pfMakeBtn('btn-d pf-remove-btn', '\u2212', 'Retirer cette case', function () {
+    var rm = pfMakeBtn('pf-remove-box', '\u2212', 'Retirer cette case', function () {
       row.remove();
     });
     row.appendChild(input);
@@ -164,7 +172,7 @@
   }
 
   // ── 3. Intégration au thème ───────────────────────────────────────
-  // Ajoute les 3 nouvelles couleurs (fond/bordure/texte du bouton "+") à
+  // Ajoute les 6 couleurs (fond/bordure/texte des boutons "+" et "−") à
   // la liste que l'éditeur de thème affiche, sans toucher à app-part1.js :
   // buildTV() reste appelé normalement, on complète juste le tableau
   // qu'il retourne. Elles apparaissent dans Paramètres → Thème → Journal
@@ -190,6 +198,24 @@
         {
           v: '--pf-add-tx',
           l: 'Ajouter résultat partiel - texte',
+          page: 'Journal de trading',
+          section: 'Formulaire nouveau trade'
+        },
+        {
+          v: '--pf-remove-bg',
+          l: 'Retirer résultat partiel - fond',
+          page: 'Journal de trading',
+          section: 'Formulaire nouveau trade'
+        },
+        {
+          v: '--pf-remove-bd',
+          l: 'Retirer résultat partiel - bordure',
+          page: 'Journal de trading',
+          section: 'Formulaire nouveau trade'
+        },
+        {
+          v: '--pf-remove-tx',
+          l: 'Retirer résultat partiel - texte',
           page: 'Journal de trading',
           section: 'Formulaire nouveau trade'
         }
