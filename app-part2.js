@@ -336,7 +336,8 @@ function _tradesFingerprint(trades) {
 
 // ══ SAUVEGARDE LOCALE (export / import) — tous les comptes locaux ══
 // ── Dossier de sauvegarde personnalisé (16/09/2026) ─────────────────────
-// Bouton 📁 de la carte "Sauvegarde locale" (Paramètres) : permet de
+// Bouton "Lieu de sauvegarde" de la carte "Sauvegarde locale" (Paramètres) :
+// permet de
 // choisir une bonne fois un dossier sur l'appareil, mémorisé (IndexedDB,
 // un FileSystemDirectoryHandle ne peut pas se stocker en JSON/localStorage)
 // pour que chaque "Exporter une sauvegarde" y écrive directement le
@@ -425,11 +426,9 @@ function bkdirRefreshButton(handle) {
   if (!btn) return;
   if (handle) {
     btn.title = 'Dossier de sauvegarde : ' + (handle.name || '…') + ' (clique pour en choisir un autre)';
-    btn.textContent = '📁✓';
     if (clearBtn) clearBtn.style.display = '';
   } else {
     btn.title = 'Choisir où seront enregistrées les sauvegardes (par défaut : Téléchargements du navigateur)';
-    btn.textContent = '📁';
     if (clearBtn) clearBtn.style.display = 'none';
   }
 }
@@ -494,7 +493,8 @@ async function exportLocalBackup() {
     const totalTrades = exportAccounts.reduce((sum, acc) => sum + (acc.trades ? acc.trades.length : 0), 0);
     const filename = `tjp-sauvegarde-${new Date().toISOString().slice(0, 10)}-${totalTrades}trades.json`;
 
-    // Dossier choisi via le bouton 📁 (voir plus haut) : écrit directement
+    // Dossier choisi via le bouton "Lieu de sauvegarde" (voir plus haut) :
+    // écrit directement
     // dedans si possible, sinon téléchargement classique inchangé.
     let savedToCustomDir = false;
     try {
