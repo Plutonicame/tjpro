@@ -554,17 +554,17 @@
 <!-- EDIT TRADE MODAL -->
 <div class="cp-overlay" id="editModal" style="z-index:10000;">
   <div class="cp-modal" style="width:420px;max-height:90vh;overflow-y:auto;position:relative;z-index:10001;">
-    <div class="cp-title">MODIFIER LE TRADE</div>
+    <div class="cp-title" style="display:flex;align-items:center;justify-content:space-between;gap:8px;">
+      <span>MODIFIER LE TRADE</span>
+      <div style="display:flex;align-items:center;gap:8px;">
+        <span style="font-size:10px;color:var(--muted);font-family:var(--mono);white-space:nowrap;">RR Pris auto</span>
+        <div class="tgl-track" id="e-tglRrAuto" onclick="toggleFormRrAuto('e')"><div class="tgl-thumb"></div></div>
+      </div>
+    </div>
     <div class="form-grid" style="margin-bottom:10px;">
       <div class="fg"><label>Date</label><input type="date" id="e-date"></div>
       <div class="fg"><label>Heure</label><input type="time" id="e-heure"></div>
       <div class="fg"><label>Session</label><select id="e-session"></select></div>
-      <div class="fg" style="grid-column:-1;">
-        <label>RR Pris auto</label>
-        <div style="display:flex;align-items:center;height:34px;">
-          <div class="tgl-track" id="e-tglRrAuto" onclick="toggleFormRrAuto('e')"><div class="tgl-thumb"></div></div>
-        </div>
-      </div>
       <div class="fg"><label>Paire / Actif</label><select id="e-paire"></select></div>
       <div class="fg"><label>Direction</label><select id="e-dir"><option value="">—</option><option>LONG</option><option>SHORT</option></select></div>
       <div class="fg"><label>RR Cible</label><input type="number" id="e-rrcible" step="0.1"></div>

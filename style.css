@@ -1626,6 +1626,16 @@ tbody td {
   max-height: 90vh;
   overflow-y: auto;
 }
+/* Fenêtre "Modifier le trade" élargie de 20% (420px -> 504px) en PC normal,
+   PC vertical et PC ultra wide uniquement (pas en mode téléphone, où
+   max-width: calc(100vw - 24px) ci-dessus continue de la contraindre de
+   toute façon). !important nécessaire pour passer devant le width:420px
+   posé en style inline sur #editModal .cp-modal (16/09/2026). */
+body.cf-mode-normal #editModal .cp-modal,
+body.cf-mode-vertical #editModal .cp-modal,
+body.cf-mode-ultrawide #editModal .cp-modal {
+  width: 504px !important;
+}
 .cp-title {
   font-family: var(--mono);
   font-size: 10px;
