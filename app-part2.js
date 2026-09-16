@@ -335,7 +335,112 @@ function _tradesFingerprint(trades) {
 }
 
 // ══ SAUVEGARDE LOCALE (export / import) — tous les comptes locaux ══
-function exportLocalBackup() {
+// ── Dossier de sauvegarde personnalisé (16/09/2026) ─────────────────────
+// Bouton 📁 de la carte "Sauvegarde locale" (Paramètres) : permet de
+// choisir une bonne fois un dossier sur l'appareil, mémorisé (IndexedDB,
+// un FileSystemDirectoryHandle ne peut pas se stocker en JSON/localStorage)
+// pour que chaque "Exporter une sauvegarde" y écrive directement le
+// fichier sans passer par le téléchargement classique du navigateur.
+// Repose sur la File System Access API, absente de Firefox/Safari — sur
+// ces navigateurs (et si aucun dossier n'a été choisi, ou permission
+// refusée/révoquée depuis) exportLocalBackup() retombe simplement sur le
+// téléchargement classique, comme avant ce correctif.
+function bkdirOpenDB() {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open('tjp-backup-dir-db', 1);
+    req.onupgradeneeded = () => req.result.createObjectStore('handles');
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+function bkdirSaveHandle(handle) {
+  return bkdirOpenDB().then(
+    db =>
+      new Promise((resolve, reject) => {
+        const tx = db.transaction('handles', 'readwrite');
+        tx.objectStore('handles').put(handle, 'dir');
+        tx.oncomplete = () => resolve();
+        tx.onerror = () => reject(tx.error);
+      })
+  );
+}
+function bkdirLoadHandle() {
+  return bkdirOpenDB().then(
+    db =>
+      new Promise((resolve, reject) => {
+        const tx = db.transaction('handles', 'readonly');
+        const req = tx.objectStore('handles').get('dir');
+        req.onsuccess = () => resolve(req.result || null);
+        req.onerror = () => reject(req.error);
+      })
+  );
+}
+function bkdirClearHandle() {
+  return bkdirOpenDB().then(
+    db =>
+      new Promise((resolve, reject) => {
+        const tx = db.transaction('handles', 'readwrite');
+        tx.objectStore('handles').delete('dir');
+        tx.oncomplete = () => resolve();
+        tx.onerror = () => reject(tx.error);
+      })
+  );
+}
+// Dossier mémorisé + permission encore valable (ou re-obtenue) → utilisable
+// pour écrire directement dedans ; sinon null (jamais d'exception ici,
+// exportLocalBackup() doit toujours pouvoir retomber sur le téléchargement
+// classique).
+async function bkdirGetUsableHandle() {
+  if (!('showDirectoryPicker' in window)) return null;
+  try {
+    const handle = await bkdirLoadHandle();
+    if (!handle) return null;
+    let perm = await handle.queryPermission({mode: 'readwrite'});
+    if (perm === 'prompt') perm = await handle.requestPermission({mode: 'readwrite'});
+    return perm === 'granted' ? handle : null;
+  } catch (e) {
+    return null;
+  }
+}
+function bkdirChooseFolder() {
+  if (!('showDirectoryPicker' in window)) {
+    alert(
+      "Ton navigateur ne permet pas de choisir un dossier de sauvegarde (fonctionnalité disponible sur Chrome/Edge, PC et Android). Les sauvegardes continueront de se télécharger normalement."
+    );
+    return;
+  }
+  window
+    .showDirectoryPicker({id: 'tjp-backup', mode: 'readwrite'})
+    .then(handle => bkdirSaveHandle(handle).then(() => bkdirRefreshButton(handle)))
+    .catch(e => {
+      if (e && e.name !== 'AbortError') console.warn('Choix du dossier de sauvegarde :', e);
+    });
+}
+function bkdirReset() {
+  bkdirClearHandle().then(() => bkdirRefreshButton(null));
+}
+function bkdirRefreshButton(handle) {
+  const btn = document.getElementById('backupDirBtn');
+  const clearBtn = document.getElementById('bkdirClearBtn');
+  if (!btn) return;
+  if (handle) {
+    btn.title = 'Dossier de sauvegarde : ' + (handle.name || '…') + ' (clique pour en choisir un autre)';
+    btn.textContent = '📁✓';
+    if (clearBtn) clearBtn.style.display = '';
+  } else {
+    btn.title = 'Choisir où seront enregistrées les sauvegardes (par défaut : Téléchargements du navigateur)';
+    btn.textContent = '📁';
+    if (clearBtn) clearBtn.style.display = 'none';
+  }
+}
+document.addEventListener('DOMContentLoaded', () => {
+  if (!('indexedDB' in window) || !('showDirectoryPicker' in window)) return;
+  bkdirLoadHandle()
+    .then(handle => bkdirRefreshButton(handle))
+    .catch(() => {});
+});
+
+async function exportLocalBackup() {
   try {
     const accs = getAccounts();
     const list = accs.length ? accs : [{id: _currentAccId || 'acc_1', name: 'Compte 1'}];
@@ -384,19 +489,41 @@ function exportLocalBackup() {
       }
     };
     const blob = new Blob([JSON.stringify(backup, null, 2)], {type: 'application/json'});
-    const url = URL.createObjectURL(blob);
     // Nombre total de trades toutes comptes confondus, dans le nom du
     // fichier pour s'y retrouver entre plusieurs sauvegardes (16/09/2026).
     const totalTrades = exportAccounts.reduce((sum, acc) => sum + (acc.trades ? acc.trades.length : 0), 0);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `tjp-sauvegarde-${new Date().toISOString().slice(0, 10)}-${totalTrades}trades.json`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+    const filename = `tjp-sauvegarde-${new Date().toISOString().slice(0, 10)}-${totalTrades}trades.json`;
+
+    // Dossier choisi via le bouton 📁 (voir plus haut) : écrit directement
+    // dedans si possible, sinon téléchargement classique inchangé.
+    let savedToCustomDir = false;
+    try {
+      const dirHandle = await bkdirGetUsableHandle();
+      if (dirHandle) {
+        const fileHandle = await dirHandle.getFileHandle(filename, {create: true});
+        const writable = await fileHandle.createWritable();
+        await writable.write(blob);
+        await writable.close();
+        savedToCustomDir = true;
+      }
+    } catch (e) {
+      console.warn('Écriture dans le dossier choisi impossible, retour au téléchargement classique :', e);
+    }
+    if (!savedToCustomDir) {
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    }
     localStorage.setItem(accKey('tj_last_backup_hash'), _tradesFingerprint(APP.trades));
-    showSync('✓ Sauvegarde téléchargée', '#22c55e');
+    showSync(
+      savedToCustomDir ? '✓ Sauvegarde enregistrée dans le dossier choisi' : '✓ Sauvegarde téléchargée',
+      '#22c55e'
+    );
   } catch (e) {
     console.error('Export de sauvegarde échoué :', e);
     showSync('⚠ Export échoué', '#ef4444');

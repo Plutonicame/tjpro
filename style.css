@@ -179,6 +179,9 @@
   --btn-import-bg: transparent;
   --btn-import-bd: #f59e0b;
   --btn-import-tx: #f59e0b;
+  --btn-bkdir-bg: transparent;
+  --btn-bkdir-bd: #64748b;
+  --btn-bkdir-tx: #64748b;
   /* Couleurs SÉPARÉES pour résultats/pourcentages journal */
   --result-pos: #00e5a0;
   --result-neg: #ef4444;
