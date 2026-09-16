@@ -10,7 +10,10 @@
 // Permet à l'utilisateur, depuis Paramètres :
 //  - de créer des questions custom (format : étoiles / texte / nombre /
 //    menu déroulant / case à cocher / date), placées où il veut dans le
-//    questionnaire "Nouveau Trade" (et dans "Modifier le trade") ;
+//    questionnaire "Nouveau Trade" (et dans "Modifier le trade") — sauf les
+//    cases à cocher (Oui/Non), qui vont toujours tout en bas à côté de
+//    "Backtest" plutôt que dans le questionnaire (seul leur ordre entre
+//    elles est configurable, voir cfInjectToggleFields) ;
 //  - chaque question crée une colonne dans l'historique des trades, dont on
 //    choisit le nom et la position (parmi les colonnes existantes + les
 //    nouvelles) ;
@@ -373,7 +376,11 @@ function cfFieldInputHtml(prefix, field) {
     return `<div class="fg cf-field" id="${id}-wrap">${labelHtml}<select id="${id}" class="cf-input"><option value="">—</option>${opts}</select></div>`;
   }
   if (field.type === 'toggle') {
-    return `<div class="fg cf-field" id="${id}-wrap">${labelHtml}<div style="display:flex;align-items:center;height:34px;"><input type="checkbox" id="${id}" class="cf-input" style="width:18px;height:18px;cursor:pointer;"></div></div>`;
+    // Les cases à cocher n'apparaissent JAMAIS dans le questionnaire
+    // principal — voir cfInjectToggleFields() : elles sont injectées à part,
+    // tout en bas à côté de "Backtest", avec un rendu assorti à celui-ci
+    // plutôt que le bloc .fg générique des autres formats de réponse.
+    return `<label class="cf-toggle-field" id="${id}-wrap" style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:12px;color:var(--muted);"><input type="checkbox" id="${id}" class="cf-input" style="width:16px;height:16px;cursor:pointer;accent-color:var(--bt-bg);"><span data-editable data-cf-custom-label="1" id="${cfLabelId(prefix, field)}" data-cf-field-id="${field.id}">${labelText}</span></label>`;
   }
   if (field.type === 'stars') {
     return `<div class="fg spanall cf-field" id="${id}-wrap">${labelHtml}
@@ -428,9 +435,66 @@ function cfInjectFormFields(prefix) {
     prefix === 'f'
       ? document.querySelector('#page-journal .form-grid')
       : document.querySelector('#editModal .form-grid');
-  if (!grid) return;
-  grid.querySelectorAll('.cf-field').forEach(el => el.remove());
-  const remaining = APP.cfFields.slice();
+  if (grid) {
+    grid.querySelectorAll('.cf-field').forEach(el => el.remove());
+    // Les cases à cocher (type "toggle") ne passent jamais par cette
+    // boucle : voir cfInjectToggleFields() plus bas, qui les place à part.
+    const remaining = APP.cfFields.filter(f => f.type !== 'toggle');
+    let guard = 0;
+    while (remaining.length && guard++ < 50) {
+      let progressed = false;
+      for (let i = 0; i < remaining.length; i++) {
+        const f = remaining[i];
+        const anchor = f.afterField;
+        let anchorEl = null,
+          isStart = false;
+        if (anchor === '__start__') {
+          isStart = true;
+        } else if (!anchor) {
+          /* "— À la fin —" (par défaut) : reste en attente, traité par le passage final ci-dessous */
+        } else if (anchor.indexOf('cf_') === 0) {
+          anchorEl = document.getElementById(prefix + '-cf-' + anchor + '-wrap');
+        } else {
+          anchorEl = cfBuiltinAnchorEl(prefix, anchor);
+        }
+        if (isStart || anchorEl) {
+          const html = cfFieldInputHtml(prefix, f);
+          if (isStart) grid.insertAdjacentHTML('afterbegin', html);
+          else anchorEl.insertAdjacentHTML('afterend', html);
+          if (f.type === 'stars') {
+            const id = cfInputId(prefix, f);
+            if (typeof initStarPicker === 'function') initStarPicker(id + '-picker', id, 0);
+          }
+          remaining.splice(i, 1);
+          progressed = true;
+          break;
+        }
+      }
+      if (!progressed) break;
+    }
+    remaining.forEach(f => {
+      grid.insertAdjacentHTML('beforeend', cfFieldInputHtml(prefix, f));
+      if (f.type === 'stars') {
+        const id = cfInputId(prefix, f);
+        if (typeof initStarPicker === 'function') initStarPicker(id + '-picker', id, 0);
+      }
+    });
+  }
+  cfInjectToggleFields(prefix);
+}
+// Cases à cocher (Oui/Non) du questionnaire : toujours en bas, à côté de la
+// case "Backtest" (jamais dans la grille du questionnaire, quelle que soit
+// leur position configurée — voir cfPopulateAnchorSelects). Leur ordre
+// RELATIF LES UNES PAR RAPPORT AUX AUTRES reste configurable (afterField ne
+// peut alors référencer qu'une autre case à cocher, jamais une question du
+// questionnaire, ni "Backtest" lui-même qui reste le point de départ fixe).
+// Demande du 16/09/2026.
+function cfInjectToggleFields(prefix) {
+  const btLabel = document.getElementById(prefix + '-backtest');
+  const startEl = btLabel ? btLabel.closest('label') : null;
+  if (!startEl) return;
+  startEl.parentNode.querySelectorAll('.cf-toggle-field').forEach(el => el.remove());
+  const remaining = APP.cfFields.filter(f => f.type === 'toggle');
   let guard = 0;
   while (remaining.length && guard++ < 50) {
     let progressed = false;
@@ -440,22 +504,16 @@ function cfInjectFormFields(prefix) {
       let anchorEl = null,
         isStart = false;
       if (anchor === '__start__') {
-        isStart = true;
+        isStart = true; // juste après Backtest
       } else if (!anchor) {
-        /* "— À la fin —" (par défaut) : reste en attente, traité par le passage final ci-dessous */
+        /* "— À la fin —" (par défaut) : reste en attente, passage final ci-dessous */
       } else if (anchor.indexOf('cf_') === 0) {
         anchorEl = document.getElementById(prefix + '-cf-' + anchor + '-wrap');
-      } else {
-        anchorEl = cfBuiltinAnchorEl(prefix, anchor);
       }
       if (isStart || anchorEl) {
         const html = cfFieldInputHtml(prefix, f);
-        if (isStart) grid.insertAdjacentHTML('afterbegin', html);
+        if (isStart) startEl.insertAdjacentHTML('afterend', html);
         else anchorEl.insertAdjacentHTML('afterend', html);
-        if (f.type === 'stars') {
-          const id = cfInputId(prefix, f);
-          if (typeof initStarPicker === 'function') initStarPicker(id + '-picker', id, 0);
-        }
         remaining.splice(i, 1);
         progressed = true;
         break;
@@ -463,12 +521,14 @@ function cfInjectFormFields(prefix) {
     }
     if (!progressed) break;
   }
+  // "— À la fin —" (par défaut) ou ancre introuvable (case supprimée
+  // entre-temps) : ajoutées après la dernière case déjà en place (Backtest
+  // si aucune autre n'existe encore), dans l'ordre où elles apparaissent
+  // dans APP.cfFields.
   remaining.forEach(f => {
-    grid.insertAdjacentHTML('beforeend', cfFieldInputHtml(prefix, f));
-    if (f.type === 'stars') {
-      const id = cfInputId(prefix, f);
-      if (typeof initStarPicker === 'function') initStarPicker(id + '-picker', id, 0);
-    }
+    const placed = startEl.parentNode.querySelectorAll('.cf-toggle-field');
+    const last = placed.length ? placed[placed.length - 1] : startEl;
+    last.insertAdjacentHTML('afterend', cfFieldInputHtml(prefix, f));
   });
 }
 
@@ -540,6 +600,13 @@ function cfApplyColumnOrder() {
       if (tds[id]) tr.insertBefore(tds[id], actionsTd);
     });
   });
+  // Les colonnes personnalisées sont ajoutées APRÈS le rendu natif du
+  // tableau (voir le wrapper de renderTable plus bas), qui a donc déjà
+  // appelé syncTableScrollbar() avec une largeur de tableau pas encore à
+  // jour (sans ces colonnes) — on la rappelle ici pour que la barre de
+  // défilement du haut reflète toujours la largeur RÉELLE finale, et
+  // reste déplaçable jusqu'à tout à droite (16/09/2026).
+  if (typeof syncTableScrollbar === 'function') syncTableScrollbar();
 }
 
 // ── Cases KPI (bande fine) ──
@@ -858,6 +925,20 @@ function cfEnsureChartsContainer() {
    sans distinction, plutôt qu'un correctif carte par carte. */
 #chartsContainer>.chart-card{margin-bottom:0;}
 @media(max-width:700px){#cfBottomRow{grid-template-columns:1fr!important;}}
+/* Correctif du 16/09/2026 : la media query générale (@media max-width:1100px,
+   style.css) empile le bouton BT et les choix de période sous le titre dès
+   qu'un écran est plus étroit que ça — ce qui inclut la plupart des
+   moniteurs PC tournés à la verticale (souvent ~1080px de large), qui
+   doivent pourtant rester en disposition "PC" (contrôles à droite du
+   titre), comme en mode normal/ultra wide. On force donc la ligne dès que
+   le mode vertical est actif, quelle que soit la largeur réelle. */
+body.cf-mode-vertical .chart-header{
+  flex-direction:row!important;
+  align-items:center!important;
+  gap:8px!important;
+}
+body.cf-mode-vertical .chart-title{width:auto!important;}
+body.cf-mode-vertical .period-btns{width:auto!important;}
 /* Un graphique doit toujours s'étirer pour occuper toute la place
    disponible sur sa ligne (2 camemberts seuls entre eux → 50% chacun, 3 →
    33% chacun, etc.) — jamais rester à une taille fixe alors qu'il reste de
@@ -1320,13 +1401,21 @@ function cfApplyChartLayout() {
   const container = document.getElementById('chartsContainer');
   if (!container) return;
   const maxes = CF_CHART_MAX_PER_ROW[cfScreenMode()] || CF_CHART_MAX_PER_ROW.normal;
-  // #chartsContainer a un gap:16px entre les cartes (voir cfEnsureChartsContainer) —
-  // un simple pourcentage (100/N%) ne le soustrait pas, donc N cartes
-  // débordaient de (N-1)*16px et une carte de trop était rejetée à la ligne
-  // suivante. calc() soustrait explicitement la place prise par les gaps.
+  // Espacement entre cartes de graphiques : 16px par défaut, réduit de
+  // moitié (8px) en mode "PC vertical" (16/09/2026, demande de Paul) — un
+  // moniteur tourné à la verticale affiche déjà beaucoup plus de lignes de
+  // graphiques empilées que les autres modes, un espacement resserré limite
+  // le défilement. Recalculé à chaque passage ici (resize, changement de
+  // mode...), pas seulement à la création du conteneur.
+  const gap = cfScreenMode() === 'vertical' ? 8 : 16;
+  container.style.gap = gap + 'px';
+  // #chartsContainer a un gap entre les cartes (voir ci-dessus) — un simple
+  // pourcentage (100/N%) ne le soustrait pas, donc N cartes débordaient de
+  // (N-1)*gap et une carte de trop était rejetée à la ligne suivante.
+  // calc() soustrait explicitement la place prise par les gaps.
   container.style.setProperty(
     '--cf-pie-basis',
-    'calc((100% - ' + (maxes.pie - 1) * 16 + 'px) / ' + maxes.pie + ')'
+    'calc((100% - ' + (maxes.pie - 1) * gap + 'px) / ' + maxes.pie + ')'
   );
   container.querySelectorAll('.cf-row-break').forEach(el => el.remove());
   const children = Array.from(container.children);
@@ -1372,7 +1461,7 @@ function cfApplyChartLayout() {
       }
       const runSize = runEnd - i + 1;
       const basisPct =
-        runSize > 1 ? 'calc((100% - ' + (runSize - 1) * 16 + 'px) / ' + runSize + ')' : '100%';
+        runSize > 1 ? 'calc((100% - ' + (runSize - 1) * gap + 'px) / ' + runSize + ')' : '100%';
       for (let k = i; k <= runEnd; k++) {
         children[k].style.flex = '1 1 ' + basisPct;
       }
@@ -1779,18 +1868,32 @@ function cfWidgetOptionsHtml(type) {
   return allowed.map(k => `<option value="${k}">${CF_WIDGET_META[k].label}</option>`).join('');
 }
 function cfPopulateAnchorSelects(f) {
-  const fieldOpts = ['<option value="">— À la fin —</option>']
-    .concat(
-      CF_BUILTIN_FORM_ANCHORS.map(
-        b => `<option value="${b.id}">Après : ${escapeHtml(b.label)}</option>`
-      )
-    )
-    .concat(
-      APP.cfFields
-        .filter(x => !f || x.id !== f.id)
-        .map(x => `<option value="${x.id}">Après : ${escapeHtml(x.label)}</option>`)
-    )
-    .concat(['<option value="__start__">— Au début —</option>']);
+  const type = document.getElementById('cfm-type').value;
+  // Case à cocher (Oui/Non) : ne va jamais dans le questionnaire — reste
+  // toujours en bas, à côté de "Backtest" (cfInjectToggleFields). Seul son
+  // ordre par rapport aux AUTRES cases à cocher est configurable ici, jamais
+  // par rapport aux questions du questionnaire (16/09/2026).
+  const fieldOpts =
+    type === 'toggle'
+      ? ['<option value="">— À la fin —</option>']
+          .concat(
+            APP.cfFields
+              .filter(x => (!f || x.id !== f.id) && x.type === 'toggle')
+              .map(x => `<option value="${x.id}">Après : ${escapeHtml(x.label)}</option>`)
+          )
+          .concat(['<option value="__start__">— Au début (juste après Backtest) —</option>'])
+      : ['<option value="">— À la fin —</option>']
+          .concat(
+            CF_BUILTIN_FORM_ANCHORS.map(
+              b => `<option value="${b.id}">Après : ${escapeHtml(b.label)}</option>`
+            )
+          )
+          .concat(
+            APP.cfFields
+              .filter(x => (!f || x.id !== f.id) && x.type !== 'toggle')
+              .map(x => `<option value="${x.id}">Après : ${escapeHtml(x.label)}</option>`)
+          )
+          .concat(['<option value="__start__">— Au début —</option>']);
   document.getElementById('cfm-afterfield').innerHTML = fieldOpts.join('');
 
   const colOpts = ['<option value="">— À la fin —</option>']
@@ -1844,6 +1947,8 @@ function cfOnTypeChange() {
   const type = document.getElementById('cfm-type').value;
   document.getElementById('cfm-options-wrap').style.display = type === 'select' ? '' : 'none';
   document.getElementById('cfm-widgetkind').innerHTML = cfWidgetOptionsHtml(type);
+  const f = cfEditingId ? APP.cfFields.find(x => x.id === cfEditingId) : null;
+  cfPopulateAnchorSelects(f);
   cfOnWidgetKindChange();
 }
 function cfOnWidgetKindChange() {

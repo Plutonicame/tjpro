@@ -385,9 +385,12 @@ function exportLocalBackup() {
     };
     const blob = new Blob([JSON.stringify(backup, null, 2)], {type: 'application/json'});
     const url = URL.createObjectURL(blob);
+    // Nombre total de trades toutes comptes confondus, dans le nom du
+    // fichier pour s'y retrouver entre plusieurs sauvegardes (16/09/2026).
+    const totalTrades = exportAccounts.reduce((sum, acc) => sum + (acc.trades ? acc.trades.length : 0), 0);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `tjp-sauvegarde-${new Date().toISOString().slice(0, 10)}.json`;
+    a.download = `tjp-sauvegarde-${new Date().toISOString().slice(0, 10)}-${totalTrades}trades.json`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
