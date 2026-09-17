@@ -174,6 +174,11 @@ const FC_CSS = `
 .fc-msg-row:not(.mine) .fc-bubble{background:var(--fc-bubble-theirs-bg,var(--surface));border:1px solid var(--fc-bubble-theirs-border,var(--border));border-bottom-left-radius:3px;}
 .fc-bubble-text{white-space:pre-wrap;word-break:break-word;color:var(--fc-bubble-text,var(--text));}
 .fc-bubble-time{font-size:9px;color:var(--fc-time-color,var(--muted));margin-top:3px;text-align:right;font-family:var(--mono);}
+/* Messages 2x plus grands en PC normal et PC ultra wide uniquement (trop
+   fins/petits sur ces écrans plus larges — signalé le 16/09/2026). Pas de
+   changement en téléphone ni PC vertical, non demandé. */
+body.cf-mode-normal .fc-bubble,
+body.cf-mode-ultrawide .fc-bubble{padding:16px 22px;font-size:26px;line-height:1.4;}
 .fc-react-trigger{opacity:0;transition:opacity .15s;flex-shrink:0;width:22px;height:22px;border-radius:50%;background:var(--fc-react-trigger-bg,var(--surface));border:1px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:11px;cursor:pointer;position:relative;color:var(--muted);padding:0;}
 .fc-msg-inner:hover .fc-react-trigger,.fc-msg-row.show-react .fc-react-trigger{opacity:1;}
 .fc-react-face{filter:grayscale(1);opacity:.85;}
