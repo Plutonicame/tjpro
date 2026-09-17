@@ -871,7 +871,13 @@ function fcBuildTradeCardHtml(t) {
   const res = typeof t.res === 'number' ? t.res : parseFloat(t.res) || 0;
   const resColor =
     res >= 0 ? 'var(--fc-trade-pos-color,var(--green))' : 'var(--fc-trade-neg-color,var(--red))';
-  const resTxt = (res >= 0 ? '+' : '') + res.toFixed(2) + ' €';
+  const pctTxt =
+    typeof t.resPct === 'number' ? ` (${t.resPct >= 0 ? '+' : ''}${t.resPct.toFixed(2)}%)` : '';
+  const resTxt = (res >= 0 ? '+' : '') + res.toFixed(2) + ' €' + pctTxt;
+  const capTxt =
+    typeof t.capitalAvant === 'number' && typeof t.capitalApres === 'number'
+      ? `${t.capitalAvant.toLocaleString('fr-FR')} € → ${t.capitalApres.toLocaleString('fr-FR')} €`
+      : '';
   const tfList = (t.tf || '').split('|').filter(Boolean);
   const confList = (t.conf || '').split('|').filter(Boolean);
   const imgs = Array.isArray(t.images) ? t.images.slice(0, 6) : [];
@@ -886,7 +892,9 @@ function fcBuildTradeCardHtml(t) {
     <div class="fc-trade-card-body">
       <div class="fc-trade-row"><span>Date</span><span>${fcEsc(t.date || '—')}${t.heure ? ' ' + fcEsc(t.heure) : ''}</span></div>
       ${t.session ? `<div class="fc-trade-row"><span>Session</span><span>${fcEsc(t.session)}</span></div>` : ''}
-      ${t.rrPris || t.rrCible ? `<div class="fc-trade-row"><span>RR</span><span>${fcEsc(String(t.rrPris || t.rrCible))}</span></div>` : ''}
+      ${capTxt ? `<div class="fc-trade-row"><span>Compte</span><span>${fcEsc(capTxt)}</span></div>` : ''}
+      ${t.rrCible ? `<div class="fc-trade-row"><span>RR Visé</span><span>${fcEsc(String(t.rrCible))}R</span></div>` : ''}
+      ${t.rrPris ? `<div class="fc-trade-row"><span>RR Pris</span><span>${fcEsc(String(t.rrPris))}R</span></div>` : ''}
       ${t.mgmt ? `<div class="fc-trade-row"><span>Mgmt</span><span>${fcEsc(t.mgmt)}</span></div>` : ''}
       ${t.reprend ? `<div class="fc-trade-row"><span>Reprend.</span><span>${fcEsc(t.reprend)}</span></div>` : ''}
       ${starsN ? `<div class="fc-trade-row"><span>Note</span><span>${starsHtml}</span></div>` : ''}
@@ -1487,9 +1495,32 @@ function fcCollectCustomFields(t) {
   });
   return out;
 }
+// Capital avant/après ce trade + % du résultat par rapport à ce capital —
+// même règle de calcul que la colonne "%" de l'historique (computePctBefore,
+// app-part1.js : capital de départ + somme des trades PRÉCÉDENTS triés par
+// date/heure). Recalculé une seule fois ICI, au moment du partage, et
+// mémorisé dans le message — un ami qui reçoit la fiche n'a pas forcément
+// ce trade dans ses propres APP.trades pour le recalculer lui-même, et la
+// fiche doit de toute façon rester une photo figée de l'état au moment du
+// partage (16/09/2026).
+function fcCapBeforeAfterPct(tid) {
+  const s = [...APP.trades].sort(
+    (a, b) => a.date.localeCompare(b.date) || (a.heure || '').localeCompare(b.heure || ''),
+  );
+  let cap = typeof CAPITAL === 'function' ? CAPITAL() : 0;
+  for (const t of s) {
+    if (t.id === tid) {
+      const res = t.res || 0;
+      return {avant: cap, apres: cap + res, pct: cap ? (res / cap) * 100 : 0};
+    }
+    cap += t.res || 0;
+  }
+  return null;
+}
 function fcSendTradeMessage(tradeId) {
   const t = (APP.trades || []).find((x) => x.id === tradeId);
   if (!t) return;
+  const capInfo = fcCapBeforeAfterPct(tradeId);
   const payload = {
     id: t.id,
     date: t.date || '',
@@ -1500,6 +1531,9 @@ function fcSendTradeMessage(tradeId) {
     rrCible: t.rrCible || 0,
     rrPris: t.rrPris || 0,
     res: t.res || 0,
+    resPct: capInfo ? capInfo.pct : null,
+    capitalAvant: capInfo ? capInfo.avant : null,
+    capitalApres: capInfo ? capInfo.apres : null,
     mgmt: t.mgmt || '',
     reprend: t.reprend || '',
     notes: t.notes || '',
