@@ -894,7 +894,7 @@ function fcBuildTradeCardHtml(t) {
       ${t.session ? `<div class="fc-trade-row"><span>Session</span><span>${fcEsc(t.session)}</span></div>` : ''}
       ${capTxt ? `<div class="fc-trade-row"><span>Compte</span><span>${fcEsc(capTxt)}</span></div>` : ''}
       ${t.rrCible ? `<div class="fc-trade-row"><span>RR Visé</span><span>${fcEsc(String(t.rrCible))}R</span></div>` : ''}
-      ${t.rrPris ? `<div class="fc-trade-row"><span>RR Pris</span><span>${fcEsc(String(t.rrPris))}R</span></div>` : ''}
+      ${typeof t.rrReel === 'number' && t.rrReel ? `<div class="fc-trade-row"><span>RR Pris</span><span>${fcEsc(String(t.rrReel))}R</span></div>` : ''}
       ${t.mgmt ? `<div class="fc-trade-row"><span>Mgmt</span><span>${fcEsc(t.mgmt)}</span></div>` : ''}
       ${t.reprend ? `<div class="fc-trade-row"><span>Reprend.</span><span>${fcEsc(t.reprend)}</span></div>` : ''}
       ${starsN ? `<div class="fc-trade-row"><span>Note</span><span>${starsHtml}</span></div>` : ''}
@@ -1495,21 +1495,26 @@ function fcCollectCustomFields(t) {
   });
   return out;
 }
-// Capital avant/après ce trade + % du résultat par rapport à ce capital —
-// même règle de calcul que la colonne "%" de l'historique (computePctBefore,
-// app-part1.js : capital de départ + somme des trades PRÉCÉDENTS triés par
-// date/heure). Recalculé une seule fois ICI, au moment du partage, et
-// mémorisé dans le message — un ami qui reçoit la fiche n'a pas forcément
-// ce trade dans ses propres APP.trades pour le recalculer lui-même, et la
-// fiche doit de toute façon rester une photo figée de l'état au moment du
-// partage (16/09/2026).
-function fcCapBeforeAfterPct(tid) {
-  const s = [...APP.trades].sort(
-    (a, b) => a.date.localeCompare(b.date) || (a.heure || '').localeCompare(b.heure || ''),
-  );
+// Capital avant/après ce trade + % du résultat par rapport à ce capital.
+// Deux séries JAMAIS mélangées : un trade backtest se compare uniquement
+// aux AUTRES trades backtest, un trade réel uniquement aux autres trades
+// réels — chacune part du même Capital de départ (CAPITAL(), il n'existe
+// pas de capital de départ séparé pour le backtest dans l'app) mais
+// accumule séparément (signalé le 16/09/2026 : jusqu'ici un trade réel
+// pouvait inclure à tort le résultat de trades backtest antérieurs dans
+// son "capital avant", et inversement). Recalculé une seule fois ICI, au
+// moment du partage, et mémorisé dans le message — un ami qui reçoit la
+// fiche n'a pas forcément ce trade dans ses propres APP.trades pour le
+// recalculer lui-même, et la fiche doit de toute façon rester une photo
+// figée de l'état au moment du partage.
+function fcCapBeforeAfterPct(trade) {
+  const isBT = !!trade.backtest;
+  const s = (APP.trades || [])
+    .filter((x) => !!x.backtest === isBT)
+    .sort((a, b) => a.date.localeCompare(b.date) || (a.heure || '').localeCompare(b.heure || ''));
   let cap = typeof CAPITAL === 'function' ? CAPITAL() : 0;
   for (const t of s) {
-    if (t.id === tid) {
+    if (t.id === trade.id) {
       const res = t.res || 0;
       return {avant: cap, apres: cap + res, pct: cap ? (res / cap) * 100 : 0};
     }
@@ -1520,7 +1525,7 @@ function fcCapBeforeAfterPct(tid) {
 function fcSendTradeMessage(tradeId) {
   const t = (APP.trades || []).find((x) => x.id === tradeId);
   if (!t) return;
-  const capInfo = fcCapBeforeAfterPct(tradeId);
+  const capInfo = fcCapBeforeAfterPct(t);
   const payload = {
     id: t.id,
     date: t.date || '',
@@ -1529,7 +1534,13 @@ function fcSendTradeMessage(tradeId) {
     paire: t.paire || '',
     dir: t.dir || '',
     rrCible: t.rrCible || 0,
-    rrPris: t.rrPris || 0,
+    // RR Pris RÉEL, valable aussi bien en mode manuel qu'automatique — computeRR()
+    // gère déjà les deux (renvoie t.rrPris tel quel en manuel, sinon le calcule à
+    // partir du capital/risque réellement actifs au moment du trade). Avant ce
+    // correctif, seul t.rrPris était envoyé, qui ne contient une valeur qu'en
+    // mode manuel : un trade en RR auto n'affichait donc jamais son RR Pris
+    // dans la fiche partagée (signalé le 16/09/2026).
+    rrReel: typeof computeRR === 'function' ? computeRR(t) : t.rrPris || 0,
     res: t.res || 0,
     resPct: capInfo ? capInfo.pct : null,
     capitalAvant: capInfo ? capInfo.avant : null,
