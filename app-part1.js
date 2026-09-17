@@ -4332,6 +4332,9 @@ function buildTV() {
     {v: '--btn-bkdir-bg', l: 'Dossier de sauvegarde - fond', page: 'Paramètres', section: 'Sauvegarde locale'},
     {v: '--btn-bkdir-bd', l: 'Dossier de sauvegarde - bordure', page: 'Paramètres', section: 'Sauvegarde locale'},
     {v: '--btn-bkdir-tx', l: 'Dossier de sauvegarde - texte', page: 'Paramètres', section: 'Sauvegarde locale'},
+    {v: '--btn-bkdirclear-bg', l: 'Dossier de sauvegarde (croix) - fond', page: 'Paramètres', section: 'Sauvegarde locale'},
+    {v: '--btn-bkdirclear-bd', l: 'Dossier de sauvegarde (croix) - bordure', page: 'Paramètres', section: 'Sauvegarde locale'},
+    {v: '--btn-bkdirclear-tx', l: 'Dossier de sauvegarde (croix) - texte', page: 'Paramètres', section: 'Sauvegarde locale'},
     {
       v: '--btn-delall-bg',
       l: 'Supprimer tout - fond',

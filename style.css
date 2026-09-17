@@ -182,6 +182,9 @@
   --btn-bkdir-bg: transparent;
   --btn-bkdir-bd: #64748b;
   --btn-bkdir-tx: #64748b;
+  --btn-bkdirclear-bg: transparent;
+  --btn-bkdirclear-bd: #64748b;
+  --btn-bkdirclear-tx: #64748b;
   /* Couleurs SÉPARÉES pour résultats/pourcentages journal */
   --result-pos: #00e5a0;
   --result-neg: #ef4444;
