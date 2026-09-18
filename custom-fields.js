@@ -799,7 +799,7 @@ function cfEnsureChartsContainer() {
 
   const container = document.createElement('div');
   container.id = 'chartsContainer';
-  container.style.cssText = 'display:flex;flex-wrap:wrap;gap:16px;';
+  container.style.cssText = 'display:flex;flex-wrap:wrap;gap:8px;';
   eqCard.parentNode.insertBefore(container, eqCard);
 
   eqCard.dataset.chartId = 'eq';
