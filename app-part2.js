@@ -2633,8 +2633,11 @@ function renderPcChat() {
   const messages = pcGetActiveMessages();
   pcUpdateChatTitleBar();
   if (!messages.length) {
+    const pseudo = typeof getProfile === 'function' ? getProfile().pseudo : '';
     box.innerHTML =
-      '<div class="pc-msg-empty">Pose-moi une question sur tes trades : "Résumé", "Quels sont mes points forts ?", "Quel jour suis-je le plus performant ?", "Mon RR moyen ?", "Que disent mes notes ?"...</div>';
+      '<div class="pc-msg-empty">Bonjour ' +
+      escapeHtml(pseudo) +
+      ", comment puis-je t'aider ?</div>";
     return;
   }
   box.innerHTML = messages
@@ -2681,11 +2684,17 @@ function pcCloseConvPanel() {
 function pcRenderConvList() {
   const list = document.getElementById('pcConvList');
   if (!list) return;
-  if (!pcConversations.length) {
+  // Une "Nouvelle conversation" jamais entamée (aucun message) ne doit pas
+  // apparaître dans l'historique — seulement une fois qu'elle contient au
+  // moins un message (18/09/2026, demande de Paul). Elle reste malgré tout
+  // la conversation active affichée dans le chat, juste absente de cette
+  // liste tant qu'elle est vide.
+  const withMessages = pcConversations.filter(c => c.messages && c.messages.length > 0);
+  if (!withMessages.length) {
     list.innerHTML = '<div class="pc-conv-empty">Aucune conversation pour le moment.</div>';
     return;
   }
-  const sorted = [...pcConversations].sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+  const sorted = [...withMessages].sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
   list.innerHTML = sorted
     .map(
       c => `
@@ -2724,6 +2733,12 @@ function pcStartFreshSessionConversation() {
 }
 
 function pcNewConversation() {
+  // Si la conversation active est déjà une "Nouvelle conversation" jamais
+  // entamée (aucun message), on ne fait rien : le bouton "+" reste affiché
+  // et cliquable, mais ne doit pas empiler une deuxième conversation vide
+  // par-dessus celle déjà en cours (18/09/2026, demande de Paul).
+  const active = pcGetActiveConv();
+  if (active && (!active.messages || active.messages.length === 0)) return;
   const conv = {
     id: 'conv-' + Date.now(),
     title: 'Nouvelle conversation',

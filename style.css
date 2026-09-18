@@ -928,6 +928,18 @@ body.pencil-mode [data-editable]:hover {
 .chip.sel::before {
   content: '✓ ';
 }
+/* Timeframes (ajout ET édition de trade) : contrairement aux confluences
+   (nombre et longueur très variables), la liste des timeframes est courte
+   et régulière — on répartit les cases pour qu'elles remplissent toute la
+   largeur de la ligne au lieu de garder leur largeur au contenu, ce qui
+   laissait de l'espace à droite et faisait passer la dernière case seule à
+   la ligne alors qu'il restait largement la place (18/09/2026, demande de
+   Paul, PC normal ET ultrawide). */
+#tf-wrap .chip,
+#e-tf-wrap .chip {
+  flex: 1 1 64px;
+  justify-content: center;
+}
 
 .btn {
   font-family: var(--mono);
@@ -1555,7 +1567,8 @@ tbody td {
   padding: 3px 0;
 }
 .cal-day {
-  min-height: 58px;
+  height: 58px;
+  overflow: hidden;
   border-radius: 4px;
   border: 1px solid var(--cal-day-border);
   padding: 3px 4px;

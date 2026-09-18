@@ -98,7 +98,7 @@ const CF_TYPE_META = {
 const CF_WIDGET_META = {
   none: {label: 'Aucun'},
   kpi: {label: 'Case KPI (bande fine, en haut)'},
-  card: {label: 'Widget (carré / rond / rectangle)'},
+  card: {label: 'Widget (rectangle)'},
   line: {label: 'Courbe'},
   'bar-v': {label: 'Barres verticales'},
   'bar-h': {label: 'Barres horizontales'},
@@ -903,8 +903,6 @@ function cfEnsureChartsContainer() {
 .cf-stat-inner{text-align:center;}
 .cf-stat-label{font-size:10px;letter-spacing:1px;text-transform:uppercase;color:var(--muted);margin-bottom:6px;}
 .cf-stat-value{font-family:var(--mono);font-size:20px;font-weight:700;}
-.cf-shape-square{max-width:200px;aspect-ratio:1/1;margin:0 auto;}
-.cf-shape-circle{max-width:200px;aspect-ratio:1/1;border-radius:50%;margin:0 auto;}
 .cf-shape-rect{max-width:360px;min-height:90px;margin:0 auto;}
 .cf-pie-body{display:flex;align-items:center;justify-content:center;}
 /* !important à dessein : le Win Rate natif gardait une zone plus grande que
@@ -1035,8 +1033,7 @@ function cfEnsureStatCardNode(field) {
     card = document.createElement('div');
     card.id = 'cfcard-' + field.id;
     card.dataset.chartId = field.id;
-    card.className =
-      'chart-card cf-stat-card cf-shape-' + ((field.widget && field.widget.shape) || 'rect');
+    card.className = 'chart-card cf-stat-card cf-shape-rect';
     card.innerHTML = `<div class="cf-stat-inner"><div class="cf-stat-label" data-editable id="cflabel-${field.id}">${escapeHtml(field.colName || field.label)}</div><div class="cf-stat-value" id="cfstatval-${field.id}">—</div></div>`;
     container.appendChild(card);
   }
@@ -1401,13 +1398,12 @@ function cfApplyChartLayout() {
   const container = document.getElementById('chartsContainer');
   if (!container) return;
   const maxes = CF_CHART_MAX_PER_ROW[cfScreenMode()] || CF_CHART_MAX_PER_ROW.normal;
-  // Espacement entre cartes de graphiques : 16px par défaut, réduit de
-  // moitié (8px) en mode "PC vertical" (16/09/2026, demande de Paul) — un
-  // moniteur tourné à la verticale affiche déjà beaucoup plus de lignes de
-  // graphiques empilées que les autres modes, un espacement resserré limite
-  // le défilement. Recalculé à chaque passage ici (resize, changement de
-  // mode...), pas seulement à la création du conteneur.
-  const gap = cfScreenMode() === 'vertical' ? 8 : 16;
+  // Espacement entre cartes de graphiques : 8px dans tous les modes
+  // (18/09/2026, demande de Paul — auparavant 16px par défaut, réduit à 8px
+  // uniquement en mode "PC vertical" le 16/09/2026). Recalculé à chaque
+  // passage ici (resize, changement de mode...), pas seulement à la
+  // création du conteneur.
+  const gap = 8;
   container.style.gap = gap + 'px';
   // #chartsContainer a un gap entre les cartes (voir ci-dessus) — un simple
   // pourcentage (100/N%) ne le soustrait pas, donc N cartes débordaient de
@@ -1480,6 +1476,15 @@ function cfApplyChartLayout() {
     if (cfChartGroup(children[idx]) !== cfChartGroup(children[idx - 1])) {
       const spacer = document.createElement('div');
       spacer.className = 'cf-row-break';
+      // Le spacer est un flex-item à part entière : le gap du conteneur
+      // s'applique aussi bien AVANT qu'APRÈS lui (hauteur 0 ou pas), ce qui
+      // double l'espace visuel entre deux vrais graphiques de groupes
+      // différents (gap + spacer + gap = 2×gap) par rapport à deux
+      // graphiques consécutifs du même groupe (simple gap). Une marge
+      // négative égale au gap annule le gap du DESSUS du spacer, pour
+      // retrouver un espacement total identique (1×gap) de part et d'autre
+      // d'un changement de groupe (18/09/2026, demande de Paul).
+      spacer.style.marginTop = '-' + gap + 'px';
       container.insertBefore(spacer, children[idx]);
     }
   }
@@ -1504,6 +1509,11 @@ function cfBuildThemeVars() {
         section: 'Listes personnalisables'
       });
     });
+  // Toutes les couleurs des widgets/graphiques de champs personnalisés vivent
+  // dans leur propre fenêtre de thème ("Champ personnalisé"), séparée de
+  // Track Record : Cases KPI/Widget d'un côté, vrais graphiques (courbe,
+  // barres, camembert) de l'autre.
+  const CF_THEME_PAGE = 'Champ personnalisé';
   APP.cfFields.forEach(f => {
     const kind = f.widget && f.widget.kind;
     if (!kind || kind === 'none') return;
@@ -1512,59 +1522,59 @@ function cfBuildThemeVars() {
       out.push({
         v: '--cf-' + f.id + '-color',
         l: lbl + ' — couleur',
-        page: 'Track Record',
-        section: 'Champs personnalisés'
+        page: CF_THEME_PAGE,
+        section: 'Cases & Widgets'
       });
     } else if (kind === 'line') {
       out.push({
         v: '--cf-' + f.id + '-title',
         l: lbl + ' — titre',
-        page: 'Track Record',
-        section: 'Champs personnalisés'
+        page: CF_THEME_PAGE,
+        section: 'Graphique'
       });
       out.push({
         v: '--cf-' + f.id + '-line',
         l: lbl + ' — courbe',
-        page: 'Track Record',
-        section: 'Champs personnalisés'
+        page: CF_THEME_PAGE,
+        section: 'Graphique'
       });
       out.push({
         v: '--cf-' + f.id + '-fill-top',
         l: lbl + ' — dégradé haut',
-        page: 'Track Record',
-        section: 'Champs personnalisés'
+        page: CF_THEME_PAGE,
+        section: 'Graphique'
       });
       out.push({
         v: '--cf-' + f.id + '-fill-bot',
         l: lbl + ' — dégradé bas',
-        page: 'Track Record',
-        section: 'Champs personnalisés'
+        page: CF_THEME_PAGE,
+        section: 'Graphique'
       });
     } else if (kind === 'bar-v' || kind === 'bar-h') {
       out.push({
         v: '--cf-' + f.id + '-title',
         l: lbl + ' — titre',
-        page: 'Track Record',
-        section: 'Champs personnalisés'
+        page: CF_THEME_PAGE,
+        section: 'Graphique'
       });
       out.push({
         v: '--cf-' + f.id + '-pos',
         l: lbl + ' — positif',
-        page: 'Track Record',
-        section: 'Champs personnalisés'
+        page: CF_THEME_PAGE,
+        section: 'Graphique'
       });
       out.push({
         v: '--cf-' + f.id + '-neg',
         l: lbl + ' — négatif',
-        page: 'Track Record',
-        section: 'Champs personnalisés'
+        page: CF_THEME_PAGE,
+        section: 'Graphique'
       });
     } else if (kind === 'pie') {
       out.push({
         v: '--cf-' + f.id + '-title',
         l: lbl + ' — titre',
-        page: 'Track Record',
-        section: 'Champs personnalisés'
+        page: CF_THEME_PAGE,
+        section: 'Graphique'
       });
       const n = cfPieSliceCount(f);
       for (let i = 1; i <= n; i++) {
@@ -1573,8 +1583,8 @@ function cfBuildThemeVars() {
         out.push({
           v: '--cf-' + f.id + '-slice-' + i,
           l: lbl + ' — ' + optLabel,
-          page: 'Track Record',
-          section: 'Champs personnalisés'
+          page: CF_THEME_PAGE,
+          section: 'Graphique'
         });
       }
     }
@@ -1842,10 +1852,6 @@ function cfEnsureModal() {
       <div class="fg" style="margin-bottom:9px;"><label>Position dans le questionnaire</label><select id="cfm-afterfield"></select></div>
       <div class="fg" style="margin-bottom:9px;"><label>Position dans les colonnes</label><select id="cfm-aftercol"></select></div>
       <div class="fg" style="margin-bottom:9px;"><label>Widget Track Record</label><select id="cfm-widgetkind" onchange="cfOnWidgetKindChange()"></select></div>
-      <div class="fg" id="cfm-shape-row" style="margin-bottom:9px;display:none;">
-        <label>Forme du widget</label>
-        <select id="cfm-widgetshape"><option value="square">Carré</option><option value="circle">Rond</option><option value="rect">Rectangle</option></select>
-      </div>
       <div class="fg" id="cfm-widgetpos-row" style="margin-bottom:14px;">
         <label>Position du widget</label>
         <select id="cfm-widgetpos"></select>
@@ -1953,7 +1959,6 @@ function cfOnTypeChange() {
 }
 function cfOnWidgetKindChange() {
   const kind = document.getElementById('cfm-widgetkind').value;
-  document.getElementById('cfm-shape-row').style.display = kind === 'card' ? '' : 'none';
   document.getElementById('cfm-widgetpos-row').style.display = kind === 'none' ? 'none' : '';
   const f = cfEditingId ? APP.cfFields.find(x => x.id === cfEditingId) : null;
   cfPopulateWidgetPosSelect(f);
@@ -1977,10 +1982,6 @@ function cfOpenBuilder(editId) {
   document.getElementById('cfm-widgetkind').innerHTML = cfWidgetOptionsHtml(f ? f.type : 'text');
   document.getElementById('cfm-widgetkind').value =
     f && f.widget && f.widget.kind ? f.widget.kind : 'none';
-  document.getElementById('cfm-widgetshape').value =
-    f && f.widget && f.widget.shape ? f.widget.shape : 'square';
-  document.getElementById('cfm-shape-row').style.display =
-    document.getElementById('cfm-widgetkind').value === 'card' ? '' : 'none';
   document.getElementById('cfm-widgetpos-row').style.display =
     document.getElementById('cfm-widgetkind').value === 'none' ? 'none' : '';
   cfPopulateWidgetPosSelect(f);
@@ -2016,7 +2017,6 @@ function cfSaveBuilder() {
   const afterField = document.getElementById('cfm-afterfield').value;
   const afterCol = document.getElementById('cfm-aftercol').value;
   const widgetKind = document.getElementById('cfm-widgetkind').value;
-  const widgetShape = document.getElementById('cfm-widgetshape').value;
   const widgetAfter = document.getElementById('cfm-widgetpos').value;
 
   let field = cfEditingId ? APP.cfFields.find(x => x.id === cfEditingId) : null;
@@ -2030,7 +2030,7 @@ function cfSaveBuilder() {
   field.colName = colName;
   field.afterField = afterField;
   field.afterCol = afterCol;
-  field.widget = {kind: widgetKind, shape: widgetShape};
+  field.widget = {kind: widgetKind};
   field.widgetAfter = widgetAfter;
 
   cfEnsureOrders();
