@@ -1284,6 +1284,133 @@ tbody td {
   }
 }
 
+/* Barre de saisie du chat Analyse IA — même design que la barre du chat Ami
+   (fc-input-bar et consorts dans friends-chat.js), avec ses propres
+   variables de thème --ia-bar-* (18/09/2026, demande de Paul). */
+.ia-bar {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  margin-top: 10px;
+}
+.ia-bar-attach-btn,
+.ia-bar-mic-btn,
+.ia-bar-cancel-btn {
+  background: none;
+  border: none;
+  color: var(--ia-bar-icon-color, var(--muted));
+  font-size: 19px;
+  cursor: pointer;
+  flex-shrink: 0;
+  padding: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+.ia-bar-attach-btn:hover,
+.ia-bar-mic-btn:hover {
+  color: var(--ia-bar-send-color, var(--green));
+}
+.ia-bar-cancel-btn {
+  display: none;
+  color: var(--ia-bar-cancel-color, var(--red));
+  transition: transform 0.12s, background 0.12s, color 0.12s;
+  border-radius: 50%;
+  align-self: center;
+}
+.ia-bar-cancel-btn:hover {
+  opacity: 0.8;
+}
+.ia-bar-cancel-btn.armed {
+  color: #fff;
+  background: var(--ia-bar-cancel-color, var(--red));
+  transform: scale(1.3);
+}
+.ia-bar-mic-btn[data-mode='send'] {
+  color: var(--ia-bar-send-color, var(--green));
+}
+.ia-bar-input-center {
+  flex: 1;
+  min-width: 0;
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+.ia-bar-rec-indicator {
+  display: none;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  background: transparent;
+  border: none;
+  padding: 8px 2px;
+  box-sizing: border-box;
+}
+.ia-bar-rec-wave {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  height: 22px;
+  overflow: hidden;
+}
+.ia-bar-wave-bar {
+  flex: 0 0 3px;
+  width: 3px;
+  background: var(--ia-bar-wave-color, var(--green));
+  border-radius: 2px;
+  height: 15%;
+  transition: height 0.08s linear;
+}
+.ia-bar-mic-wrap {
+  position: relative;
+  flex-shrink: 0;
+  align-self: center;
+}
+.ia-bar-rec-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--ia-bar-rec-dot-color, var(--red));
+  animation: iaBarPulse 1s infinite;
+  flex-shrink: 0;
+}
+.ia-bar-rec-timer {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--text);
+  flex-shrink: 0;
+}
+.ia-bar-text-input {
+  flex: 1;
+  resize: none;
+  max-height: 96px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 8px 12px;
+  color: var(--text);
+  font-family: var(--sans);
+  font-size: 13px;
+  line-height: 1.35;
+}
+.ia-bar-text-input:focus {
+  outline: none;
+  border-color: var(--green);
+}
+@keyframes iaBarPulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.3;
+  }
+}
+
 .pc-chat-bar {
   display: flex;
   align-items: center;

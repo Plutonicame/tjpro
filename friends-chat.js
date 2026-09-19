@@ -215,25 +215,15 @@ const FC_CSS = `
 .fc-trade-notes{margin-top:6px;font-size:10px;color:var(--muted);font-style:italic;white-space:pre-wrap;}
 .fc-trade-imgs{display:flex;gap:4px;margin-top:6px;flex-wrap:wrap;}
 .fc-trade-imgs img{width:44px;height:34px;object-fit:cover;border-radius:4px;cursor:zoom-in;border:1px solid var(--border);}
-/* Fiche de trade partagée (pas les bulles de texte) 2x plus grande en PC
-   normal et PC ultra wide uniquement — corrigé le 17/09/2026 : la 1ère
-   version (16/09) avait doublé les bulles de texte par erreur au lieu des
-   zones de trade envoyées ; les bulles de texte redeviennent donc
-   inchangées ci-dessus. Pas de changement en téléphone ni PC vertical. */
+/* Zone de la fiche de trade partagée +50% par rapport à la largeur de base
+   (220px → 330px) sur les 3 modes PC (normal, vertical, ultrawide) — le
+   contenu à l'intérieur (texte, badges, chips, notes, images) reste à sa
+   taille normale, seule la boîte est agrandie (18/09/2026, demande de Paul
+   — annule le 2x du 16-17/09 qui avait aussi doublé le contenu par
+   erreur). Pas de changement en téléphone. */
 body.cf-mode-normal .fc-trade-card,
-body.cf-mode-ultrawide .fc-trade-card{width:440px;}
-body.cf-mode-normal .fc-trade-card-head,
-body.cf-mode-ultrawide .fc-trade-card-head{padding:14px 20px;font-size:22px;}
-body.cf-mode-normal .fc-trade-card-body,
-body.cf-mode-ultrawide .fc-trade-card-body{padding:16px 20px;font-size:22px;}
-body.cf-mode-normal .fc-trade-card .fc-bt-badge,
-body.cf-mode-ultrawide .fc-trade-card .fc-bt-badge{font-size:16px;padding:2px 6px;}
-body.cf-mode-normal .fc-trade-chip,
-body.cf-mode-ultrawide .fc-trade-chip{font-size:18px;padding:4px 12px;}
-body.cf-mode-normal .fc-trade-notes,
-body.cf-mode-ultrawide .fc-trade-notes{font-size:20px;margin-top:12px;}
-body.cf-mode-normal .fc-trade-imgs img,
-body.cf-mode-ultrawide .fc-trade-imgs img{width:88px;height:68px;}
+body.cf-mode-vertical .fc-trade-card,
+body.cf-mode-ultrawide .fc-trade-card{width:330px;}
 .fc-input-bar{display:flex;align-items:flex-end;gap:8px;padding:10px 12px;border-top:1px solid var(--border);background:var(--surface);flex-shrink:0;}
 .fc-attach-btn,.fc-mic-btn,.fc-cancel-btn{background:none;border:none;color:var(--fc-icon-color,var(--muted));font-size:19px;cursor:pointer;flex-shrink:0;padding:4px;display:flex;align-items:center;justify-content:center;touch-action:none;user-select:none;-webkit-user-select:none;}
 .fc-attach-btn:hover,.fc-mic-btn:hover{color:var(--fc-send-color,var(--green));}

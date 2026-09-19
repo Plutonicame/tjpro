@@ -2555,7 +2555,7 @@ let pcActiveConvId = pcGetActiveConvId();
 function pcDeriveTitle(messages) {
   const firstUser = messages.find(m => m.role === 'user');
   if (!firstUser) return 'Nouvelle conversation';
-  const plain = firstUser.text.replace(/<[^>]+>/g, '').trim();
+  const plain = (firstUser.plainText || firstUser.text.replace(/<[^>]+>/g, '')).trim();
   return plain.length > 40 ? plain.slice(0, 40) + '…' : plain || 'Nouvelle conversation';
 }
 
@@ -2587,7 +2587,7 @@ function pcUpdateChatTitleBar() {
 // l'IA (pcImagesHtml). "img"/"src" sont autorisés, mais AUCUN attribut "on*"
 // (onclick compris) ne l'est : le zoom au clic passe par un écouteur délégué
 // (cf. plus bas), jamais par un attribut inline, qui serait de toute façon retiré.
-const PC_CHAT_ALLOWED_TAGS = ['br', 'strong', 'em', 'b', 'i', 'span', 'img'];
+const PC_CHAT_ALLOWED_TAGS = ['br', 'strong', 'em', 'b', 'i', 'span', 'div', 'img'];
 const PC_CHAT_ALLOWED_ATTR = ['id', 'class', 'style', 'src', 'title'];
 function pcSanitizeChatHtml(html) {
   const raw = String(html == null ? '' : html);
@@ -2649,7 +2649,7 @@ function renderPcChat() {
   box.scrollTop = box.scrollHeight;
 }
 
-function pcPushMsg(role, text) {
+function pcPushMsg(role, text, plainText) {
   let conv = pcGetActiveConv();
   if (!conv) {
     conv = {
@@ -2662,7 +2662,9 @@ function pcPushMsg(role, text) {
     pcActiveConvId = conv.id;
     pcSetActiveConvId(conv.id);
   }
-  conv.messages.push({role, text});
+  const msg = {role, text};
+  if (plainText) msg.plainText = plainText;
+  conv.messages.push(msg);
   if (conv.messages.length > 60) conv.messages = conv.messages.slice(-60);
   if (conv.title === 'Nouvelle conversation') conv.title = pcDeriveTitle(conv.messages);
   conv.updatedAt = Date.now();
@@ -2854,7 +2856,7 @@ function pcHistoryForAI(history) {
     .slice(-10) // les derniers échanges suffisent pour le contexte
     .map(m => ({
       role: m.role === 'user' ? 'user' : 'assistant',
-      text: m.text.replace(/<br\s*\/?>/gi, '\n').replace(/<[^>]+>/g, '')
+      text: m.plainText || m.text.replace(/<br\s*\/?>/gi, '\n').replace(/<[^>]+>/g, '')
     }));
 }
 
@@ -3019,6 +3021,381 @@ async function sendPcMessage() {
     pcPushMsg('bot', answer + imagesHtml);
   }
 }
+
+// ══ Barre de saisie du chat Analyse IA — même design que le chat Ami ══
+// Icônes dupliquées localement (pas réutilisées depuis friends-chat.js) pour
+// que cette barre reste fonctionnelle même si ce module optionnel n'est pas
+// chargé (18/09/2026, demande de Paul).
+const IA_ICON_MIC =
+  '<svg viewBox="0 0 24 24" width="19" height="19" fill="currentColor"><path d="M12 15a3.5 3.5 0 0 0 3.5-3.5v-5a3.5 3.5 0 0 0-7 0v5A3.5 3.5 0 0 0 12 15z"/><path d="M18 11.5a1 1 0 0 0-2 0 4 4 0 0 1-8 0 1 1 0 0 0-2 0 6 6 0 0 0 5 5.92V19h-1.5a1 1 0 0 0 0 2h5a1 1 0 0 0 0-2H13v-1.58a6 6 0 0 0 5-5.92z"/></svg>';
+const IA_ICON_SEND =
+  '<svg viewBox="0 0 24 24" width="19" height="19" fill="currentColor"><path d="M3.4 20.6l17.45-8.3a1 1 0 0 0 0-1.8L3.4 2.2a1 1 0 0 0-1.4 1.1l1.9 7L15 12 3.9 13.7l-1.9 7a1 1 0 0 0 1.4 1.1z"/></svg>';
+
+function iaUpdateMicSendBtn() {
+  const input = document.getElementById('pcQuestion');
+  const btn = document.getElementById('iaMicBtn');
+  if (!input || !btn) return;
+  const hasText = input.value.trim().length > 0;
+  btn.dataset.mode = hasText ? 'send' : 'mic';
+  btn.innerHTML = hasText ? IA_ICON_SEND : IA_ICON_MIC;
+}
+
+// ── Partage d'une fiche de trade avec l'IA — même fiche que le chat Ami ──
+// (fcBuildTradeCardHtml / fcCapBeforeAfterPct / fcCollectCustomFields dans
+// friends-chat.js), avec repli si ce module n'est pas chargé.
+function iaOpenTradePicker() {
+  iaRenderTradePickerList('');
+  const modal = document.getElementById('iaTradeModal');
+  if (modal) modal.classList.add('open');
+  const search = document.getElementById('iaTradeSearchInput');
+  if (search) {
+    search.value = '';
+    search.focus();
+  }
+}
+function iaCloseTradePicker() {
+  const modal = document.getElementById('iaTradeModal');
+  if (modal) modal.classList.remove('open');
+}
+function iaRenderTradePickerList(filter) {
+  const list = document.getElementById('iaTradePickList');
+  if (!list) return;
+  const f = (filter || '').toLowerCase();
+  const trades = (APP.trades || [])
+    .filter(t => !f || (t.paire || '').toLowerCase().includes(f) || (t.date || '').includes(f))
+    .sort((a, b) => (b.date || '').localeCompare(a.date || '') || b.id - a.id)
+    .slice(0, 60);
+  if (!trades.length) {
+    list.innerHTML = '<div class="fc-empty-hint">Aucun trade trouvé.</div>';
+    return;
+  }
+  list.innerHTML = trades
+    .map(t => {
+      const res = typeof t.res === 'number' ? t.res : parseFloat(t.res) || 0;
+      const resColor =
+        res >= 0 ? 'var(--fc-trade-pos-color,var(--green))' : 'var(--fc-trade-neg-color,var(--red))';
+      return `<div class="fc-trade-pick-item" onclick="iaSendTradeMessage(${t.id})">
+        <div class="fc-trade-pick-info">
+          <div class="fc-trade-pick-pair">${escapeHtml(t.paire || '—')}${t.dir ? ' · ' + escapeHtml(t.dir) : ''}${t.backtest ? '&nbsp;<span class="fc-bt-badge">BT</span>' : ''}</div>
+          <div class="fc-trade-pick-meta">${escapeHtml(t.date || '')}${t.heure ? ' ' + escapeHtml(t.heure) : ''}</div>
+        </div>
+        <div style="color:${resColor};font-family:var(--mono);font-size:12px;font-weight:700;flex-shrink:0;">${res >= 0 ? '+' : ''}${res.toFixed(2)}€</div>
+      </div>`;
+    })
+    .join('');
+}
+function iaSendTradeMessage(tradeId) {
+  const t = (APP.trades || []).find(x => x.id === tradeId);
+  if (!t) return;
+  const capInfo = typeof fcCapBeforeAfterPct === 'function' ? fcCapBeforeAfterPct(t) : null;
+  const payload = {
+    id: t.id,
+    date: t.date || '',
+    heure: t.heure || '',
+    session: t.session || '',
+    paire: t.paire || '',
+    dir: t.dir || '',
+    rrCible: t.rrCible || 0,
+    rrReel: typeof computeRR === 'function' ? computeRR(t) : t.rrPris || 0,
+    res: t.res || 0,
+    resPct: capInfo ? capInfo.pct : null,
+    capitalAvant: capInfo ? capInfo.avant : null,
+    capitalApres: capInfo ? capInfo.apres : null,
+    mgmt: t.mgmt || '',
+    reprend: t.reprend || '',
+    notes: t.notes || '',
+    stars: t.stars || 0,
+    tf: t.tf || '',
+    conf: t.conf || '',
+    backtest: !!t.backtest,
+    customFields: typeof fcCollectCustomFields === 'function' ? fcCollectCustomFields(t) : [],
+    images: Array.isArray(t.images) ? t.images.slice(0, 6) : []
+  };
+  // Les images de la fiche portent un onclick="openFullscreen(...)" inline, retiré par
+  // pcSanitizeChatHtml (aucun attribut on* autorisé) : on les fait plutôt correspondre à
+  // l'écouteur délégué déjà en place sur .pc-msg-img (cf. plus haut, pcImagesHtml).
+  const cardHtml =
+    typeof fcBuildTradeCardHtml === 'function'
+      ? fcBuildTradeCardHtml(payload).replace(
+          /<img src="([^"]*)" onclick="[^"]*">/g,
+          '<img class="pc-msg-img" src="$1">'
+        )
+      : `Fiche partagée : ${escapeHtml(payload.paire || '—')} du ${escapeHtml(payload.date || '—')}`;
+  const resTxt = (payload.res >= 0 ? '+' : '') + Number(payload.res).toFixed(2) + ' €';
+  const plainSummary =
+    `Fiche de trade partagée — ${payload.paire || '—'}${payload.dir ? ' ' + payload.dir : ''} du ${payload.date || '—'}, résultat ${resTxt}` +
+    (payload.notes ? `. Notes : ${payload.notes}` : '');
+  pcPushMsg('user', cardHtml, plainSummary);
+  iaCloseTradePicker();
+}
+
+// ── Message vocal : contrairement au chat Ami, l'IA ne peut pas "écouter"
+// un fichier audio. Le vocal est donc transcrit en direct (reconnaissance
+// vocale du navigateur) puis envoyé comme une question classique, plutôt
+// que joint tel quel. La visualisation de l'onde (getUserMedia +
+// AnalyserNode) reste identique au chat Ami, purement visuelle (18/09/2026,
+// demande de Paul). ──
+const IA_WAVE_BAR_WIDTH = 3;
+const IA_WAVE_BAR_GAP = 2;
+let iaDragStartX = 0;
+let iaDragArmed = false;
+let iaDragMaxPx = -240;
+let iaRecordStream = null;
+let iaRecordStart = 0;
+let iaRecordTimerHandle = null;
+let iaAudioCtx = null;
+let iaAnalyser = null;
+let iaAnalyserData = null;
+let iaWaveIntervalHandle = null;
+let iaWaveSamples = [];
+let iaRecognition = null;
+let iaFinalTranscript = '';
+let iaRecording = false;
+
+function iaFmtDuration(sec) {
+  const s = Math.max(0, Math.floor(sec));
+  return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0');
+}
+function iaInitWaveBars() {
+  const wave = document.getElementById('iaRecWave');
+  if (!wave) return;
+  const containerWidth = wave.getBoundingClientRect().width;
+  let count = Math.floor((containerWidth + IA_WAVE_BAR_GAP) / (IA_WAVE_BAR_WIDTH + IA_WAVE_BAR_GAP));
+  if (!count || count < 15) count = 15;
+  wave.innerHTML = '';
+  iaWaveSamples = new Array(count).fill(0);
+  for (let i = 0; i < count; i++) {
+    const bar = document.createElement('div');
+    bar.className = 'ia-bar-wave-bar';
+    wave.appendChild(bar);
+  }
+}
+function iaSampleAndRenderWave() {
+  if (!iaAnalyser || !iaAnalyserData) return;
+  iaAnalyser.getByteTimeDomainData(iaAnalyserData);
+  let maxDev = 0;
+  for (let i = 0; i < iaAnalyserData.length; i++) {
+    const dev = Math.abs(iaAnalyserData[i] - 128);
+    if (dev > maxDev) maxDev = dev;
+  }
+  const vol = Math.min(1, Math.sqrt(maxDev / 12));
+  iaWaveSamples.shift();
+  iaWaveSamples.push(vol);
+  const wave = document.getElementById('iaRecWave');
+  if (!wave) return;
+  const bars = wave.children;
+  for (let i = 0; i < bars.length; i++) {
+    bars[i].style.height = 15 + iaWaveSamples[i] * 85 + '%';
+  }
+}
+function iaUpdateRecTimer() {
+  const el = document.getElementById('iaRecTimer');
+  if (el) el.textContent = iaFmtDuration((Date.now() - iaRecordStart) / 1000);
+}
+function iaShowRecordingUI(on) {
+  const indicator = document.getElementById('iaRecIndicator');
+  const input = document.getElementById('pcQuestion');
+  const attachBtn = document.getElementById('iaAttachBtn');
+  const cancelBtn = document.getElementById('iaCancelBtn');
+  const micBtn = document.getElementById('iaMicBtn');
+  const mobile = typeof isMobileView === 'function' ? isMobileView() : window.innerWidth <= 1100;
+  if (indicator) indicator.style.display = on ? 'flex' : 'none';
+  if (input) input.style.display = on ? 'none' : 'block';
+  if (attachBtn) attachBtn.style.display = on ? 'none' : 'flex';
+  if (cancelBtn) cancelBtn.style.display = on ? 'flex' : 'none';
+  if (micBtn) {
+    if (on && !mobile) {
+      micBtn.dataset.mode = 'recording-send';
+      micBtn.innerHTML = IA_ICON_SEND;
+    } else if (!on) {
+      iaUpdateMicSendBtn();
+    }
+  }
+}
+async function iaStartRecording() {
+  if (iaRecording) return;
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    if (typeof showSync === 'function') showSync('⚠ Micro non supporté', '#ef4444');
+    return;
+  }
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SR) {
+    if (typeof showSync === 'function')
+      showSync('⚠ Reconnaissance vocale non supportée par ce navigateur', '#ef4444');
+    return;
+  }
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({audio: true});
+    iaRecordStream = stream;
+    iaRecording = true;
+    iaRecordStart = Date.now();
+    iaShowRecordingUI(true);
+    iaRecordTimerHandle = setInterval(iaUpdateRecTimer, 200);
+    try {
+      iaAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      if (iaAudioCtx.state === 'suspended') iaAudioCtx.resume().catch(() => {});
+      const source = iaAudioCtx.createMediaStreamSource(stream);
+      iaAnalyser = iaAudioCtx.createAnalyser();
+      iaAnalyser.fftSize = 64;
+      iaAnalyserData = new Uint8Array(iaAnalyser.fftSize);
+      source.connect(iaAnalyser);
+      iaInitWaveBars();
+      iaWaveIntervalHandle = setInterval(iaSampleAndRenderWave, 33);
+    } catch (e) {
+      iaAnalyser = null; // pas grave : la transcription marche même sans le rendu visuel
+    }
+    iaFinalTranscript = '';
+    iaRecognition = new SR();
+    iaRecognition.lang = 'fr-FR';
+    iaRecognition.continuous = true;
+    iaRecognition.interimResults = true;
+    iaRecognition.onresult = e => {
+      for (let i = e.resultIndex; i < e.results.length; i++) {
+        if (e.results[i].isFinal) iaFinalTranscript += e.results[i][0].transcript;
+      }
+    };
+    iaRecognition.onerror = e => console.warn('iaRecognition:', e.error);
+    try {
+      iaRecognition.start();
+    } catch (e) {}
+  } catch (e) {
+    console.warn('getUserMedia error:', e && e.name, e && e.message);
+    let msg = '⚠ Micro inaccessible';
+    if (e && e.name === 'NotAllowedError') msg = '⚠ Autorise le micro dans les réglages du site';
+    else if (e && e.name === 'NotFoundError') msg = '⚠ Aucun micro détecté sur cet appareil';
+    else if (e && e.name === 'NotReadableError') msg = '⚠ Micro déjà utilisé par une autre appli';
+    else if (e && e.name === 'SecurityError') msg = '⚠ Connexion non sécurisée (HTTPS requis)';
+    if (typeof showSync === 'function') showSync(msg, '#ef4444');
+    iaRecording = false;
+  }
+}
+function iaStopRecording(shouldSend) {
+  if (!iaRecording) return;
+  iaRecording = false;
+  clearInterval(iaRecordTimerHandle);
+  clearInterval(iaWaveIntervalHandle);
+  if (iaAudioCtx) {
+    try {
+      iaAudioCtx.close();
+    } catch (e) {}
+    iaAudioCtx = null;
+  }
+  iaAnalyser = null;
+  iaAnalyserData = null;
+  if (iaRecordStream) {
+    iaRecordStream.getTracks().forEach(t => t.stop());
+    iaRecordStream = null;
+  }
+  iaShowRecordingUI(false);
+  const rec = iaRecognition;
+  iaRecognition = null;
+  if (!rec) return;
+  rec.onend = () => {
+    const transcript = iaFinalTranscript.trim();
+    iaFinalTranscript = '';
+    if (shouldSend && transcript) {
+      const input = document.getElementById('pcQuestion');
+      if (input) input.value = transcript;
+      sendPcMessage();
+    }
+  };
+  try {
+    rec.stop();
+  } catch (e) {
+    iaFinalTranscript = '';
+  }
+}
+// ── Téléphone : glisser le micro vers la gauche pour annuler (comme le chat Ami) ──
+function iaOnMicPointerDown(e) {
+  const micBtn = document.getElementById('iaMicBtn');
+  if (!micBtn || !isMobileView() || micBtn.dataset.mode !== 'mic') return;
+  e.preventDefault();
+  iaDragStartX = e.clientX;
+  iaDragArmed = false;
+  const bar = document.getElementById('iaBarRow');
+  const micRect = micBtn.getBoundingClientRect();
+  if (bar) {
+    const barRect = bar.getBoundingClientRect();
+    iaDragMaxPx = -(micRect.left - barRect.left - 26);
+    if (iaDragMaxPx > -90) iaDragMaxPx = -90;
+  } else {
+    iaDragMaxPx = -240;
+  }
+  try {
+    micBtn.setPointerCapture(e.pointerId);
+  } catch (err) {}
+  micBtn.style.transition = 'none';
+  iaStartRecording();
+}
+function iaOnMicPointerMove(e) {
+  if (!isMobileView() || !iaRecording) return;
+  const micBtn = document.getElementById('iaMicBtn');
+  if (!micBtn) return;
+  let dx = Math.min(0, e.clientX - iaDragStartX);
+  dx = Math.max(dx, iaDragMaxPx);
+  micBtn.style.transform = 'translateX(' + dx + 'px)';
+  const armed = dx <= iaDragMaxPx * 0.92;
+  if (armed !== iaDragArmed) {
+    iaDragArmed = armed;
+    const cancelBtn = document.getElementById('iaCancelBtn');
+    if (cancelBtn) cancelBtn.classList.toggle('armed', armed);
+  }
+}
+function iaOnMicPointerUp() {
+  if (!isMobileView()) return;
+  const micBtn = document.getElementById('iaMicBtn');
+  if (micBtn) {
+    micBtn.style.transition = '';
+    micBtn.style.transform = '';
+  }
+  const cancelBtn = document.getElementById('iaCancelBtn');
+  if (cancelBtn) cancelBtn.classList.remove('armed');
+  if (micBtn && micBtn.dataset.mode === 'mic' && iaRecording) {
+    iaStopRecording(!iaDragArmed);
+  }
+  iaDragArmed = false;
+}
+// ── PC : clic pour démarrer, clic sur l'avion pour envoyer, corbeille pour annuler ──
+function iaOnMicClick() {
+  const micBtn = document.getElementById('iaMicBtn');
+  if (!micBtn) return;
+  const mode = micBtn.dataset.mode;
+  if (mode === 'send') {
+    sendPcMessage();
+  } else if (mode === 'recording-send') {
+    iaStopRecording(true);
+  } else if (mode === 'mic' && !isMobileView()) {
+    iaStartRecording();
+  }
+}
+function iaBindComposerEvents() {
+  const input = document.getElementById('pcQuestion');
+  const micBtn = document.getElementById('iaMicBtn');
+  const attachBtn = document.getElementById('iaAttachBtn');
+  const cancelBtn = document.getElementById('iaCancelBtn');
+  if (input) {
+    input.addEventListener('input', () => {
+      if (typeof autoGrow === 'function') autoGrow(input);
+      iaUpdateMicSendBtn();
+    });
+    input.addEventListener('keydown', e => {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        sendPcMessage();
+      }
+    });
+  }
+  if (attachBtn) attachBtn.addEventListener('click', iaOpenTradePicker);
+  if (cancelBtn) cancelBtn.addEventListener('click', () => iaStopRecording(false));
+  if (micBtn) {
+    micBtn.addEventListener('click', iaOnMicClick);
+    micBtn.addEventListener('pointerdown', iaOnMicPointerDown);
+    micBtn.addEventListener('pointermove', iaOnMicPointerMove);
+    ['pointerup', 'pointercancel'].forEach(evt => micBtn.addEventListener(evt, iaOnMicPointerUp));
+  }
+  iaUpdateMicSendBtn();
+}
+iaBindComposerEvents();
 
 // Échappement HTML générique, sûr aussi bien dans un nœud texte que dans un
 // attribut entre guillemets. Les guillemets doubles/simples ont été ajoutés :

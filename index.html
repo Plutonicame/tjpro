@@ -254,9 +254,28 @@
         <button class="pc-icon-btn" onclick="pcNewConversation()" title="Nouvelle conversation">+</button>
       </div>
       <div id="pcChatMessages" class="pc-chat-messages"></div>
-      <div style="display:flex;gap:8px;margin-top:10px;">
-        <input type="text" id="pcQuestion" placeholder="Ex: Quels sont mes points forts ?" style="flex:1;font-size:13px;" onkeydown="if(event.key==='Enter')sendPcMessage()">
-        <button class="btn btn-p" onclick="sendPcMessage()" style="white-space:nowrap;">Envoyer</button>
+      <div class="ia-bar" id="iaBarRow">
+        <button class="ia-bar-cancel-btn" id="iaCancelBtn" title="Annuler"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16"/><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/><path d="M6 7l1 13a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-13"/><path d="M10 11v6M14 11v6"/></svg></button>
+        <button class="ia-bar-attach-btn" id="iaAttachBtn" title="Partager un trade"><svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M17 7l-7.5 7.5a3 3 0 0 0 4.24 4.24L21 12.4a5 5 0 0 0-7.07-7.07L6.5 12.7a2 2 0 0 0 2.83 2.83L16 9"/></svg></button>
+        <div class="ia-bar-input-center">
+          <textarea class="ia-bar-text-input" id="pcQuestion" placeholder="Message" rows="1"></textarea>
+          <div class="ia-bar-rec-indicator" id="iaRecIndicator">
+            <span class="ia-bar-rec-dot"></span>
+            <span class="ia-bar-rec-timer" id="iaRecTimer">0:00</span>
+            <div class="ia-bar-rec-wave" id="iaRecWave"></div>
+          </div>
+        </div>
+        <div class="ia-bar-mic-wrap" id="iaMicWrap">
+          <button class="ia-bar-mic-btn" id="iaMicBtn" title="Message vocal"><svg viewBox="0 0 24 24" width="19" height="19" fill="currentColor"><path d="M12 15a3.5 3.5 0 0 0 3.5-3.5v-5a3.5 3.5 0 0 0-7 0v5A3.5 3.5 0 0 0 12 15z"/><path d="M18 11.5a1 1 0 0 0-2 0 4 4 0 0 1-8 0 1 1 0 0 0-2 0 6 6 0 0 0 5 5.92V19h-1.5a1 1 0 0 0 0 2h5a1 1 0 0 0 0-2H13v-1.58a6 6 0 0 0 5-5.92z"/></svg></button>
+        </div>
+      </div>
+    </div>
+    <div class="confirm-modal" id="iaTradeModal">
+      <div class="confirm-box fc-modal-box">
+        <div class="fc-modal-title">Partager un trade avec l'IA</div>
+        <input type="text" class="fc-search-input" id="iaTradeSearchInput" placeholder="Rechercher une paire, une date…" oninput="iaRenderTradePickerList(this.value)">
+        <div class="fc-trade-pick-list" id="iaTradePickList"></div>
+        <div class="btn-row" style="margin-top:12px;"><button class="btn btn-g" onclick="iaCloseTradePicker()">FERMER</button></div>
       </div>
     </div>
   </div>

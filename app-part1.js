@@ -2077,6 +2077,7 @@ function executeResetAccount() {
   document.documentElement.removeAttribute('style');
   ensureMgmtThemeDefaults();
   ensureTitleThemeDefaults();
+  ensureIaComposerThemeDefaults();
   renderTable();
   updateNavBadges();
   updateKPIs();
@@ -2242,6 +2243,29 @@ const TITLE_DEFAULTS = {
 };
 function ensureTitleThemeDefaults() {
   Object.entries(TITLE_DEFAULTS).forEach(([vn, def]) => {
+    if (
+      (typeof teVals !== 'undefined' ? teVals[vn] : undefined) === undefined &&
+      !document.documentElement.style.getPropertyValue(vn)
+    ) {
+      document.documentElement.style.setProperty(vn, def);
+    }
+  });
+}
+// Barre de saisie du chat Analyse IA (18/09/2026, demande de Paul) : même
+// design que la barre de saisie du chat Ami (icônes, micro, partage de
+// fiche), mais avec ses propres variables de thème — modifiable
+// séparément, les couleurs par défaut reprenant seulement CELLES de départ
+// du chat Ami (--fc-icon-color, --fc-send-color, --fc-cancel-color,
+// --fc-rec-dot-color, --fc-wave-color).
+const IA_BAR_DEFAULTS = {
+  '--ia-bar-icon-color': '#64748b',
+  '--ia-bar-send-color': '#00e5a0',
+  '--ia-bar-cancel-color': '#ef4444',
+  '--ia-bar-rec-dot-color': '#ef4444',
+  '--ia-bar-wave-color': '#00e5a0'
+};
+function ensureIaComposerThemeDefaults() {
+  Object.entries(IA_BAR_DEFAULTS).forEach(([vn, def]) => {
     if (
       (typeof teVals !== 'undefined' ? teVals[vn] : undefined) === undefined &&
       !document.documentElement.style.getPropertyValue(vn)
@@ -4277,6 +4301,11 @@ function buildTV() {
       page: 'Analyse IA',
       section: 'Conversation'
     },
+    {v: '--ia-bar-icon-color', l: 'Icônes (trombone, micro...)', page: 'Analyse IA', section: 'Barre de message'},
+    {v: '--ia-bar-wave-color', l: "Barres de l'onde vocale", page: 'Analyse IA', section: 'Barre de message'},
+    {v: '--ia-bar-rec-dot-color', l: "Point d'enregistrement", page: 'Analyse IA', section: 'Barre de message'},
+    {v: '--ia-bar-cancel-color', l: 'Bouton annuler (corbeille)', page: 'Analyse IA', section: 'Barre de message'},
+    {v: '--ia-bar-send-color', l: 'Icône envoyer / micro actif', page: 'Analyse IA', section: 'Barre de message'},
     // ══ Paramètres ══
     {
       v: '--state-capital',
@@ -5353,6 +5382,7 @@ function toggleTE() {
 function renderTE() {
   ensureMgmtThemeDefaults();
   ensureTitleThemeDefaults();
+  ensureIaComposerThemeDefaults();
   const TV = buildTV();
   const s = getComputedStyle(document.documentElement);
   TE_LABELS = {};
@@ -5484,6 +5514,7 @@ function loadSavedTheme() {
   Object.entries(teVals).forEach(([v, c]) => document.documentElement.style.setProperty(v, c));
   ensureMgmtThemeDefaults();
   ensureTitleThemeDefaults();
+  ensureIaComposerThemeDefaults();
 }
 // Applique par avance le thème d'un compte identifié par son uid, SANS le
 // considérer connecté (currentUser n'est pas touché) — utilisé sur l'écran
@@ -5521,6 +5552,7 @@ document.addEventListener('DOMContentLoaded', function () {
   } else {
     ensureMgmtThemeDefaults();
     ensureTitleThemeDefaults();
+    ensureIaComposerThemeDefaults();
   }
   buildCompCharts();
   bindPBtns();
