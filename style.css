@@ -928,17 +928,20 @@ body.pencil-mode [data-editable]:hover {
 .chip.sel::before {
   content: '✓ ';
 }
-/* Timeframes (ajout ET édition de trade) : contrairement aux confluences
-   (nombre et longueur très variables), la liste des timeframes est courte
-   et régulière — on répartit les cases pour qu'elles remplissent toute la
-   largeur de la ligne au lieu de garder leur largeur au contenu, ce qui
-   laissait de l'espace à droite et faisait passer la dernière case seule à
-   la ligne alors qu'il restait largement la place (18/09/2026, demande de
-   Paul, PC normal ET ultrawide). */
+/* Timeframes (ajout ET édition de trade) : la tentative précédente
+   (flex-grow) agrandissait les cases et les rendait toutes de la même
+   taille, en plus de parfois passer sur 2 lignes. Les cases gardent
+   maintenant leur taille normale (au contenu, comme les confluences) ; on
+   empêche seulement le retour à la ligne pour qu'elles restent toutes
+   ensemble sur une seule ligne, la place étant largement suffisante
+   (18/09/2026, demande de Paul, PC normal ET ultrawide). */
+#tf-wrap,
+#e-tf-wrap {
+  flex-wrap: nowrap;
+}
 #tf-wrap .chip,
 #e-tf-wrap .chip {
-  flex: 1 1 64px;
-  justify-content: center;
+  flex: 0 0 auto;
 }
 
 .btn {
@@ -1967,6 +1970,13 @@ body.cf-mode-ultrawide #editModal .cp-modal {
 }
 .mod-item:hover {
   background: var(--row-hover);
+}
+.mod-item-fixed {
+  cursor: default;
+  opacity: 0.65;
+}
+.mod-item-fixed .drag-h {
+  cursor: default;
 }
 .drag-h {
   color: var(--drag-h-color);

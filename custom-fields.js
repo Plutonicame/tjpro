@@ -1420,6 +1420,7 @@ function cfApplyChartLayout() {
     el.classList.remove('cf-flex-full', 'cf-flex-pie');
     el.style.removeProperty('flex');
     el.style.removeProperty('grid-column');
+    el.style.removeProperty('margin-top');
   });
   // Un camembert seul ou en petit nombre sur sa ligne s'étire toujours pour
   // occuper toute la place disponible (cf-flex-pie : flex-grow:1) — la part
@@ -1434,12 +1435,30 @@ function cfApplyChartLayout() {
   // plafonnée au maximum du mode pour ce groupe (une liaison ne peut
   // jamais dépasser cette taille).
   let i = 0;
+  let prevGroup = null;
   while (i < children.length) {
     const el = children[i];
     const group = cfChartGroup(el);
+    const isNewGroup = group !== prevGroup;
     if (group === 'pie') {
-      el.classList.add(maxes.pie <= 1 ? 'cf-flex-full' : 'cf-flex-pie');
-      i++;
+      // Un camembert seul ne suffit pas à savoir combien de camemberts
+      // consécutifs partagent sa 1ère ligne (jusqu'à maxes.pie) : il faut
+      // TOUS les marquer ensemble ci-dessous, sinon seul le premier
+      // remonterait et ils se désaligneraient verticalement entre eux.
+      let runEnd = i;
+      while (
+        runEnd - i + 1 < maxes.pie &&
+        runEnd + 1 < children.length &&
+        cfChartGroup(children[runEnd + 1]) === 'pie'
+      ) {
+        runEnd++;
+      }
+      for (let k = i; k <= runEnd; k++) {
+        children[k].classList.add(maxes.pie <= 1 ? 'cf-flex-full' : 'cf-flex-pie');
+        if (isNewGroup && i > 0) children[k].style.marginTop = '-' + gap + 'px';
+      }
+      prevGroup = 'pie';
+      i = runEnd + 1;
       continue;
     }
     if (group === 'barv' || group === 'other') {
@@ -1460,31 +1479,33 @@ function cfApplyChartLayout() {
         runSize > 1 ? 'calc((100% - ' + (runSize - 1) * gap + 'px) / ' + runSize + ')' : '100%';
       for (let k = i; k <= runEnd; k++) {
         children[k].style.flex = '1 1 ' + basisPct;
+        if (isNewGroup && i > 0) children[k].style.marginTop = '-' + gap + 'px';
       }
+      prevGroup = group;
       i = runEnd + 1;
       continue;
     }
     el.classList.add('cf-flex-full');
+    if (isNewGroup && i > 0) el.style.marginTop = '-' + gap + 'px';
+    prevGroup = group;
     i++;
   }
   // Sépare deux groupes différents consécutifs par un séparateur de ligne
   // invisible (flex-basis:100%, hauteur 0) : un élément à 100% de large
   // force forcément un retour à la ligne juste après lui, ce qui empêche
   // tout mélange entre groupes sans jamais limiter à un nombre fixe de
-  // lignes — il y en a exactement autant que nécessaire.
+  // lignes — il y en a exactement autant que nécessaire. Ce séparateur
+  // ajoute mécaniquement un gap supplémentaire (gap + séparateur + gap =
+  // 2×gap au lieu de 1×) : une marge négative posée sur LE SÉPARATEUR
+  // lui-même n'a aucun effet mesurable (vérifié par rendu réel,
+  // 18/09/2026) — elle est donc posée ci-dessus, sur les vrais graphiques
+  // de la ligne qui suit ce changement de groupe, ce qui annule
+  // effectivement le surplus et redonne 1×gap partout, y compris entre 2
+  // camemberts côte à côte (demande de Paul).
   for (let idx = children.length - 1; idx >= 1; idx--) {
     if (cfChartGroup(children[idx]) !== cfChartGroup(children[idx - 1])) {
       const spacer = document.createElement('div');
       spacer.className = 'cf-row-break';
-      // Le spacer est un flex-item à part entière : le gap du conteneur
-      // s'applique aussi bien AVANT qu'APRÈS lui (hauteur 0 ou pas), ce qui
-      // double l'espace visuel entre deux vrais graphiques de groupes
-      // différents (gap + spacer + gap = 2×gap) par rapport à deux
-      // graphiques consécutifs du même groupe (simple gap). Une marge
-      // négative égale au gap annule le gap du DESSUS du spacer, pour
-      // retrouver un espacement total identique (1×gap) de part et d'autre
-      // d'un changement de groupe (18/09/2026, demande de Paul).
-      spacer.style.marginTop = '-' + gap + 'px';
       container.insertBefore(spacer, children[idx]);
     }
   }
@@ -1613,6 +1634,83 @@ function cfRenderOrderList(containerId, order, labelMap, onReorder) {
     });
   }
 }
+// ── Ordre des questions du questionnaire "nouveau trade" (18/09/2026,
+// demande de Paul) : contrairement aux colonnes/KPI/graphiques, cet ordre
+// n'est pas stocké tel quel — il est déjà entièrement déterminé par
+// afterField sur chaque champ (voir cfInjectFormFields plus haut). Cette
+// fonction rejoue le même algorithme d'ancrage (mêmes priorités : __start__
+// immédiat, ancre vide posée en dernier, sinon juste après son ancre) mais
+// sur une simple liste d'IDs/libellés, pour l'afficher et permettre de la
+// glisser sans toucher au rendu du formulaire lui-même. Les questions
+// natives (CF_BUILTIN_FORM_ANCHORS) gardent une position fixe entre elles —
+// seuls les champs personnalisés se déplacent, autour d'elles ou entre eux.
+function cfComputeQuestionOrder() {
+  const items = CF_BUILTIN_FORM_ANCHORS.map(a => ({id: a.id, label: a.label, fixed: true}));
+  const remaining = APP.cfFields
+    .filter(f => f.type !== 'toggle')
+    .map(f => ({id: f.id, label: f.colName || f.label, afterField: f.afterField}));
+  let guard = 0;
+  while (remaining.length && guard++ < 50) {
+    let progressed = false;
+    for (let i = 0; i < remaining.length; i++) {
+      const f = remaining[i];
+      const anchor = f.afterField;
+      let insertAt;
+      if (anchor === '__start__') {
+        insertAt = 0;
+      } else if (!anchor) {
+        continue; // "— À la fin —" : posé au tout dernier passage, comme dans cfInjectFormFields
+      } else {
+        const idx = items.findIndex(it => it.id === anchor);
+        if (idx === -1) continue;
+        insertAt = idx + 1;
+      }
+      items.splice(insertAt, 0, {id: f.id, label: f.label, fixed: false});
+      remaining.splice(i, 1);
+      progressed = true;
+      break;
+    }
+    if (!progressed) break;
+  }
+  remaining.forEach(f => items.push({id: f.id, label: f.label, fixed: false}));
+  return items;
+}
+function cfRenderQuestionOrderList(containerId, items, onReorder) {
+  const el = document.getElementById(containerId);
+  if (!el) return;
+  el.innerHTML = items
+    .map(
+      it =>
+        `<div class="mod-item${it.fixed ? ' mod-item-fixed' : ''}" data-id="${escapeHtml(it.id)}"${it.fixed ? ' title="Question native — position fixe"' : ''}><span class="drag-h">⣿</span><span class="item-tx">${escapeHtml(it.label)}</span></div>`
+    )
+    .join('');
+  if (window.Sortable) {
+    new Sortable(el, {
+      animation: 120,
+      handle: '.drag-h',
+      filter: '.mod-item-fixed',
+      preventOnFilter: true,
+      onEnd: () => {
+        const newOrder = Array.from(el.children).map(c => c.dataset.id);
+        onReorder(newOrder);
+      }
+    });
+  }
+}
+function cfReorderQuestions(newOrder) {
+  // newOrder mélange ancres natives (fixes, jamais stockées) et champs
+  // personnalisés : on ne recalcule que afterField de chaque champ perso,
+  // d'après ce qui le précède désormais dans la liste affichée.
+  newOrder.forEach((id, i) => {
+    const f = APP.cfFields.find(x => x.id === id);
+    if (!f) return;
+    f.afterField = i === 0 ? '__start__' : newOrder[i - 1];
+  });
+  cfPersist();
+  cfInjectFormFields('f');
+  cfInjectFormFields('e');
+  cfRenderSettings();
+}
 function cfRenderOptionsEditor(containerEl, arr, onChange) {
   if (!containerEl) return;
   containerEl.innerHTML = arr
@@ -1722,9 +1820,12 @@ function cfEnsureCard() {
       <div id="cfFieldsList"></div>
       <div id="cfNoFields" style="font-size:11px;color:var(--muted);padding:10px 0;">Aucun champ personnalisé pour l'instant.</div>
       <div style="margin-top:16px;">
-        <button class="btn btn-g" id="cfOrderToggleBtn" onclick="cfToggleOrderSection()">▾ Ordre (colonnes / KPI / graphiques)</button>
+        <button class="btn btn-g" id="cfOrderToggleBtn" onclick="cfToggleOrderSection()">▾ Ordre (questionnaire / colonnes / KPI / graphiques)</button>
         <div id="cfOrderSection" style="display:none;margin-top:12px;">
-          <div class="mod-col-title" style="margin-bottom:8px;">ORDRE DES COLONNES — HISTORIQUE DES TRADES</div>
+          <div class="mod-col-title" style="margin-bottom:8px;">ORDRE DES QUESTIONS — NOUVEAU TRADE</div>
+          <div style="font-size:10px;color:var(--muted);margin-bottom:6px;">Les questions natives (grisées) gardent une position fixe entre elles — seules tes questions personnalisées peuvent être déplacées.</div>
+          <div class="mod-list" id="cfQuestionOrderList"></div>
+          <div class="mod-col-title" style="margin-top:16px;margin-bottom:8px;">ORDRE DES COLONNES — HISTORIQUE DES TRADES</div>
           <div class="mod-list" id="cfColOrderList"></div>
           <div class="mod-col-title" style="margin-top:16px;margin-bottom:8px;">ORDRE DES CASES KPI</div>
           <div class="mod-list" id="cfKpiOrderList"></div>
@@ -1749,7 +1850,9 @@ function cfToggleOrderSection() {
   if (!sec || !btn) return;
   const opening = sec.style.display === 'none';
   sec.style.display = opening ? 'block' : 'none';
-  btn.textContent = opening ? "▲ Replier l'ordre" : '▾ Ordre (colonnes / KPI / graphiques)';
+  btn.textContent = opening
+    ? "▲ Replier l'ordre"
+    : '▾ Ordre (questionnaire / colonnes / KPI / graphiques)';
 }
 function cfRenderSettings() {
   cfEnsureCard();
@@ -1786,6 +1889,10 @@ function cfRenderSettings() {
       })
       .join('');
   }
+  cfRenderQuestionOrderList('cfQuestionOrderList', cfComputeQuestionOrder(), newOrder => {
+    cfReorderQuestions(newOrder);
+  });
+
   const colLabelMap = {};
   CF_BUILTIN_COLS.forEach(c => (colLabelMap[c.id] = c.label));
   APP.cfFields.forEach(f => (colLabelMap[f.id] = f.colName || f.label));
