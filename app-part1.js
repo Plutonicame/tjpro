@@ -5686,6 +5686,13 @@ function closeTradesListModal() {
   const modal = document.getElementById('tradesListModal');
   if (modal) modal.classList.remove('open');
 }
+// Ferme la liste avant d'ouvrir la fiche du trade cliqué (18/09/2026,
+// demande de Paul) : les deux popups ne doivent pas rester ouvertes en
+// même temps.
+function tlmOpenTrade(id) {
+  closeTradesListModal();
+  openEditTrade(id, true);
+}
 function tlmRender() {
   const body = document.getElementById('tlmBody');
   if (!body) return;
@@ -5701,7 +5708,7 @@ function tlmRender() {
     .map(t => {
       const pct = cap > 0 ? (((t.res || 0) / cap) * 100).toFixed(2) : '0.00';
       const col = (t.res || 0) >= 0 ? 'var(--green)' : 'var(--red)';
-      return `<div class="top5-row" style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid var(--top5-row-border);cursor:pointer;transition:background .15s;" onclick="openEditTrade(${t.id},true)" onmouseover="this.style.background='var(--row-hover)'" onmouseout="this.style.background='transparent'">
+      return `<div class="top5-row" style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid var(--top5-row-border);cursor:pointer;transition:background .15s;" onclick="tlmOpenTrade(${t.id})" onmouseover="this.style.background='var(--row-hover)'" onmouseout="this.style.background='transparent'">
         <div>
           <div style="font-family:var(--mono);font-size:11px;">${escapeHtml(t.paire || '—')} <span style="color:var(--muted);font-size:10px;">${escapeHtml(t.date || '')}</span></div>
           <div style="font-size:10px;color:var(--muted);">${escapeHtml(t.session || '')} ${escapeHtml(t.tf || '')}</div>
