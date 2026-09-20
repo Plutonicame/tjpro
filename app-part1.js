@@ -1715,6 +1715,17 @@ function drawRiskChart(period) {
     options: {
       responsive: true,
       maintainAspectRatio: false,
+      interaction: {mode: 'index', intersect: false},
+      onClick: (evt, elements) => {
+        const el = elements.find(e => e.datasetIndex === 0) || elements[0];
+        if (!el || el.index === 0) return; // "Départ" : point de repère, aucun trade derrière
+        const t = tr[el.index - 1];
+        if (t) openTradesListModal('Trade : ' + (t.paire || '—') + ' du ' + (t.date || ''), [t]);
+      },
+      onHover: (evt, elements) => {
+        const real = elements.filter(e => !(e.datasetIndex === 0 && e.index === 0));
+        evt.native.target.style.cursor = real.length ? 'pointer' : 'default';
+      },
       plugins: {legend: {display: false}, tooltip: {callbacks: {label: i => ` Risk: ${i.raw}%`}}},
       scales: {
         x: {grid: {color: grC}, ticks: {color: axC, maxTicksLimit: 10, maxRotation: 0}},
@@ -3154,6 +3165,15 @@ function drawEquity(period) {
     },
     options: {
       ...CO,
+      interaction: {mode: 'index', intersect: false},
+      onClick: (evt, elements) => {
+        if (!elements.length) return;
+        const t = tr[elements[0].index];
+        if (t) openTradesListModal('Trade : ' + (t.paire || '—') + ' du ' + (t.date || ''), [t]);
+      },
+      onHover: (evt, elements) => {
+        evt.native.target.style.cursor = elements.length ? 'pointer' : 'default';
+      },
       plugins: {
         legend: {display: false},
         tooltip: {callbacks: {label: i => ' Capital : ' + i.parsed.y.toLocaleString('fr-FR') + '€'}}
@@ -3248,6 +3268,15 @@ function drawPnl(period) {
       responsive: true,
       maintainAspectRatio: false,
       interaction: {mode: 'index', intersect: false},
+      onClick: (evt, elements) => {
+        const el = elements.find(e => e.datasetIndex === 0) || elements[0];
+        if (!el) return;
+        const t = sorted[el.index];
+        if (t) openTradesListModal('Trade : ' + (t.paire || '—') + ' du ' + (t.date || ''), [t]);
+      },
+      onHover: (evt, elements) => {
+        evt.native.target.style.cursor = elements.length ? 'pointer' : 'default';
+      },
       plugins: {
         legend: {display: false},
         tooltip: {
@@ -3288,9 +3317,13 @@ function drawPnl(period) {
 function drawPie(period) {
   const tr = btFilter('pie', period);
   destroy('pie');
-  const g = tr.filter(t => t.res > 0).length,
-    p = tr.filter(t => t.res < 0).length,
-    n = tr.filter(t => t.res === 0).length;
+  const gT = tr.filter(t => t.res > 0),
+    pT = tr.filter(t => t.res < 0),
+    nT = tr.filter(t => t.res === 0);
+  const g = gT.length,
+    p = pT.length,
+    n = nT.length;
+  const sliceTrades = [gT, pT, nT];
   const ctx = document.getElementById('cPie').getContext('2d');
   CH['pie'] = new Chart(ctx, {
     type: 'doughnut',
@@ -3311,6 +3344,14 @@ function drawPie(period) {
       maintainAspectRatio: true,
       cutout: '60%',
       layout: {padding: {bottom: 8}},
+      onClick: (evt, elements) => {
+        if (!elements.length) return;
+        const idx = elements[0].index;
+        openTradesListModal('Win Rate : ' + ['Gagnants', 'Perdants', 'Nuls'][idx], sliceTrades[idx]);
+      },
+      onHover: (evt, elements) => {
+        evt.native.target.style.cursor = elements.length ? 'pointer' : 'default';
+      },
       plugins: {
         legend: {
           position: 'bottom',
@@ -3384,6 +3425,14 @@ function drawMgmt(period) {
     options: {
       responsive: true,
       maintainAspectRatio: false,
+      onClick: (evt, elements) => {
+        if (!elements.length) return;
+        const s = stats[elements[0].index];
+        openTradesListModal('Management : ' + s.m, tr.filter(t => t.mgmt === s.m));
+      },
+      onHover: (evt, elements) => {
+        evt.native.target.style.cursor = elements.length ? 'pointer' : 'default';
+      },
       plugins: {
         legend: {
           display: true,
@@ -3430,6 +3479,7 @@ function drawComp(cid, chKey, trKey, period, pct, multi = false) {
   const tr = btFilter(chKey, period);
   destroy(chKey);
   const map = {};
+  const mapTrades = {};
   tr.forEach(t => {
     const keys =
       multi && t[trKey]
@@ -3439,10 +3489,14 @@ function drawComp(cid, chKey, trKey, period, pct, multi = false) {
             .filter(Boolean)
         : [t[trKey] || '?'];
     keys.forEach(k => {
-      if (!map[k]) map[k] = {pnl: 0, wins: 0, total: 0};
+      if (!map[k]) {
+        map[k] = {pnl: 0, wins: 0, total: 0};
+        mapTrades[k] = [];
+      }
       map[k].pnl += t.res || 0;
       if (t.res > 0) map[k].wins++;
       map[k].total++;
+      mapTrades[k].push(t);
     });
   });
   const ks = Object.keys(map)
@@ -3456,6 +3510,9 @@ function drawComp(cid, chKey, trKey, period, pct, multi = false) {
   const axC = gc('--comp-axis') || '#64748b',
     grC = gc('--comp-grid') || 'rgba(100,116,139,.1)';
   const ctx = document.getElementById(cid).getContext('2d');
+  // Clic sur une barre ⇒ popup des trades derrière cette clé (18/09/2026,
+  // demande de Paul) : titre lisible par type de comparaison.
+  const compTitles = {conf: 'Confluence', pairs: 'Paire', sessions: 'Session', tf: 'Timeframe'};
   CH[chKey] = new Chart(ctx, {
     type: 'bar',
     data: {
@@ -3472,6 +3529,17 @@ function drawComp(cid, chKey, trKey, period, pct, multi = false) {
     options: {
       ...CO,
       indexAxis: 'y',
+      onClick: (evt, elements) => {
+        if (!elements.length) return;
+        const k = ks[elements[0].index];
+        openTradesListModal(
+          (compTitles[chKey] || chKey) + ' : ' + k,
+          mapTrades[k] || []
+        );
+      },
+      onHover: (evt, elements) => {
+        evt.native.target.style.cursor = elements.length ? 'pointer' : 'default';
+      },
       plugins: {
         legend: {display: false},
         tooltip: {
@@ -3500,14 +3568,19 @@ function drawJours(period) {
   destroy('jours');
   const JR = ['Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi', 'Dimanche'];
   const map = {};
+  const mapTrades = {};
   tr.forEach(t => {
     if (!t.date) return;
     const d = new Date(t.date + 'T12:00:00');
     const j = JR[(d.getDay() + 6) % 7];
-    if (!map[j]) map[j] = {pnl: 0, wins: 0, total: 0};
+    if (!map[j]) {
+      map[j] = {pnl: 0, wins: 0, total: 0};
+      mapTrades[j] = [];
+    }
     map[j].pnl += t.res || 0;
     if (t.res > 0) map[j].wins++;
     map[j].total++;
+    mapTrades[j].push(t);
   });
   const ks = JR.filter(j => map[j]),
     pct = MODE.jours;
@@ -3534,6 +3607,14 @@ function drawJours(period) {
     options: {
       ...CO,
       indexAxis: 'y',
+      onClick: (evt, elements) => {
+        if (!elements.length) return;
+        const j = ks[elements[0].index];
+        openTradesListModal('Jour : ' + j, mapTrades[j] || []);
+      },
+      onHover: (evt, elements) => {
+        evt.native.target.style.cursor = elements.length ? 'pointer' : 'default';
+      },
       plugins: {
         legend: {display: false},
         tooltip: {
@@ -5585,7 +5666,55 @@ document.addEventListener('DOMContentLoaded', function () {
 
 // ── EDIT TRADE ──
 let _editId = null;
-function openEditTrade(id) {
+// ══ Popup "trades derrière un graphique" (18/09/2026, demande de Paul) ══
+// Ouverte par un clic sur une barre/tranche/point de n'importe quel
+// graphique de comparaison ou d'analyse : liste, dans le même esprit
+// visuel que "Top 5 Trades", les trades derrière la donnée cliquée. Clic
+// sur un trade ⇒ sa fiche en lecture seule (openEditTrade, readOnly=true).
+let TLM_TRADES = [];
+function openTradesListModal(title, trades) {
+  TLM_TRADES = trades || [];
+  const titleEl = document.getElementById('tlm-title');
+  if (titleEl) titleEl.textContent = title;
+  const btChk = document.getElementById('tlm-bt');
+  if (btChk) btChk.checked = false;
+  tlmRender();
+  const modal = document.getElementById('tradesListModal');
+  if (modal) modal.classList.add('open');
+}
+function closeTradesListModal() {
+  const modal = document.getElementById('tradesListModal');
+  if (modal) modal.classList.remove('open');
+}
+function tlmRender() {
+  const body = document.getElementById('tlmBody');
+  if (!body) return;
+  const includeBT = document.getElementById('tlm-bt') ? document.getElementById('tlm-bt').checked : false;
+  const list = includeBT ? TLM_TRADES : TLM_TRADES.filter(t => !t.backtest);
+  if (!list.length) {
+    body.innerHTML =
+      '<div style="color:var(--muted);font-size:12px;padding:10px 0;">Aucun trade</div>';
+    return;
+  }
+  const cap = CAPITAL();
+  body.innerHTML = list
+    .map(t => {
+      const pct = cap > 0 ? (((t.res || 0) / cap) * 100).toFixed(2) : '0.00';
+      const col = (t.res || 0) >= 0 ? 'var(--green)' : 'var(--red)';
+      return `<div class="top5-row" style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid var(--top5-row-border);cursor:pointer;transition:background .15s;" onclick="openEditTrade(${t.id},true)" onmouseover="this.style.background='var(--row-hover)'" onmouseout="this.style.background='transparent'">
+        <div>
+          <div style="font-family:var(--mono);font-size:11px;">${escapeHtml(t.paire || '—')} <span style="color:var(--muted);font-size:10px;">${escapeHtml(t.date || '')}</span></div>
+          <div style="font-size:10px;color:var(--muted);">${escapeHtml(t.session || '')} ${escapeHtml(t.tf || '')}</div>
+        </div>
+        <div style="text-align:right;font-family:var(--mono);font-size:12px;color:${col};">
+          ${(t.res || 0) >= 0 ? '+' : ''}${(t.res || 0).toLocaleString('fr-FR')}€<br>
+          <span style="font-size:10px;">${pct >= 0 ? '+' : ''}${pct}%</span>
+        </div>
+      </div>`;
+    })
+    .join('');
+}
+function openEditTrade(id, readOnly) {
   id = parseInt(id, 10);
   const t = APP.trades.find(x => x.id === id);
   if (!t) {
@@ -5668,11 +5797,32 @@ function openEditTrade(id) {
     )
     .join('');
   document.getElementById('editModal').classList.add('open');
+  cfSetEditModalReadOnly(!!readOnly);
   // Init étoiles + ajustement du champ Notes après ouverture réelle du modal (mise en page pas garantie stable avant)
   setTimeout(() => {
     initStarPicker('e-stars-picker', 'e-stars', t.stars || 0);
     autoGrow(document.getElementById('e-notes'));
   }, 60);
+}
+// Bascule le modal "MODIFIER LE TRADE" en simple fiche de consultation :
+// aucune saisie n'est bloquée en dur, tout reste rempli normalement par
+// openEditTrade — seule l'interaction est coupée (18/09/2026, demande de
+// Paul, pour la popup "trades derrière un graphique"). Les images restent
+// zoomables (lecture pure, ne modifie rien) ; le reste (champs, chips,
+// étoiles, ajout/suppression d'image, case Backtest) est verrouillé et le
+// bouton SAUVEGARDER disparaît, remplacé par un simple FERMER.
+function cfSetEditModalReadOnly(readOnly) {
+  const modal = document.getElementById('editModal');
+  if (!modal) return;
+  modal.classList.toggle('cp-readonly', readOnly);
+  const title = modal.querySelector('.cp-title span');
+  if (title) title.textContent = readOnly ? 'FICHE DU TRADE' : 'MODIFIER LE TRADE';
+  const btCheck = document.getElementById('e-backtest');
+  if (btCheck) btCheck.disabled = readOnly;
+  const saveBtn = document.getElementById('e-save-btn');
+  if (saveBtn) saveBtn.style.display = readOnly ? 'none' : '';
+  const cancelBtn = document.getElementById('e-cancel-btn');
+  if (cancelBtn) cancelBtn.textContent = readOnly ? 'FERMER' : 'ANNULER';
 }
 function renderEditImages(existing) {
   const wrap = document.getElementById('e-images-wrap');

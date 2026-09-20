@@ -56,7 +56,8 @@ const CF_BUILTIN_FORM_ANCHORS = [
   {id: 'tf', label: 'Timeframes'},
   {id: 'conf', label: 'Confluences'},
   {id: 'notes', label: 'Notes'},
-  {id: 'stars', label: 'Note ⭐'}
+  {id: 'stars', label: 'Note ⭐'},
+  {id: 'images', label: 'Images du trade'}
 ];
 const CF_BUILTIN_KPIS = [
   {id: 'kpi1', label: 'Capital'},
@@ -236,11 +237,20 @@ function cfEnsureOrders() {
   // de Paul) : questions natives et personnalisées librement mélangeables
   // entre elles, comme colonnes/KPI/graphiques ci-dessus — remplace
   // l'ancien système d'ancrage (afterField) pour tout sauf les cases à
-  // cocher, qui restent à part (cfInjectToggleFields, inchangé). Peut aussi
-  // contenir des "sauts de ligne" (ids préfixés __break_, voir
-  // cfIsLineBreak) : de simples repères de mise en page, jamais de vraies
-  // questions.
+  // cocher, qui restent une liste à part (APP.cfToggleOrder plus bas,
+  // même principe de glisser-déposer). Peut aussi contenir des "sauts de
+  // ligne" (ids préfixés __break_, voir cfIsLineBreak) : de simples
+  // repères de mise en page, jamais de vraies questions.
   if (!APP.cfQuestionOrder) APP.cfQuestionOrder = CF_BUILTIN_FORM_ANCHORS.map(a => a.id);
+  // Ordre des CASES À COCHER entre elles (18/09/2026, demande de Paul) :
+  // "backtest" (native) est un membre de cet ordre comme les autres,
+  // jamais un point de départ fixe — remplace l'ancien menu déroulant par
+  // case (cfInjectToggleFields, ci-dessous).
+  if (!APP.cfToggleOrder) {
+    APP.cfToggleOrder = ['backtest'].concat(
+      APP.cfFields.filter(f => f.type === 'toggle').map(f => f.id)
+    );
+  }
   if (!APP.cfChartOrderByMode) APP.cfChartOrderByMode = {};
   if (!APP.cfNavColumnByMode) APP.cfNavColumnByMode = {};
   if (!APP.cfChartLinksByMode) APP.cfChartLinksByMode = {};
@@ -258,11 +268,24 @@ function cfEnsureOrders() {
   );
   const allFieldIds = new Set(APP.cfFields.map(f => f.id));
   const questionFieldIds = new Set(APP.cfFields.filter(f => f.type !== 'toggle').map(f => f.id));
+  const toggleFieldIds = new Set(APP.cfFields.filter(f => f.type === 'toggle').map(f => f.id));
   APP.cfFields.forEach(f => {
     if (!APP.cfColOrder.includes(f.id)) APP.cfColOrder.push(f.id);
   });
   questionFieldIds.forEach(id => {
     if (!APP.cfQuestionOrder.includes(id)) APP.cfQuestionOrder.push(id);
+  });
+  // Une ancre native ajoutée après coup (ex: "images", le 18/09/2026,
+  // demande de Paul) doit aussi rejoindre un ordre déjà existant et
+  // personnalisé — sinon elle ne serait jamais insérée nulle part. Ajoutée
+  // à la fin par défaut : après la dernière question, puisque les cases à
+  // cocher vivent dans une liste séparée (APP.cfToggleOrder) et
+  // apparaissent de toute façon toujours après le questionnaire.
+  CF_BUILTIN_FORM_ANCHORS.forEach(a => {
+    if (!APP.cfQuestionOrder.includes(a.id)) APP.cfQuestionOrder.push(a.id);
+  });
+  toggleFieldIds.forEach(id => {
+    if (!APP.cfToggleOrder.includes(id)) APP.cfToggleOrder.push(id);
   });
   kpiFieldIds.forEach(id => {
     if (!APP.cfKpiOrder.includes(id)) APP.cfKpiOrder.push(id);
@@ -280,6 +303,7 @@ function cfEnsureOrders() {
   APP.cfQuestionOrder = APP.cfQuestionOrder.filter(
     id => builtinFormIds.has(id) || questionFieldIds.has(id) || cfIsLineBreak(id)
   );
+  APP.cfToggleOrder = APP.cfToggleOrder.filter(id => id === 'backtest' || toggleFieldIds.has(id));
   APP.cfKpiOrder = APP.cfKpiOrder.filter(id => builtinKpiIds.has(id) || kpiFieldIds.has(id));
   CF_SCREEN_MODES.forEach(m => {
     APP.cfChartOrderByMode[m] = APP.cfChartOrderByMode[m].filter(
@@ -468,6 +492,9 @@ function cfBuiltinAnchorEl(prefix, anchorId) {
     const w = document.getElementById(prefix + '-stars-picker');
     return w ? w.closest('.fg') : null;
   }
+  if (anchorId === 'images') {
+    return document.getElementById(prefix + '-images-block');
+  }
   const inp = document.getElementById(prefix + '-' + anchorId);
   return inp ? inp.closest('.fg') : null;
 }
@@ -482,9 +509,10 @@ function cfInjectFormFields(prefix) {
   // ligne) dans l'ordre de APP.cfQuestionOrder, librement mélangeable par
   // glisser-déposer dans les Paramètres (18/09/2026, demande de Paul —
   // remplace l'ancien système d'ancrage afterField pour tout sauf les
-  // cases à cocher, cfInjectToggleFields plus bas, inchangé). Les
-  // questions natives sont déjà dans le DOM (cfBuiltinAnchorEl les
-  // retrouve par leur ancre) : on les déplace simplement ; les
+  // cases à cocher, gérées à part par cfInjectToggleFields via
+  // APP.cfToggleOrder). Les questions natives sont déjà dans le DOM
+  // (cfBuiltinAnchorEl les retrouve par leur ancre) : on les déplace
+  // simplement ; les
   // personnalisées et les sauts de ligne sont (re)créés à chaque passage.
   grid.querySelectorAll('.cf-field, .cf-line-break').forEach(el => el.remove());
   APP.cfQuestionOrder.forEach(id => {
@@ -513,53 +541,30 @@ function cfInjectFormFields(prefix) {
   });
   cfInjectToggleFields(prefix);
 }
-// Cases à cocher (Oui/Non) du questionnaire : toujours en bas, à côté de la
-// case "Backtest" (jamais dans la grille du questionnaire, quelle que soit
-// leur position configurée — voir cfPopulateAnchorSelects). Leur ordre
-// RELATIF LES UNES PAR RAPPORT AUX AUTRES reste configurable (afterField ne
-// peut alors référencer qu'une autre case à cocher, jamais une question du
-// questionnaire, ni "Backtest" lui-même qui reste le point de départ fixe).
-// Demande du 16/09/2026.
+// Cases à cocher (Oui/Non) du questionnaire : toujours à part, jamais dans
+// la grille du questionnaire — mais depuis le 18/09/2026 (demande de Paul)
+// leur ordre ENTRE ELLES se glisse-dépose comme tout le reste (voir
+// APP.cfToggleOrder / "ORDRE DES CASES À COCHER"), au lieu de l'ancien menu
+// déroulant par case. "backtest" (native) est un membre de cet ordre comme
+// les autres, jamais un point de départ fixe.
 function cfInjectToggleFields(prefix) {
+  const container = document.getElementById(prefix + '-toggles-row');
   const btLabel = document.getElementById(prefix + '-backtest');
-  const startEl = btLabel ? btLabel.closest('label') : null;
-  if (!startEl) return;
-  startEl.parentNode.querySelectorAll('.cf-toggle-field').forEach(el => el.remove());
-  const remaining = APP.cfFields.filter(f => f.type === 'toggle');
-  let guard = 0;
-  while (remaining.length && guard++ < 50) {
-    let progressed = false;
-    for (let i = 0; i < remaining.length; i++) {
-      const f = remaining[i];
-      const anchor = f.afterField;
-      let anchorEl = null,
-        isStart = false;
-      if (anchor === '__start__') {
-        isStart = true; // juste après Backtest
-      } else if (!anchor) {
-        /* "— À la fin —" (par défaut) : reste en attente, passage final ci-dessous */
-      } else if (anchor.indexOf('cf_') === 0) {
-        anchorEl = document.getElementById(prefix + '-cf-' + anchor + '-wrap');
-      }
-      if (isStart || anchorEl) {
-        const html = cfFieldInputHtml(prefix, f);
-        if (isStart) startEl.insertAdjacentHTML('afterend', html);
-        else anchorEl.insertAdjacentHTML('afterend', html);
-        remaining.splice(i, 1);
-        progressed = true;
-        break;
-      }
+  const backtestEl = btLabel ? btLabel.closest('label') : null;
+  if (!container || !backtestEl) return;
+  cfEnsureOrders();
+  container.querySelectorAll('.cf-toggle-field').forEach(el => el.remove());
+  APP.cfToggleOrder.forEach(id => {
+    if (id === 'backtest') {
+      container.appendChild(backtestEl);
+      return;
     }
-    if (!progressed) break;
-  }
-  // "— À la fin —" (par défaut) ou ancre introuvable (case supprimée
-  // entre-temps) : ajoutées après la dernière case déjà en place (Backtest
-  // si aucune autre n'existe encore), dans l'ordre où elles apparaissent
-  // dans APP.cfFields.
-  remaining.forEach(f => {
-    const placed = startEl.parentNode.querySelectorAll('.cf-toggle-field');
-    const last = placed.length ? placed[placed.length - 1] : startEl;
-    last.insertAdjacentHTML('afterend', cfFieldInputHtml(prefix, f));
+    const f = APP.cfFields.find(x => x.id === id && x.type === 'toggle');
+    if (!f) return;
+    const tmp = document.createElement('div');
+    tmp.innerHTML = cfFieldInputHtml(prefix, f);
+    const el = tmp.firstElementChild;
+    if (el) container.appendChild(el);
   });
 }
 
@@ -1802,12 +1807,14 @@ function cfEnsureCard() {
       <div id="cfFieldsList"></div>
       <div id="cfNoFields" style="font-size:11px;color:var(--muted);padding:10px 0;">Aucun champ personnalisé pour l'instant.</div>
       <div style="margin-top:16px;">
-        <button class="btn btn-g" id="cfOrderToggleBtn" onclick="cfToggleOrderSection()">▾ Ordre (questionnaire / colonnes / KPI / graphiques)</button>
+        <button class="btn btn-g" id="cfOrderToggleBtn" onclick="cfToggleOrderSection()">▾ Ordre (questionnaire / cases à cocher / colonnes / KPI / graphiques)</button>
         <div id="cfOrderSection" style="display:none;margin-top:12px;">
           <div class="mod-col-title" style="margin-bottom:8px;">ORDRE DES QUESTIONS — NOUVEAU TRADE</div>
           <div style="font-size:10px;color:var(--muted);margin-bottom:6px;">Questions natives et personnalisées se mélangent librement. Ajoute un saut de ligne pour forcer les questions suivantes à démarrer une nouvelle ligne.</div>
           <button class="btn btn-g" style="margin-bottom:8px;" onclick="cfAddLineBreak()">+ Ajouter un saut de ligne</button>
           <div class="mod-list" id="cfQuestionOrderList"></div>
+          <div class="mod-col-title" style="margin-top:16px;margin-bottom:8px;">ORDRE DES CASES À COCHER</div>
+          <div class="mod-list" id="cfToggleOrderList"></div>
           <div class="mod-col-title" style="margin-top:16px;margin-bottom:8px;">ORDRE DES COLONNES — HISTORIQUE DES TRADES</div>
           <div class="mod-list" id="cfColOrderList"></div>
           <div class="mod-col-title" style="margin-top:16px;margin-bottom:8px;">ORDRE DES CASES KPI</div>
@@ -1835,7 +1842,7 @@ function cfToggleOrderSection() {
   sec.style.display = opening ? 'block' : 'none';
   btn.textContent = opening
     ? "▲ Replier l'ordre"
-    : '▾ Ordre (questionnaire / colonnes / KPI / graphiques)';
+    : '▾ Ordre (questionnaire / cases à cocher / colonnes / KPI / graphiques)';
 }
 function cfRenderSettings() {
   cfEnsureCard();
@@ -1880,6 +1887,15 @@ function cfRenderSettings() {
     cfPersist();
     cfInjectFormFields('f');
     cfInjectFormFields('e');
+  });
+
+  const toggleLabelMap = {backtest: 'Backtest'};
+  APP.cfFields.filter(f => f.type === 'toggle').forEach(f => (toggleLabelMap[f.id] = f.label));
+  cfRenderOrderList('cfToggleOrderList', APP.cfToggleOrder, toggleLabelMap, newOrder => {
+    APP.cfToggleOrder = newOrder;
+    cfPersist();
+    cfInjectToggleFields('f');
+    cfInjectToggleFields('e');
   });
 
   const colLabelMap = {};
@@ -1945,7 +1961,6 @@ function cfEnsureModal() {
         <div class="mod-add"><input type="text" id="cfm-options-add-input" placeholder="Ajouter une option..." onkeydown="if(event.key==='Enter'){event.preventDefault();cfAddOption();}"><button onclick="cfAddOption()">+</button></div>
       </div>
       <div class="fg" style="margin-bottom:9px;"><label>Nom de la colonne (historique)</label><input type="text" id="cfm-colname" placeholder="Par défaut : même nom que la question"></div>
-      <div class="fg" id="cfm-afterfield-row" style="margin-bottom:9px;"><label>Position parmi les autres cases à cocher</label><select id="cfm-afterfield"></select></div>
       <div class="fg" style="margin-bottom:9px;"><label>Position dans les colonnes</label><select id="cfm-aftercol"></select></div>
       <div class="fg" style="margin-bottom:9px;"><label>Widget Track Record</label><select id="cfm-widgetkind" onchange="cfOnWidgetKindChange()"></select></div>
       <div class="fg" id="cfm-widgetpos-row" style="margin-bottom:14px;">
@@ -1970,28 +1985,11 @@ function cfWidgetOptionsHtml(type) {
   return allowed.map(k => `<option value="${k}">${CF_WIDGET_META[k].label}</option>`).join('');
 }
 function cfPopulateAnchorSelects(f) {
-  const type = document.getElementById('cfm-type').value;
-  const afterFieldRow = document.getElementById('cfm-afterfield-row');
-  // Depuis le 18/09/2026 (demande de Paul), la position des QUESTIONS
-  // (hors cases à cocher) se règle uniquement par glisser-déposer dans
-  // "ORDRE DES QUESTIONS" (Paramètres) — ce menu déroulant ne sert plus
-  // qu'aux cases à cocher, qui restent à part, toujours à côté de
-  // "Backtest" (cfInjectToggleFields), avec seulement leur ordre entre
-  // elles configurable ici.
-  if (type !== 'toggle') {
-    if (afterFieldRow) afterFieldRow.style.display = 'none';
-  } else {
-    if (afterFieldRow) afterFieldRow.style.display = '';
-    const fieldOpts = ['<option value="">— À la fin —</option>']
-      .concat(
-        APP.cfFields
-          .filter(x => (!f || x.id !== f.id) && x.type === 'toggle')
-          .map(x => `<option value="${x.id}">Après : ${escapeHtml(x.label)}</option>`)
-      )
-      .concat(['<option value="__start__">— Au début (juste après Backtest) —</option>']);
-    document.getElementById('cfm-afterfield').innerHTML = fieldOpts.join('');
-  }
-
+  // Depuis le 18/09/2026 (demande de Paul), la position des questions ET
+  // des cases à cocher entre elles se règle uniquement par glisser-déposer
+  // ("ORDRE DES QUESTIONS" / "ORDRE DES CASES À COCHER", Paramètres) — ce
+  // menu déroulant ne sert plus qu'à la position dans les COLONNES de
+  // l'historique, un classement à part entière.
   const colOpts = ['<option value="">— À la fin —</option>']
     .concat(
       CF_BUILTIN_COLS.map(b => `<option value="${b.id}">Après : ${escapeHtml(b.label)}</option>`)
@@ -2065,7 +2063,6 @@ function cfOpenBuilder(editId) {
   document.getElementById('cfm-type').value = f ? f.type : 'text';
   document.getElementById('cfm-colname').value = f ? f.colName || '' : '';
   cfPopulateAnchorSelects(f);
-  document.getElementById('cfm-afterfield').value = f ? f.afterField || '' : '';
   document.getElementById('cfm-aftercol').value = f ? f.afterCol || '' : '';
   document.getElementById('cfm-options-wrap').style.display =
     (f ? f.type : 'text') === 'select' ? '' : 'none';
@@ -2104,7 +2101,6 @@ function cfSaveBuilder() {
     return;
   }
   const colName = document.getElementById('cfm-colname').value.trim() || label;
-  const afterField = document.getElementById('cfm-afterfield').value;
   const afterCol = document.getElementById('cfm-aftercol').value;
   const widgetKind = document.getElementById('cfm-widgetkind').value;
   const widgetAfter = document.getElementById('cfm-widgetpos').value;
@@ -2118,11 +2114,6 @@ function cfSaveBuilder() {
   field.type = type;
   field.options = type === 'select' ? cfTempOptions.slice() : undefined;
   field.colName = colName;
-  if (type === 'toggle') {
-    field.afterField = afterField;
-  } else {
-    delete field.afterField;
-  }
   field.afterCol = afterCol;
   field.widget = {kind: widgetKind};
   field.widgetAfter = widgetAfter;

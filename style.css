@@ -1792,6 +1792,20 @@ body.cf-mode-ultrawide #editModal .cp-modal {
   color: var(--cp-title-color);
   margin-bottom: 11px;
 }
+/* Fiche de trade en lecture seule (popup "trades derrière un graphique",
+   18/09/2026, demande de Paul) : tout le formulaire devient inerte — les
+   images restent zoomables (ne modifient rien), le reste (champs, chips,
+   étoiles, boutons d'image) est verrouillé. */
+#editModal.cp-readonly .form-grid,
+#editModal.cp-readonly .form-grid * {
+  pointer-events: none;
+}
+#editModal.cp-readonly .form-grid img {
+  pointer-events: auto;
+}
+#editModal.cp-readonly .form-grid button {
+  display: none;
+}
 .cp-sw {
   position: relative;
   width: 100%;
