@@ -642,6 +642,7 @@ async function resetPin() {
 async function _doResetPin() {
   stopRealtime();
   stopPolling();
+  if (typeof unanchorState === 'function') unanchorState();
   currentUser = null;
   _currentAccId = null;
   // Vide l'état en mémoire du compte qui vient de se déconnecter : la
@@ -1012,6 +1013,16 @@ async function cloudDeleteAccount(accId) {
 async function pushToCloud(opts) {
   opts = opts || {};
   if (!currentUser || !currentUser.id) return false;
+  // Garde-fou anti-écrasement : tant que l'état en mémoire n'a pas été rechargé
+  // pour le compte connecté (code PIN pas encore validé), il ne contient que
+  // les valeurs par défaut de démarrage — les envoyer écraserait les vraies
+  // données du cloud (voir isStateAnchored dans app-part1.js). Concerne aussi
+  // les envois déclenchés à la fermeture / mise en arrière-plan de l'app.
+  if (typeof isStateAnchored === 'function' && !isStateAnchored()) {
+    console.warn('pushToCloud() ignoré : état non ancré sur le compte connecté.');
+    _isPushing = false; // schedulePush() l'avait posé d'avance
+    return false;
+  }
   _isPushing = true;
   const myGen = ++_pushGeneration; // identifie ce push précis parmi d'éventuels chevauchements
   try {
@@ -1221,6 +1232,7 @@ async function pullGlobalChatData() {
 // chercher cette ancienne ligne et on l'adopte pour lui — une seule fois, le
 // prochain envoi la re-taggera avec le bon acc_id.
 async function fetchCloudRowForCurrentAccount() {
+  window._cloudFetchFailed = false; // distingue "lecture échouée" de "aucune ligne"
   const {data, error} = await sb
     .from('journal_data')
     .select('*')
@@ -1228,6 +1240,7 @@ async function fetchCloudRowForCurrentAccount() {
     .eq('acc_id', _currentAccId)
     .order('updated_at', {ascending: false})
     .limit(1);
+  if (error) window._cloudFetchFailed = true;
   if (!error && data && data.length) return data[0];
   const accs = getAccounts();
   if (accs[0] && accs[0].id === _currentAccId) {
@@ -1238,6 +1251,7 @@ async function fetchCloudRowForCurrentAccount() {
       .is('acc_id', null)
       .order('updated_at', {ascending: false})
       .limit(1);
+    if (legacyErr) window._cloudFetchFailed = true;
     if (!legacyErr && legacy && legacy.length) return legacy[0];
   }
   return null;
@@ -1251,6 +1265,9 @@ async function pullFromCloud() {
   try {
     const row = await fetchCloudRowForCurrentAccount();
     if (!row) {
+      // Lecture échouée (réseau, jeton...) ≠ compte sans données : dans ce cas on
+      // n'envoie rien, sinon des valeurs par défaut pourraient écraser le cloud.
+      if (window._cloudFetchFailed) return;
       await pushToCloud();
       return;
     } // premier envoi jamais fait pour ce compte
@@ -1348,6 +1365,9 @@ function _applyCloudDataDirect(data, cloudTrades) {
 
   APP.trades = incomingTrades;
   window._intentionalBulkDelete = false;
+  // Anciens trades de démonstration reçus du cloud : retirés ici, puis cloud
+  // écrasé en fin de fonction.
+  const _demoPurged = typeof purgeDemoTrades === 'function' ? purgeDemoTrades() : 0;
 
   if (data.lists) {
     const merged = {...APP.lists};
@@ -1479,6 +1499,9 @@ function _applyCloudDataDirect(data, cloudTrades) {
   setTimeout(() => {
     _isSyncing = false;
   }, 1000);
+  // Mode force : sans ça, la fusion automatique de pushToCloud() réintégrerait
+  // depuis le cloud les trades de démo qu'on vient de retirer.
+  if (_demoPurged) schedulePush(0, {force: true});
 }
 
 // ── Temps réel ──

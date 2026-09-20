@@ -48,259 +48,102 @@ async function signInWithGoogle() {
   // Si pas d'erreur, le navigateur redirige vers Google — la page se recharge ensuite
 }
 
-// ══ DATA GEN ══
-const TFC = [
-  'M1',
-  'M5',
-  'M15',
-  'M30',
-  'H1',
-  'H4',
-  'Daily',
-  'Weekly',
-  'M1,M5',
-  'M5,M15',
-  'M15,H1',
-  'M30,H4',
-  'H1,H4',
-  'H4,Daily',
-  'Daily,Weekly',
-  'M1,M5,M15',
-  'M5,M15,H1',
-  'M15,H1,H4',
-  'H1,H4,Daily',
-  'H4,Daily,Weekly',
-  'M1,M15,H1',
-  'M5,H1,Daily',
-  'M30,H1,H4',
-  'M15,H4,Daily',
-  'H1,Daily,Weekly'
-];
-const PRS = [
-  'EURUSD',
-  'GBPUSD',
-  'USDJPY',
-  'XAUUSD',
-  'NAS100',
-  'DAX40',
-  'SPX500',
-  'GBPJPY',
-  'AUDUSD'
-];
-const SSG = ['Londres', 'New York', 'Asie', 'Chevauchement LN', 'Pre-Marche'];
-const CNF = [
-  'FVG',
-  'OB',
-  'BOS',
-  'CHOCH',
-  'Chandelier Japonais',
-  'EMA Cross',
-  'Support/Résistance',
-  'Liquidité',
-  'VWAP',
-  'SMT',
-  'Divergence RSI',
-  'Golden Zone Fib'
-];
-function rn(a) {
-  return a[Math.floor(Math.random() * a.length)];
-}
-function rf(a, b, d = 1) {
-  return parseFloat((Math.random() * (b - a) + a).toFixed(d));
-}
-function gen2025() {
-  const out = [];
-  let id = 2000,
-    ti = 0;
-  const s = new Date('2025-01-01'),
-    e = new Date('2025-05-21');
-  const hM = ['08:00', '08:30', '09:00', '09:15', '09:30', '10:00', '10:30'],
-    hA = ['13:00', '13:30', '14:00', '14:30', '15:00', '15:30', '16:00'];
-  for (let d = new Date(s); d <= e; d.setDate(d.getDate() + 1)) {
-    const ds = d.toISOString().split('T')[0];
-    [hM, hA].forEach(pool => {
-      const tf = TFC[ti++ % TFC.length],
-        win = Math.random() > 0.43;
-      const res = win ? Math.round(rf(25, 900)) : Math.round(rf(-300, -15));
-      const nc = Math.floor(Math.random() * 3) + 1,
-        p = [...CNF],
-        confs = [];
-      for (let i = 0; i < nc && p.length; i++) {
-        const x = Math.floor(Math.random() * p.length);
-        confs.push(p.splice(x, 1)[0]);
-      }
-      out.push({
-        id: id++,
-        date: ds,
-        heure: rn(pool),
-        paire: rn(PRS),
-        session: rn(SSG),
-        conf: confs.join(','),
-        tf,
-        dir: Math.random() > 0.5 ? 'LONG' : 'SHORT',
-        rrCible: rf(1.5, 3.5),
-        res,
-        mgmt: Math.random() > 0.4 ? 'Oui' : 'Non',
-        reprend: rn(['Oui', 'Non', 'Peut-être']),
-        notes: ''
-      });
-    });
+// ══ TRADES DE DÉMONSTRATION — SUPPRIMÉS ══
+// L'app démarrait avec ~290 trades fictifs (10 trades "BASE" + un trade
+// aléatoire par session du 01/01 au 21/05/2025) affichés tant qu'aucune donnée
+// réelle n'était chargée. Ils ont fini par être envoyés au cloud de certains
+// comptes, avec les listes déroulantes par défaut (cause : voir
+// isStateAnchored() plus bas). Il n'y a donc plus AUCUN trade de démonstration
+// dans le code : un compte neuf démarre à zéro.
+// Ce qui suit ne sert qu'à NETTOYER les comptes déjà pollués. Un trade n'est
+// retiré que s'il porte la signature exacte des anciens trades de démo ET n'a
+// jamais été touché (notes vides, pas d'image, pas de champ rempli en plus).
+// Un ancien trade de démo que tu as modifié est donc conservé.
+const DEMO_BASE_SIG = new Set([
+  '1|2023-05-22|14:24|USDJPY|126',
+  '2|2023-05-22|16:39|EURUSD|226',
+  '10|2023-07-10|09:26|USDJPY|341',
+  '11|2023-07-10|15:53|DAX40|-207',
+  '20|2023-10-15|14:14|GBPUSD|250',
+  '30|2024-01-20|08:59|EURUSD|437',
+  '40|2024-04-08|09:26|USDJPY|340',
+  '50|2024-07-22|14:14|GBPUSD|220',
+  '60|2024-10-14|09:36|GBPJPY|510',
+  '70|2024-12-03|08:27|DAX40|280'
+]);
+const DEMO_HEURES = new Set([
+  '08:00', '08:30', '09:00', '09:15', '09:30', '10:00', '10:30',
+  '13:00', '13:30', '14:00', '14:30', '15:00', '15:30', '16:00'
+]);
+const DEMO_PAIRES = new Set([
+  'EURUSD', 'GBPUSD', 'USDJPY', 'XAUUSD', 'NAS100', 'DAX40', 'SPX500', 'GBPJPY', 'AUDUSD'
+]);
+const DEMO_SESSIONS = new Set(['Londres', 'New York', 'Asie', 'Chevauchement LN', 'Pre-Marche']);
+const DEMO_KEYS = new Set([
+  'id', 'date', 'heure', 'paire', 'session', 'conf', 'tf', 'dir',
+  'rrCible', 'res', 'mgmt', 'reprend', 'notes'
+]);
+
+function isDemoTrade(t) {
+  if (!t || typeof t !== 'object' || typeof t.id !== 'number') return false;
+  // Jamais touché : notes vides et aucun champ rempli en plus de ceux du trade
+  // de démo d'origine (les valeurs vides/par défaut ajoutées depuis, comme
+  // images:[] ou stars:0, ne comptent pas).
+  if (t.notes != null && t.notes !== '') return false;
+  for (const k of Object.keys(t)) {
+    if (DEMO_KEYS.has(k) || k === 'rrAuto') continue;
+    const v = t[k];
+    const vide =
+      v == null ||
+      v === '' ||
+      v === 0 ||
+      v === false ||
+      (Array.isArray(v) && !v.length) ||
+      (typeof v === 'object' && !Array.isArray(v) && !Object.keys(v).length);
+    if (!vide) return false;
   }
-  return out;
+  if (DEMO_BASE_SIG.has([t.id, t.date, t.heure, t.paire, t.res].join('|'))) return true;
+  // Trades générés : ids 2000 à 2281, du 01/01 au 22/05/2025 (marge d'un jour
+  // pour les décalages de fuseau/heure d'été de l'ancienne génération).
+  return (
+    t.id >= 2000 &&
+    t.id <= 2281 &&
+    typeof t.date === 'string' &&
+    t.date >= '2025-01-01' &&
+    t.date <= '2025-05-22' &&
+    DEMO_HEURES.has(t.heure) &&
+    DEMO_PAIRES.has(t.paire) &&
+    DEMO_SESSIONS.has(t.session) &&
+    (t.dir === 'LONG' || t.dir === 'SHORT') &&
+    typeof t.tf === 'string' &&
+    typeof t.rrCible === 'number' &&
+    t.rrCible >= 1.5 &&
+    t.rrCible <= 3.5 &&
+    Number.isInteger(t.res) &&
+    ((t.res >= 25 && t.res <= 900) || (t.res >= -300 && t.res <= -15)) &&
+    (t.mgmt === 'Oui' || t.mgmt === 'Non') &&
+    (t.reprend === 'Oui' || t.reprend === 'Non' || t.reprend === 'Peut-être')
+  );
 }
-const BASE = [
-  {
-    id: 1,
-    date: '2023-05-22',
-    heure: '14:24',
-    paire: 'USDJPY',
-    session: 'Chevauchement LN',
-    conf: 'BOS,FVG',
-    tf: 'M5',
-    dir: 'LONG',
-    rrCible: 3.4,
-    res: 126,
-    mgmt: 'Oui',
-    reprend: 'Peut-être',
-    notes: ''
-  },
-  {
-    id: 2,
-    date: '2023-05-22',
-    heure: '16:39',
-    paire: 'EURUSD',
-    session: 'Pre-Marche',
-    conf: 'OB,CHOCH',
-    tf: 'M15,Daily,H4',
-    dir: 'LONG',
-    rrCible: 3.4,
-    res: 226,
-    mgmt: 'Non',
-    reprend: 'Oui',
-    notes: ''
-  },
-  {
-    id: 10,
-    date: '2023-07-10',
-    heure: '09:26',
-    paire: 'USDJPY',
-    session: 'Londres',
-    conf: 'EMA Cross',
-    tf: 'H4,M15',
-    dir: 'LONG',
-    rrCible: 2.9,
-    res: 341,
-    mgmt: 'Non',
-    reprend: 'Oui',
-    notes: ''
-  },
-  {
-    id: 11,
-    date: '2023-07-10',
-    heure: '15:53',
-    paire: 'DAX40',
-    session: 'Chevauchement LN',
-    conf: 'FVG',
-    tf: 'H1,H4',
-    dir: 'LONG',
-    rrCible: 1.9,
-    res: -207,
-    mgmt: 'Oui',
-    reprend: 'Peut-être',
-    notes: ''
-  },
-  {
-    id: 20,
-    date: '2023-10-15',
-    heure: '14:14',
-    paire: 'GBPUSD',
-    session: 'New York',
-    conf: 'OB,Liquidité',
-    tf: 'M5,H1',
-    dir: 'SHORT',
-    rrCible: 2.4,
-    res: 250,
-    mgmt: 'Oui',
-    reprend: 'Peut-être',
-    notes: ''
-  },
-  {
-    id: 30,
-    date: '2024-01-20',
-    heure: '08:59',
-    paire: 'EURUSD',
-    session: 'Pre-Marche',
-    conf: 'FVG,OB,BOS',
-    tf: 'M5,H4',
-    dir: 'LONG',
-    rrCible: 3.3,
-    res: 437,
-    mgmt: 'Oui',
-    reprend: 'Oui',
-    notes: ''
-  },
-  {
-    id: 40,
-    date: '2024-04-08',
-    heure: '09:26',
-    paire: 'USDJPY',
-    session: 'Londres',
-    conf: 'OB',
-    tf: 'H4,M15',
-    dir: 'LONG',
-    rrCible: 2.9,
-    res: 340,
-    mgmt: 'Non',
-    reprend: 'Oui',
-    notes: ''
-  },
-  {
-    id: 50,
-    date: '2024-07-22',
-    heure: '14:14',
-    paire: 'GBPUSD',
-    session: 'New York',
-    conf: 'BOS,FVG',
-    tf: 'M5,H1',
-    dir: 'SHORT',
-    rrCible: 2.4,
-    res: 220,
-    mgmt: 'Oui',
-    reprend: 'Peut-être',
-    notes: ''
-  },
-  {
-    id: 60,
-    date: '2024-10-14',
-    heure: '09:36',
-    paire: 'GBPJPY',
-    session: 'Londres',
-    conf: 'FVG,OB,BOS',
-    tf: 'M15,H4,Daily',
-    dir: 'LONG',
-    rrCible: 2.0,
-    res: 510,
-    mgmt: 'Non',
-    reprend: 'Non',
-    notes: ''
-  },
-  {
-    id: 70,
-    date: '2024-12-03',
-    heure: '08:27',
-    paire: 'DAX40',
-    session: 'Londres',
-    conf: 'EMA Cross',
-    tf: 'H1,M15,Daily',
-    dir: 'LONG',
-    rrCible: 3.0,
-    res: 280,
-    mgmt: 'Oui',
-    reprend: 'Oui',
-    notes: ''
-  }
-];
-const ALL_S = [...BASE, ...gen2025()];
+
+// Retire de l'état en mémoire (et du stockage local du compte actif) les
+// anciens trades de démo. Renvoie le nombre retiré. Ne fait rien tant que
+// l'état n'est pas ancré sur le compte connecté. L'appelant doit ensuite
+// écraser la version cloud en mode force si le nombre est > 0 (sinon la
+// fusion automatique réintégrerait les trades de démo depuis le cloud).
+function purgeDemoTrades() {
+  if (!isStateAnchored()) return 0;
+  if (!Array.isArray(APP.trades) || !APP.trades.length) return 0;
+  const kept = APP.trades.filter(t => !isDemoTrade(t));
+  const removed = APP.trades.length - kept.length;
+  if (!removed) return 0;
+  APP.trades = kept;
+  // Écriture directe et non saveState() : passer à 0 trade est ici voulu, le
+  // garde-fou anti-perte de saveState() n'a pas à s'en mêler.
+  lssAcc('tj_trades', APP.trades);
+  console.info('🧹 ' + removed + ' ancien(s) trade(s) de démonstration retiré(s).');
+  return removed;
+}
 
 // ══ STATE ══
 const DEF = {
@@ -506,6 +349,14 @@ function _doSwitchAccount(accId) {
   ['confluences', 'mgmt_opts', 'reprend_opts'].forEach(k => {
     if (!APP.lists[k]) APP.lists[k] = DEF[k];
   });
+  // À partir d'ici l'état en mémoire est bien celui de CE compte de connexion
+  // (et plus les valeurs de démarrage) : sauvegarde locale et envoi cloud sont
+  // autorisés (voir isStateAnchored). On nettoie au passage les anciens trades
+  // de démonstration éventuellement restés en local.
+  if (typeof currentUser !== 'undefined' && currentUser && currentUser.id) {
+    _anchoredUid = currentUser.id;
+    purgeDemoTrades();
+  }
   // Appliquer le thème du nouveau compte
   loadSavedTheme();
   renderTable();
@@ -796,14 +647,45 @@ function lsAcc(k, d) {
 function lssAcc(k, v) {
   lss(accKey(k), v);
 }
+// ── Ancrage de l'état sur le compte connecté ──
+// CAUSE DU BUG des trades de démo / listes réinitialisées : au démarrage,
+// APP contient seulement les valeurs par défaut (avant même de savoir qui est
+// connecté). Or currentUser est renseigné dès que la session Google est
+// restaurée — donc AVANT la saisie du code PIN et avant que
+// reanchorToCurrentUser() recharge les vraies données du compte. Si l'app
+// était fermée / rechargée / passée en arrière-plan sur l'écran du code PIN
+// (beforeunload, visibilitychange → pushToCloud), ces valeurs par défaut
+// partaient au cloud sur la ligne du compte et écrasaient les vraies listes.
+// Règle désormais : aucune sauvegarde locale ni envoi cloud tant que l'état
+// n'a pas été rechargé pour le compte connecté (_doSwitchAccount pose
+// l'ancrage, _doResetPin le retire).
+let _anchoredUid = null;
+function isStateAnchored() {
+  return (
+    typeof currentUser !== 'undefined' &&
+    !!currentUser &&
+    !!currentUser.id &&
+    _anchoredUid === currentUser.id
+  );
+}
+function unanchorState() {
+  _anchoredUid = null;
+}
 function loadState() {
   return {
-    trades: lsAcc('tj_trades', ALL_S),
+    trades: lsAcc('tj_trades', []),
     lists: lsAcc('tj_lists', DEF),
     nextId: lsAcc('tj_nextId', 9000)
   };
 }
 function saveState() {
+  // Jamais de sauvegarde tant que l'état en mémoire n'est pas celui du compte
+  // connecté (voir isStateAnchored) : avant ça, APP n'a que les valeurs de
+  // démarrage, pas les données de l'utilisateur.
+  if (!isStateAnchored()) {
+    console.warn('saveState() ignoré : état non ancré sur le compte connecté.');
+    return;
+  }
   // Garde-fou générique : quelle que soit la cause (bug, course entre sync, etc.),
   // on ne persiste JAMAIS silencieusement un passage de plusieurs trades à 0.
   // Ça bloque le symptôme à la racine, peu importe d'où vient exactement le bug,
