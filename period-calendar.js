@@ -15,6 +15,13 @@
 //    les dates analysées.
 //  • Comme les autres périodes, la plage n'est pas mémorisée au rechargement.
 //
+// Le même bouton est aussi posé sur la page Track Record, à côté de la case BT
+// au-dessus des cartes KPI : les KPI (natifs et personnalisés) ne portent alors
+// que sur les trades de la période choisie (voir applyKpiRange). « Capital » et
+// « Risk actuel » sont ceux de la fin de la période ; « Pay Out » ne compte que
+// les retraits datés dans la période ; « Drawdown Max » est mesuré dans la période.
+// Les dates choisies restent affichées à côté du bouton tant que la période est active.
+//
 // Fonctionnement : la plage est stockée dans ST[clé] sous la forme
 // 'plage:AAAA-MM-JJ:AAAA-MM-JJ'. filterT() est enveloppée pour la comprendre ;
 // le reste (libellés, BT, redessin) est déjà générique. Les boutons sont
@@ -93,6 +100,7 @@
   transition: border-color 0.12s, color 0.12s, background 0.12s;
 }
 .pcal-btn svg { width: 74%; height: 74%; display: block; pointer-events: none; }
+.pcal-range-label { margin-left: 8px; font-family: var(--mono, monospace); font-size: 9px; color: var(--pcal-hint-tx); white-space: nowrap; }
 .pcal-btn:hover { border-color: var(--pcal-btn-hover-bd); color: var(--pcal-btn-hover-ic); }
 .pcal-btn.active,
 .pcal-btn.active:hover {
@@ -191,6 +199,148 @@
     };
   }
 
+  // ── 3b. KPI limités à la période (Track Record) ──
+  // Les trades pris en compte sont ceux de la période (et de la case BT). Ce qui
+  // est un NIVEAU (capital, risque actuel) est celui de la fin de la période ;
+  // le drawdown est mesuré dans la période, à partir du capital qu'on avait au
+  // début de la période.
+  function cmpTrade(a, b) {
+    return a.date.localeCompare(b.date) || (a.heure || '').localeCompare(b.heure || '');
+  }
+  function applyKpiRange(r) {
+    var bt = !!BT_STATE.kpi;
+    var all = (bt ? APP.trades : realTrades())
+      .filter(function (x) {
+        return x.date;
+      })
+      .sort(cmpTrade);
+    var inR = function (d) {
+      return d >= r.from && d <= r.to;
+    };
+    var t = all.filter(function (x) {
+      return inR(x.date);
+    });
+    var cap0 = CAPITAL();
+    var fr2 = function (n) {
+      return n.toLocaleString('fr-FR', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+    };
+    var poInRange = 0,
+      poUntilEnd = 0;
+    lsAcc('tj_payouts', []).forEach(function (po) {
+      var a = po.amount || 0;
+      if (!po.date || po.date <= r.to) poUntilEnd += a;
+      if (po.date && inR(po.date)) poInRange += a;
+    });
+    var capEnd =
+      all.reduce(function (sum, x) {
+        return x.date <= r.to ? sum + (x.res || 0) : sum;
+      }, cap0) - poUntilEnd;
+    var capStart = all.reduce(function (sum, x) {
+      return x.date < r.from ? sum + (x.res || 0) : sum;
+    }, cap0);
+    // Risque à la fin de la période : état après le dernier trade ≤ fin de période
+    var hist = computeRiskHistory(bt).hist,
+      rp = hist[0].rp;
+    for (var i = hist.length - 1; i >= 1; i--) {
+      if (hist[i].date <= r.to) {
+        rp = hist[i].rp;
+        break;
+      }
+    }
+    var re = Math.round(((capEnd * rp) / 100) * 100) / 100;
+    var set = function (id, txt) {
+      var el = document.getElementById(id);
+      if (el) el.textContent = txt;
+    };
+    set('k0', fr2(capEnd) + '€');
+    set('k5', (poInRange > 0 ? '-' : '') + fr2(poInRange) + ' €');
+    var btCount = APP.trades.filter(function (x) {
+      return x.backtest && x.date && inR(x.date);
+    }).length;
+    var k6 = document.getElementById('k6');
+    if (k6)
+      k6.innerHTML =
+        t.length +
+        (btCount
+          ? '<br><span style="font-size:9px;opacity:.7;">' +
+            (bt ? '(dont ' + btCount + ' BT)' : '(' + btCount + ' BT exclus)') +
+            '</span>'
+          : '');
+    set('k7', re.toLocaleString('fr-FR') + '€ (' + fmtRiskPct(rp) + ')');
+    if (!t.length) {
+      ['k1', 'k2', 'k3', 'k4', 'k8'].forEach(function (id) {
+        set(id, '');
+      });
+      return;
+    }
+    var gains = t.filter(function (x) {
+        return x.res > 0;
+      }),
+      pertes = t.filter(function (x) {
+        return x.res < 0;
+      });
+    var pnl = t.reduce(function (sum, x) {
+      return sum + (x.res || 0);
+    }, 0);
+    var wr = (gains.length / t.length) * 100;
+    var rrMoy =
+      t.reduce(function (sum, x) {
+        return sum + computeRR(x);
+      }, 0) / t.length;
+    var sumG = gains.reduce(function (sum, x) {
+        return sum + x.res;
+      }, 0),
+      sumP = Math.abs(
+        pertes.reduce(function (sum, x) {
+          return sum + x.res;
+        }, 0)
+      );
+    var pf = sumP > 0 ? sumG / sumP : sumG > 0 ? 99 : 0;
+    var streak = 0,
+      worst = 0,
+      run = capStart,
+      peak = capStart,
+      maxDD = 0;
+    t.forEach(function (x) {
+      if (x.res < 0) {
+        streak++;
+        worst = Math.max(worst, streak);
+      } else if (x.res > 0) streak = 0;
+      run += x.res || 0;
+      if (run > peak) peak = run;
+      var dd = peak > 0 ? ((peak - run) / peak) * 100 : 0;
+      if (dd > maxDD) maxDD = dd;
+    });
+    var pnlPct = cap0 > 0 ? (pnl / cap0) * 100 : 0;
+    set('k1', (pnl >= 0 ? '+' : '') + fr2(pnl) + '€ (' + (pnlPct >= 0 ? '+' : '') + pnlPct.toFixed(1) + '%)');
+    set('k2', wr.toFixed(1) + '%');
+    set('k3', rrMoy.toFixed(2) + 'R');
+    set('k4', pf.toFixed(2));
+    set('k8', worst + ' T (' + maxDD.toFixed(1) + '%)');
+  }
+  if (typeof window.updateKPIs === 'function') {
+    var _origUpdateKPIs = window.updateKPIs;
+    window.updateKPIs = function () {
+      var out = _origUpdateKPIs.apply(this, arguments);
+      var r = parseRange(ST.kpi);
+      if (r) applyKpiRange(r);
+      return out;
+    };
+  }
+  // Cartes KPI personnalisées : mêmes trades que les KPI natifs (donc sur la période)
+  if (typeof window.cfKpiTradesFor === 'function') {
+    var _origCfKpiTradesFor = window.cfKpiTradesFor;
+    window.cfKpiTradesFor = function () {
+      var list = _origCfKpiTradesFor.apply(this, arguments);
+      var r = parseRange(ST.kpi);
+      return r
+        ? list.filter(function (x) {
+            return x.date && x.date >= r.from && x.date <= r.to;
+          })
+        : list;
+    };
+  }
+
   // ── 4. Boutons calendrier sur chaque graphique ──────────────────────
   var ICON =
     '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" ' +
@@ -218,8 +368,21 @@
       });
     }
   }
+  // Bouton du bandeau KPI (Track Record) : même principe, sans groupe de boutons de période.
+  function syncKpiBtn() {
+    var btn = document.querySelector('.pcal-btn[data-chart="kpi"]');
+    if (!btn) return;
+    var r = parseRange(ST.kpi);
+    btn.classList.toggle('active', !!r);
+    btn.title = r
+      ? 'Période analysée par les KPI : du ' + fr(r.from) + ' au ' + fr(r.to) + ' (clic pour modifier)'
+      : 'Choisir la période analysée par les KPI';
+    var lbl = btn.parentNode.querySelector('.pcal-range-label');
+    if (lbl) lbl.textContent = r ? 'du ' + fr(r.from) + ' au ' + fr(r.to) : '';
+  }
   function syncAll() {
     document.querySelectorAll('.period-btns').forEach(syncGroup);
+    syncKpiBtn();
   }
 
   // Le bouton calendrier est un carré dont le côté = la hauteur des boutons de
@@ -244,6 +407,14 @@
       var btn = g.querySelector('.pcal-btn');
       if (heights[i] > 0) btn.style.setProperty('--pcal-size', Math.round(heights[i] * 100) / 100 + 'px');
       else btn.style.removeProperty('--pcal-size'); // graphique masqué : valeur par défaut, recalculée à son affichage
+    });
+    // Bouton du bandeau KPI : même taille que ceux des graphiques.
+    var ref = 0;
+    heights.forEach(function (h) {
+      if (!ref && h > 0) ref = h;
+    });
+    document.querySelectorAll('.pcal-btn[data-chart="kpi"]').forEach(function (b) {
+      b.style.setProperty('--pcal-size', Math.round((ref || 17) * 100) / 100 + 'px');
     });
   }
   function queueFit() {
@@ -272,6 +443,23 @@
       }
       syncGroup(group);
     });
+    // Track Record : bouton à côté de la case BT, au-dessus des cartes KPI
+    var btKpi = document.getElementById('bt-kpi');
+    var kpiBox = btKpi && btKpi.closest('div');
+    if (kpiBox && !kpiBox.querySelector('.pcal-btn')) {
+      var kb = document.createElement('button');
+      kb.type = 'button';
+      kb.className = 'pcal-btn';
+      kb.dataset.chart = 'kpi';
+      kb.setAttribute('aria-label', 'Choisir la période analysée par les KPI');
+      kb.innerHTML = ICON;
+      kpiBox.appendChild(kb);
+      var kl = document.createElement('span');
+      kl.className = 'pcal-range-label';
+      kpiBox.appendChild(kl);
+      added = true;
+    }
+    syncKpiBtn();
     if (added) queueFit();
   }
 
