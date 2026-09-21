@@ -367,6 +367,24 @@ function cfCategoryStats(field, trades) {
   });
   return map;
 }
+// Trades regroupés par réponse, avec EXACTEMENT le même regroupement que
+// cfCategoryStats() : sert à afficher, au clic sur une barre / une tranche, la
+// liste des trades analysés dans cette zone (comme les graphiques natifs).
+function cfTradesByCategory(field, trades) {
+  const map = {};
+  (trades || []).forEach(t => {
+    const raw = cfDisplayValue(field, t);
+    if (raw === undefined || raw === null || raw === '') return;
+    const v = String(raw);
+    if (!map[v]) map[v] = [];
+    map[v].push(t);
+  });
+  return map;
+}
+// Curseur « main » au survol d'une zone cliquable, comme sur les graphiques natifs.
+function cfChartHover(evt, elements) {
+  if (evt && evt.native && evt.native.target) evt.native.target.style.cursor = elements.length ? 'pointer' : 'default';
+}
 // Nombre de tranches à prévoir pour un camembert (thème + dessin), selon le
 // nombre RÉEL de réponses possibles pour ce champ (pas une valeur figée) :
 // menu déroulant -> nombre d'options configurées ; étoiles -> 5 ; case à
@@ -1130,6 +1148,17 @@ function cfDrawChart(field) {
       options: {
         responsive: true,
         maintainAspectRatio: false,
+        // Comme Équity natif : le point le plus proche sur l'axe des dates, sans
+        // devoir viser exactement le point (il n'est pas dessiné).
+        interaction: {mode: 'index', intersect: false},
+        // Clic sur un point : la liste des trades analysés à cet endroit (ici 1 trade),
+        // comme sur les graphiques natifs.
+        onClick: (evt, elements) => {
+          if (!elements.length || typeof openTradesListModal !== 'function') return;
+          const t = trs[elements[0].index];
+          if (t) openTradesListModal('Trade : ' + (t.paire || '—') + ' du ' + (t.date || ''), [t]);
+        },
+        onHover: cfChartHover,
         plugins: {
           legend: {display: false},
           // Manquait par rapport à Équity/P&L natifs : sans ça, l'info-bulle
@@ -1170,6 +1199,7 @@ function cfDrawChart(field) {
       .slice(0, 20);
     if (!ks.length) return;
     const data = ks.map(k => map[k].pnl);
+    const mapTrades = cfTradesByCategory(field, trades);
     const posC = gc('--cf-' + field.id + '-pos') || 'rgba(0,229,160,.8)',
       negC = gc('--cf-' + field.id + '-neg') || 'rgba(239,68,68,.8)';
     const valueAxis = kind === 'bar-h' ? 'x' : 'y',
@@ -1197,6 +1227,14 @@ function cfDrawChart(field) {
         responsive: true,
         maintainAspectRatio: false,
         indexAxis: kind === 'bar-h' ? 'y' : 'x',
+        // Clic sur une barre : la liste des trades analysés dans cette barre, comme
+        // sur les graphiques de comparaison natifs (Confluence, Paire...).
+        onClick: (evt, elements) => {
+          if (!elements.length || typeof openTradesListModal !== 'function') return;
+          const k = ks[elements[0].index];
+          openTradesListModal((field.colName || field.label) + ' : ' + k, mapTrades[k] || []);
+        },
+        onHover: cfChartHover,
         plugins: {
           legend: {display: false},
           // Manquait par rapport aux graphiques de comparaison natifs
@@ -1223,6 +1261,7 @@ function cfDrawChart(field) {
     const ks = cfCategoryOrder(field, map).slice(0, cfPieSliceCount(field));
     if (!ks.length) return;
     const data = ks.map(k => map[k].total);
+    const mapTrades = cfTradesByCategory(field, trades);
     const fallback = [
       '#00e5a0',
       '#3b82f6',
@@ -1267,6 +1306,14 @@ function cfDrawChart(field) {
         // Les 2 paramètres suivants manquaient par rapport au Win Rate natif
         // (repérés en comparant point par point) :
         layout: {padding: {bottom: 8}},
+        // Clic sur une tranche : la liste des trades analysés dans cette tranche,
+        // comme sur le Win Rate natif.
+        onClick: (evt, elements) => {
+          if (!elements.length || typeof openTradesListModal !== 'function') return;
+          const k = ks[elements[0].index];
+          openTradesListModal((field.colName || field.label) + ' : ' + k, mapTrades[k] || []);
+        },
+        onHover: cfChartHover,
         plugins: {
           legend: {display: false},
           tooltip: {
