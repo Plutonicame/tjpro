@@ -1960,12 +1960,14 @@ function cfEnsureModal() {
         <div class="mod-list" id="cfm-options-list" style="margin-bottom:6px;"></div>
         <div class="mod-add"><input type="text" id="cfm-options-add-input" placeholder="Ajouter une option..." onkeydown="if(event.key==='Enter'){event.preventDefault();cfAddOption();}"><button onclick="cfAddOption()">+</button></div>
       </div>
+      <div class="fg" style="margin-bottom:9px;"><label id="cfm-afterq-label">Position dans le questionnaire</label><select id="cfm-afterq"></select></div>
       <div class="fg" style="margin-bottom:9px;"><label>Nom de la colonne (historique)</label><input type="text" id="cfm-colname" placeholder="Par défaut : même nom que la question"></div>
       <div class="fg" style="margin-bottom:9px;"><label>Position dans les colonnes</label><select id="cfm-aftercol"></select></div>
       <div class="fg" style="margin-bottom:9px;"><label>Widget Track Record</label><select id="cfm-widgetkind" onchange="cfOnWidgetKindChange()"></select></div>
       <div class="fg" id="cfm-widgetpos-row" style="margin-bottom:14px;">
         <label>Position du widget</label>
         <select id="cfm-widgetpos"></select>
+        <div id="cfm-widgetpos-hint" style="font-size:9px;color:var(--muted);margin-top:4px;line-height:1.4;"></div>
       </div>
       <div style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;">
         <button class="btn" id="cfmDeleteBtn" style="background:var(--btn-delall-bg);color:var(--btn-delall-tx);border:1px solid var(--btn-delall-bd);display:none;" onclick="cfDeleteFieldFromModal()">Supprimer</button>
@@ -1984,58 +1986,145 @@ function cfWidgetOptionsHtml(type) {
   const allowed = (CF_TYPE_META[type] || CF_TYPE_META.text).widgets;
   return allowed.map(k => `<option value="${k}">${CF_WIDGET_META[k].label}</option>`).join('');
 }
-function cfPopulateAnchorSelects(f) {
-  // Depuis le 18/09/2026 (demande de Paul), la position des questions ET
-  // des cases à cocher entre elles se règle uniquement par glisser-déposer
-  // ("ORDRE DES QUESTIONS" / "ORDRE DES CASES À COCHER", Paramètres) — ce
-  // menu déroulant ne sert plus qu'à la position dans les COLONNES de
-  // l'historique, un classement à part entière.
-  const colOpts = ['<option value="">— À la fin —</option>']
-    .concat(
-      CF_BUILTIN_COLS.map(b => `<option value="${b.id}">Après : ${escapeHtml(b.label)}</option>`)
-    )
-    .concat(
-      APP.cfFields
-        .filter(x => !f || x.id !== f.id)
-        .map(x => `<option value="${x.id}">Après : ${escapeHtml(x.colName || x.label)}</option>`)
-    )
-    .concat(['<option value="__start__">— Au début —</option>']);
-  document.getElementById('cfm-aftercol').innerHTML = colOpts.join('');
+// ── Menus de position du pop-up « Modifier le champ » ──
+// Chaque menu (question, colonne, KPI / graphique) affiche l'ordre RÉEL — celui
+// des listes d'ordre des Paramètres, glisser-déposer compris — avec les
+// champs personnalisés intégrés À LEUR PLACE (repérés par « (perso) »). Ainsi
+// un graphique personnalisé placé après « Win Rate » apparaît juste après
+// « Win Rate » dans la liste. Avant, les menus listaient les éléments natifs
+// dans un ordre fixe puis tous les champs personnalisés à la suite, dans
+// l'ordre de création, sans rapport avec la position réelle.
+// Le menu est pré-sélectionné sur la position ACTUELLE du champ (l'élément
+// qui le précède), et le champ n'est déplacé à l'enregistrement que si tu
+// changes ce choix (voir cfPosOrig / cfSaveBuilder).
+let cfPosOrig = {};
+function cfFieldById(id) {
+  return APP.cfFields.find(x => x.id === id) || null;
 }
-function cfPopulateWidgetPosSelect(f) {
-  const kind = document.getElementById('cfm-widgetkind').value;
-  const sel = document.getElementById('cfm-widgetpos');
-  if (kind === 'kpi') {
-    const opts = ['<option value="">— À la fin —</option>']
-      .concat(
-        CF_BUILTIN_KPIS.map(b => `<option value="${b.id}">Après : ${escapeHtml(b.label)}</option>`)
-      )
-      .concat(
-        APP.cfFields
-          .filter(x => (!f || x.id !== f.id) && x.widget && x.widget.kind === 'kpi')
-          .map(x => `<option value="${x.id}">Après : ${escapeHtml(x.label)}</option>`)
-      )
-      .concat(['<option value="__start__">— Au début —</option>']);
-    sel.innerHTML = opts.join('');
-  } else if (kind && kind !== 'none') {
-    const opts = ['<option value="">— À la fin —</option>']
-      .concat(
-        CF_BUILTIN_CHARTS.map(
-          b => `<option value="${b.id}">Après : ${escapeHtml(b.label)}</option>`
-        )
-      )
-      .concat(
-        APP.cfFields
-          .filter(
-            x => (!f || x.id !== f.id) && x.widget && CF_CHART_WIDGET_KINDS.includes(x.widget.kind)
-          )
-          .map(x => `<option value="${x.id}">Après : ${escapeHtml(x.label)}</option>`)
-      )
-      .concat(['<option value="__start__">— Au début —</option>']);
-    sel.innerHTML = opts.join('');
-  } else {
-    sel.innerHTML = '';
+function cfWidgetFamily(kind) {
+  if (kind === 'kpi') return 'kpi';
+  return CF_CHART_WIDGET_KINDS.includes(kind) ? 'chart' : null;
+}
+// Ordre réel + libellé de chaque élément, pour un type de liste. Les libellés
+// sont les mêmes que dans les listes d'ordre des Paramètres.
+function cfPosSource(kind) {
+  cfEnsureOrders();
+  if (kind === 'question') {
+    return {
+      order: APP.cfQuestionOrder,
+      label: id => {
+        if (cfIsLineBreak(id)) return '— Saut de ligne —';
+        const bi = CF_BUILTIN_FORM_ANCHORS.find(x => x.id === id);
+        if (bi) return bi.label;
+        const x = cfFieldById(id);
+        return x ? x.colName || x.label : null;
+      }
+    };
   }
+  if (kind === 'toggle') {
+    return {
+      order: APP.cfToggleOrder,
+      label: id => {
+        if (id === 'backtest') return 'Backtest';
+        const x = cfFieldById(id);
+        return x ? x.label : null;
+      }
+    };
+  }
+  const builtin = {col: CF_BUILTIN_COLS, kpi: CF_BUILTIN_KPIS, chart: CF_BUILTIN_CHARTS}[kind];
+  const order =
+    kind === 'col'
+      ? APP.cfColOrder
+      : kind === 'kpi'
+        ? APP.cfKpiOrder
+        : APP.cfChartOrderByMode[cfScreenMode()] || builtin.map(x => x.id);
+  return {
+    order,
+    label: id => {
+      const bi = builtin.find(x => x.id === id);
+      if (bi) return bi.label;
+      const x = cfFieldById(id);
+      return x ? x.colName || x.label : null;
+    }
+  };
+}
+// Remplit un menu de position. `keepPrev` : garde le choix en cours s'il est
+// encore valable (changement de format / de widget pendant que le pop-up est
+// ouvert) ; sinon (ouverture du pop-up) pré-sélectionne la position actuelle
+// du champ, ou « à la fin » pour un nouveau champ.
+function cfPosFill(selectId, kind, f, keepPrev) {
+  const sel = document.getElementById(selectId);
+  if (!sel) return '';
+  const src = cfPosSource(kind);
+  const prev = keepPrev ? sel.value : null;
+  const ids = [];
+  const opts = ['<option value="__start__">— Au début —</option>'];
+  src.order.forEach(id => {
+    if (f && id === f.id) return; // on ne se positionne pas par rapport à soi-même
+    const label = src.label(id);
+    if (label == null) return;
+    ids.push(id);
+    opts.push(
+      `<option value="${escapeHtml(id)}">Après : ${escapeHtml(label)}${cfFieldById(id) ? ' (perso)' : ''}</option>`
+    );
+  });
+  sel.innerHTML = opts.join('');
+  let val;
+  if (prev && (prev === '__start__' || ids.includes(prev))) {
+    val = prev;
+  } else {
+    const idx = f ? src.order.indexOf(f.id) : -1;
+    if (idx === -1) {
+      val = ids.length ? ids[ids.length - 1] : '__start__'; // nouveau champ : à la fin
+    } else {
+      val = '__start__';
+      for (let i = idx - 1; i >= 0; i--) {
+        if (ids.includes(src.order[i])) {
+          val = src.order[i];
+          break;
+        }
+      }
+    }
+  }
+  sel.value = val;
+  return val;
+}
+function cfPopulateAnchorSelects(f, fresh) {
+  const isToggle = document.getElementById('cfm-type').value === 'toggle';
+  const lbl = document.getElementById('cfm-afterq-label');
+  if (lbl)
+    lbl.textContent = isToggle ? 'Position parmi les cases à cocher' : 'Position dans le questionnaire';
+  cfPosFill('cfm-afterq', isToggle ? 'toggle' : 'question', f, !fresh);
+  cfPosFill('cfm-aftercol', 'col', f, !fresh);
+}
+function cfPopulateWidgetPosSelect(f, fresh) {
+  const kind = document.getElementById('cfm-widgetkind').value;
+  const fam = cfWidgetFamily(kind);
+  const sel = document.getElementById('cfm-widgetpos');
+  const hint = document.getElementById('cfm-widgetpos-hint');
+  if (fam) cfPosFill('cfm-widgetpos', fam, f, !fresh);
+  else sel.innerHTML = '';
+  if (hint) {
+    const mode = cfScreenMode();
+    hint.textContent =
+      fam === 'chart'
+        ? 'Ordre affiché : mode « ' +
+          (CF_MODE_LABELS[mode] || mode) +
+          ' ». Dans les autres modes, le graphique se place après le même élément.'
+        : '';
+  }
+}
+// Positions affichées à l'ouverture : sert à ne déplacer le champ que si tu
+// changes un de ces choix.
+function cfCapturePosOrig() {
+  const qSel = document.getElementById('cfm-afterq');
+  cfPosOrig = {
+    qKind: document.getElementById('cfm-type').value === 'toggle' ? 'toggle' : 'question',
+    q: qSel ? qSel.value : '',
+    col: document.getElementById('cfm-aftercol').value,
+    wFam: cfWidgetFamily(document.getElementById('cfm-widgetkind').value),
+    w: document.getElementById('cfm-widgetpos').value
+  };
 }
 function cfOnTypeChange() {
   const type = document.getElementById('cfm-type').value;
@@ -2062,8 +2151,7 @@ function cfOpenBuilder(editId) {
   document.getElementById('cfm-label').value = f ? f.label : '';
   document.getElementById('cfm-type').value = f ? f.type : 'text';
   document.getElementById('cfm-colname').value = f ? f.colName || '' : '';
-  cfPopulateAnchorSelects(f);
-  document.getElementById('cfm-aftercol').value = f ? f.afterCol || '' : '';
+  cfPopulateAnchorSelects(f, true);
   document.getElementById('cfm-options-wrap').style.display =
     (f ? f.type : 'text') === 'select' ? '' : 'none';
   document.getElementById('cfm-widgetkind').innerHTML = cfWidgetOptionsHtml(f ? f.type : 'text');
@@ -2071,8 +2159,8 @@ function cfOpenBuilder(editId) {
     f && f.widget && f.widget.kind ? f.widget.kind : 'none';
   document.getElementById('cfm-widgetpos-row').style.display =
     document.getElementById('cfm-widgetkind').value === 'none' ? 'none' : '';
-  cfPopulateWidgetPosSelect(f);
-  document.getElementById('cfm-widgetpos').value = f ? f.widgetAfter || '' : '';
+  cfPopulateWidgetPosSelect(f, true);
+  cfCapturePosOrig();
   document.getElementById('cfmDeleteBtn').style.display = f ? '' : 'none';
   cfRenderOptionsEditor(document.getElementById('cfm-options-list'), cfTempOptions, () => {});
   document.getElementById('cfModal').classList.add('open');
@@ -2104,7 +2192,9 @@ function cfSaveBuilder() {
   const afterCol = document.getElementById('cfm-aftercol').value;
   const widgetKind = document.getElementById('cfm-widgetkind').value;
   const widgetAfter = document.getElementById('cfm-widgetpos').value;
+  const afterQ = document.getElementById('cfm-afterq').value;
 
+  const isNew = !cfEditingId;
   let field = cfEditingId ? APP.cfFields.find(x => x.id === cfEditingId) : null;
   if (!field) {
     field = {id: cfNewId()};
@@ -2118,17 +2208,33 @@ function cfSaveBuilder() {
   field.widget = {kind: widgetKind};
   field.widgetAfter = widgetAfter;
 
+  // Un champ existant n'est déplacé que si son menu de position a été changé
+  // (ou si sa liste a changé : question ↔ case à cocher, KPI ↔ graphique...) :
+  // enregistrer sans toucher aux positions ne le fait plus sauter ailleurs, et
+  // ne touche pas à l'ordre des autres modes d'affichage.
+  const o = cfPosOrig || {};
+  const qKind = type === 'toggle' ? 'toggle' : 'question';
+  const wFam = cfWidgetFamily(widgetKind);
+  const moveQ = isNew || o.qKind !== qKind || o.q !== afterQ;
+  const moveCol = isNew || o.col !== afterCol;
+  const moveW = isNew || o.wFam !== wFam || o.w !== widgetAfter;
+
   cfEnsureOrders();
-  cfInsertIntoOrder(APP.cfColOrder, field.id, afterCol);
-  if (widgetKind === 'kpi') {
-    cfInsertIntoOrder(APP.cfKpiOrder, field.id, widgetAfter);
+  if (moveQ) {
+    cfInsertIntoOrder(qKind === 'toggle' ? APP.cfToggleOrder : APP.cfQuestionOrder, field.id, afterQ);
+  }
+  if (moveCol) cfInsertIntoOrder(APP.cfColOrder, field.id, afterCol);
+  if (wFam === 'kpi') {
+    if (moveW) cfInsertIntoOrder(APP.cfKpiOrder, field.id, widgetAfter);
     CF_SCREEN_MODES.forEach(m => {
       APP.cfChartOrderByMode[m] = APP.cfChartOrderByMode[m].filter(x => x !== field.id);
     });
-  } else if (CF_CHART_WIDGET_KINDS.includes(widgetKind)) {
-    CF_SCREEN_MODES.forEach(m => {
-      cfInsertIntoOrder(APP.cfChartOrderByMode[m], field.id, widgetAfter);
-    });
+  } else if (wFam === 'chart') {
+    if (moveW) {
+      CF_SCREEN_MODES.forEach(m => {
+        cfInsertIntoOrder(APP.cfChartOrderByMode[m], field.id, widgetAfter);
+      });
+    }
     APP.cfKpiOrder = APP.cfKpiOrder.filter(x => x !== field.id);
   } else {
     APP.cfKpiOrder = APP.cfKpiOrder.filter(x => x !== field.id);

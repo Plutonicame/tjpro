@@ -3810,6 +3810,25 @@ function cpConfirm() {
   if (cpCB) cpCB(hex);
   document.getElementById('cpOverlay').classList.remove('open');
 }
+// Touche Entrée = APPLIQUER, tant que le sélecteur de couleurs est ouvert
+// (même effet qu'un clic sur le bouton). Un bouton du sélecteur qui a le focus
+// (ANNULER, REPLIER...) garde son comportement normal. Écouteur en phase de
+// capture pour passer avant tout autre gestionnaire (ex. l'élément resté
+// focalisé sous la fenêtre).
+document.addEventListener(
+  'keydown',
+  function (e) {
+    if (e.key !== 'Enter' || e.repeat || e.isComposing) return;
+    const ov = document.getElementById('cpOverlay');
+    if (!ov || !ov.classList.contains('open')) return;
+    const t = e.target;
+    if (t && t.closest && t.closest('#cpOverlay') && t.closest('button')) return;
+    e.preventDefault();
+    e.stopPropagation();
+    cpConfirm();
+  },
+  true
+);
 
 // ══ THEME ══
 function buildTV() {

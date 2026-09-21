@@ -2,8 +2,8 @@
 // PÉRIODE PAR CALENDRIER — TJP · module additif, zéro-édition
 // ═══════════════════════════════════════════════════════════════════════
 // Ajoute sur CHAQUE graphique (natifs comme personnalisés, y compris ceux
-// créés plus tard) un tout petit bouton calendrier, à côté des boutons de
-// période (J / SEM / MOIS / TRIM / AN / TOUT). Un clic ouvre un calendrier :
+// créés plus tard) un bouton calendrier carré, à côté des boutons de période
+// (J / SEM / MOIS / TRIM / AN / TOUT), de la même hauteur qu'eux. Un clic ouvre un calendrier :
 // on clique un jour de début, puis un jour de fin, et le graphique n'analyse
 // plus que les trades compris entre ces deux jours (inclus).
 //
@@ -81,7 +81,9 @@
     `
 .pcal-btn {
   flex-shrink: 0; box-sizing: border-box;
-  width: 14px; height: 14px; padding: 0; margin: 0 0 0 4px;
+  /* Carré, de la même hauteur que les boutons de période (J / SEM / MOIS...) :
+     --pcal-size est mesurée et tenue à jour par le script (voir fitAll). */
+  width: var(--pcal-size, 20px); height: var(--pcal-size, 20px); padding: 0; margin: 0 0 0 4px;
   display: inline-flex; align-items: center; justify-content: center; align-self: center;
   border-radius: 3px;
   border: 1px solid var(--pcal-btn-bd);
@@ -90,17 +92,13 @@
   cursor: pointer;
   transition: border-color 0.12s, color 0.12s, background 0.12s;
 }
-.pcal-btn svg { width: 9px; height: 9px; display: block; pointer-events: none; }
+.pcal-btn svg { width: 74%; height: 74%; display: block; pointer-events: none; }
 .pcal-btn:hover { border-color: var(--pcal-btn-hover-bd); color: var(--pcal-btn-hover-ic); }
 .pcal-btn.active,
 .pcal-btn.active:hover {
   background: var(--pcal-btn-active-bg);
   border-color: var(--pcal-btn-active-bd);
   color: var(--pcal-btn-active-ic);
-}
-@media (pointer: coarse) {
-  .pcal-btn { width: 18px; height: 18px; }
-  .pcal-btn svg { width: 12px; height: 12px; }
 }
 
 .pcal-pop {
@@ -224,7 +222,39 @@
     document.querySelectorAll('.period-btns').forEach(syncGroup);
   }
 
+  // Le bouton calendrier est un carré dont le côté = la hauteur des boutons de
+  // période. On mesure cette hauteur NATURELLE (le bouton est ramené à 0 le
+  // temps de la mesure : sinon, plus haut qu'eux, il étirerait toute la ligne
+  // et on mesurerait sa propre taille) puis on la lui donne, et on la suit avec
+  // un ResizeObserver (chargement de la police, mode d'affichage, réglages du
+  // thème...) au lieu de la figer en pixels.
+  var fitQueued = false;
+  function fitAll() {
+    fitQueued = false;
+    var groups = Array.prototype.filter.call(document.querySelectorAll('.period-btns'), function (g) {
+      return g.querySelector('.pcal-btn') && g.querySelector('.pbtn');
+    });
+    groups.forEach(function (g) {
+      g.querySelector('.pcal-btn').style.setProperty('--pcal-size', '0px');
+    });
+    var heights = groups.map(function (g) {
+      return g.querySelector('.pbtn').getBoundingClientRect().height;
+    });
+    groups.forEach(function (g, i) {
+      var btn = g.querySelector('.pcal-btn');
+      if (heights[i] > 0) btn.style.setProperty('--pcal-size', Math.round(heights[i] * 100) / 100 + 'px');
+      else btn.style.removeProperty('--pcal-size'); // graphique masqué : valeur par défaut, recalculée à son affichage
+    });
+  }
+  function queueFit() {
+    if (fitQueued) return;
+    fitQueued = true;
+    requestAnimationFrame(fitAll);
+  }
+  var sizeObserver = typeof ResizeObserver === 'function' ? new ResizeObserver(queueFit) : null;
+
   function decorate() {
+    var added = false;
     document.querySelectorAll('.period-btns').forEach(function (group) {
       var key = chartKeyOf(group);
       if (!key) return;
@@ -236,9 +266,13 @@
         btn.setAttribute('aria-label', 'Choisir une période dans un calendrier');
         btn.innerHTML = ICON;
         group.appendChild(btn);
+        var ref = group.querySelector('.pbtn');
+        if (sizeObserver && ref) sizeObserver.observe(ref);
+        added = true;
       }
       syncGroup(group);
     });
+    if (added) queueFit();
   }
 
   // Les graphiques sont créés à différents moments (démarrage, graphiques
