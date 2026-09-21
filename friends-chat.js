@@ -74,6 +74,7 @@ let fcActiveFriendId = null;
 let fcMessages = [];
 let fcChannel = null;
 let fcActivityMap = {}; // friendId -> dernier created_at (tri de la liste)
+let fcLastMsgMap = {}; // friendId -> dernier message échangé (aperçu + heure dans la liste)
 let fcUnreadCounts = {}; // friendId -> nombre de messages non lus de cet ami
 let fcInitDone = false;
 let fcSetupNoticeShown = false;
@@ -152,7 +153,12 @@ const FC_CSS = `
 .fc-contact-item.active{background:var(--fc-contact-active-bg,color-mix(in srgb, var(--green) 10%, transparent));}
 .fc-avatar{width:40px;height:40px;border-radius:50%;overflow:hidden;flex-shrink:0;display:flex;align-items:center;justify-content:center;background:var(--surface);border:1px solid var(--border);font-size:15px;color:var(--muted);font-family:var(--mono);}
 .fc-avatar img{width:100%;height:100%;object-fit:cover;display:block;}
-.fc-contact-name{font-size:13px;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.fc-contact-name{font-size:13px;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;}
+.fc-contact-body{flex:1;min-width:0;display:flex;flex-direction:column;gap:4px;}
+.fc-contact-top{display:flex;align-items:baseline;justify-content:space-between;gap:8px;min-width:0;}
+.fc-contact-time{font-family:var(--mono);font-size:10px;color:var(--muted);flex-shrink:0;white-space:nowrap;}
+.fc-contact-last{font-size:12px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.fc-contact-last.fc-none{font-style:italic;opacity:.7;}
 .fc-contact-avatar-wrap{position:relative;flex-shrink:0;}
 .fc-contact-unread-dot{position:absolute;top:-2px;right:-2px;width:10px;height:10px;border-radius:50%;background:var(--fc-unread-dot-color,var(--red));border:2px solid var(--fc-sidebar-bg,var(--surface));}
 .fc-nav-badge{display:none;position:absolute;top:4px;right:2px;width:8px;height:8px;border-radius:50%;background:var(--fc-unread-dot-color,var(--red));box-shadow:0 0 0 2px var(--nav-bg,var(--bg));}
@@ -266,8 +272,25 @@ body.cf-mode-ultrawide .fc-trade-card{width:330px;}
   .fc-contact-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(64px,1fr));gap:14px;padding:14px;}
   .fc-contact-item{flex-direction:column;gap:5px;padding:4px;border-bottom:none;text-align:center;}
   .fc-contact-name{display:none;}
+  .fc-contact-body{display:none;}
   .fc-avatar{width:56px;height:56px;font-size:19px;margin:0 auto;}
   .fc-msg-inner{max-width:82%;}
+}
+/* ── Modes PC (normal, ultra wide, vertical) : liste en UNE colonne, photos ×2, dernier message + heure.
+   Le mode Téléphone garde la grille de photos. Toute la ligne est cliquable / surlignée. ── */
+body:not(.cf-mode-phone) .fc-contact-item{gap:14px;}
+body:not(.cf-mode-phone) .fc-contact-avatar-wrap .fc-avatar{width:80px;height:80px;font-size:30px;margin:0;}
+body:not(.cf-mode-phone) .fc-contact-name{font-size:14px;font-weight:600;}
+@media (max-width:1100px){
+  body:not(.cf-mode-phone) .fc-contact-list{display:block;padding:0;}
+  body:not(.cf-mode-phone) .fc-contact-item{flex-direction:row;gap:18px;padding:12px 16px;border-bottom:1px solid var(--border);text-align:left;}
+  body:not(.cf-mode-phone) .fc-contact-name{display:block;}
+  body:not(.cf-mode-phone) .fc-contact-body{display:flex;}
+  body:not(.cf-mode-phone) .fc-contact-avatar-wrap .fc-avatar{width:112px;height:112px;font-size:38px;}
+  body:not(.cf-mode-phone) .fc-contact-last{font-size:13px;}
+}
+@media (min-width:1101px){
+  body:not(.cf-mode-phone) .fc-sidebar{width:340px;}
 }
 .fc-bubble-deleted{color:var(--muted);font-style:italic;}
 .fc-bubble-edited{font-size:9px;color:var(--muted);margin-left:5px;}
@@ -658,16 +681,18 @@ async function fcRefreshActivityOrder() {
   try {
     const { data, error } = await sb
       .from(FC_MESSAGES_TABLE)
-      .select('sender_id,receiver_id,created_at')
+      .select('id,sender_id,receiver_id,created_at,msg_type,content,audio_duration,deleted')
       .or(`sender_id.eq.${me},receiver_id.eq.${me}`)
       .order('created_at', { ascending: false })
       .limit(400);
     if (!error && data) {
       fcActivityMap = {};
+      fcLastMsgMap = {};
       const incomingByFriend = {};
       data.forEach((m) => {
         const other = m.sender_id === me ? m.receiver_id : m.sender_id;
         if (!fcActivityMap[other]) fcActivityMap[other] = m.created_at;
+        if (!fcLastMsgMap[other]) fcLastMsgMap[other] = m; // le plus récent (liste triée du plus récent au plus ancien)
         if (m.sender_id === other) {
           if (!incomingByFriend[other]) incomingByFriend[other] = [];
           incomingByFriend[other].push(m.created_at);
@@ -694,6 +719,44 @@ async function fcRefreshActivityOrder() {
   fcRenderContactList();
 }
 
+// Aperçu du dernier message : « Vous : » devant un message envoyé par moi.
+function fcPreviewText(m) {
+  if (!m) return '';
+  let t;
+  if (m.deleted) t = 'Message supprimé';
+  else if (m.msg_type === 'audio') t = 'Message vocal' + (m.audio_duration ? ' (' + fcFmtDuration(m.audio_duration) + ')' : '');
+  else if (m.msg_type === 'trade') t = 'Trade partagé';
+  else t = String(m.content || '').replace(/\s+/g, ' ').trim();
+  const mine = currentUser && m.sender_id === currentUser.id;
+  return (mine ? 'Vous : ' : '') + t;
+}
+// Heure du dernier message : « 14:32 » aujourd'hui, « Hier 14:32 » hier, sinon « 12/09 14:32 »
+// (avec l'année si ce n'est pas l'année en cours).
+function fcFmtListTime(iso) {
+  if (!iso) return '';
+  const d = new Date(iso);
+  if (isNaN(d)) return '';
+  const hm = String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
+  const now = new Date();
+  const dayDiff = Math.round(
+    (new Date(now.getFullYear(), now.getMonth(), now.getDate()) - new Date(d.getFullYear(), d.getMonth(), d.getDate())) / 864e5,
+  );
+  if (dayDiff === 0) return hm;
+  if (dayDiff === 1) return 'Hier ' + hm;
+  const dm = String(d.getDate()).padStart(2, '0') + '/' + String(d.getMonth() + 1).padStart(2, '0');
+  return (d.getFullYear() === now.getFullYear() ? dm : dm + '/' + String(d.getFullYear()).slice(2)) + ' ' + hm;
+}
+// Un message modifié / supprimé (par moi ou par l'autre) : met à jour l'aperçu s'il s'agit du dernier.
+function fcSyncLastMsg(m) {
+  if (!m || !currentUser) return;
+  const other = m.sender_id === currentUser.id ? m.receiver_id : m.sender_id;
+  const cur = fcLastMsgMap[other];
+  if (cur && cur.id === m.id) {
+    fcLastMsgMap[other] = Object.assign({}, cur, m);
+    fcRenderContactList();
+  }
+}
+
 function fcRenderContactList() {
   const list = document.getElementById('fcContactList');
   if (!list) return;
@@ -711,12 +774,20 @@ function fcRenderContactList() {
           : unreadCount > 1
             ? `<span class="fc-contact-unread-dot fc-badge-count">${unreadCount > 99 ? '99+' : unreadCount}</span>`
             : '';
+      const last = fcLastMsgMap[c.friendId];
+      const lastHtml = last
+        ? `<div class="fc-contact-last">${fcEsc(fcPreviewText(last))}</div>`
+        : '<div class="fc-contact-last fc-none">Aucun message</div>';
+      const timeHtml = last ? `<span class="fc-contact-time">${fcEsc(fcFmtListTime(last.created_at))}</span>` : '';
       return `<div class="fc-contact-item${c.friendId === fcActiveFriendId ? ' active' : ''}" data-friend-id="${fcEsc(c.friendId)}" onclick="fcOpenConversation(this.dataset.friendId)">
       <div class="fc-contact-avatar-wrap">
         ${fcAvatarHtml(c.photo, c.pseudo)}
         ${unreadDot}
       </div>
-      <div class="fc-contact-name">${fcEsc(c.pseudo)}</div>
+      <div class="fc-contact-body">
+        <div class="fc-contact-top"><div class="fc-contact-name">${fcEsc(c.pseudo)}</div>${timeHtml}</div>
+        ${lastHtml}
+      </div>
     </div>`;
     })
     .join('');
@@ -1055,6 +1126,7 @@ async function fcSaveEditedMessage() {
     if (error) throw error;
     const idx = fcMessages.findIndex((x) => x.id === msgId);
     if (idx !== -1) fcMessages[idx] = data;
+    fcSyncLastMsg(data);
     fcRenderMessages();
   } catch (e) {
     console.warn('fcSaveEditedMessage:', e);
@@ -1097,6 +1169,7 @@ async function fcDeleteMessageForEveryone(msgId) {
     if (error) throw error;
     const idx = fcMessages.findIndex((x) => x.id === msgId);
     if (idx !== -1) fcMessages[idx] = data;
+    fcSyncLastMsg(data);
     fcRenderMessages();
   } catch (e) {
     console.warn('fcDeleteMessageForEveryone:', e);
@@ -1107,6 +1180,7 @@ async function fcDeleteMessageForEveryone(msgId) {
 // soi-même depuis un autre appareil) en temps réel — voir fcStartRealtime().
 function fcHandleMessageUpdate(m) {
   if (!m || !currentUser) return;
+  fcSyncLastMsg(m);
   const me = currentUser.id;
   const other = m.sender_id === me ? m.receiver_id : m.sender_id;
   const idx = fcMessages.findIndex((x) => x.id === m.id);
@@ -1433,6 +1507,8 @@ async function fcSendMessage(payload) {
       fcRenderMessages();
     }
     fcActivityMap[fcActiveFriendId] = data.created_at;
+    fcLastMsgMap[fcActiveFriendId] = data;
+    fcRenderContactList();
   } catch (e) {
     console.warn('fcSendMessage:', e);
     if (typeof showSync === 'function') showSync('⚠ Réseau', '#f59e0b');
@@ -1684,7 +1760,7 @@ function fcShowRecordingUI(on) {
   const attachBtn = document.getElementById('fcAttachBtn');
   const cancelBtn = document.getElementById('fcCancelBtn');
   const micBtn = document.getElementById('fcMicBtn');
-  const mobile = typeof isMobileView === 'function' ? isMobileView() : window.innerWidth <= 1100;
+  const mobile = typeof micHoldMode === 'function' ? micHoldMode() : window.innerWidth <= 1100;
   if (indicator) indicator.style.display = on ? 'flex' : 'none';
   if (input) input.style.display = on ? 'none' : 'block';
   if (attachBtn) attachBtn.style.display = on ? 'none' : 'flex';
@@ -1737,7 +1813,7 @@ function fcStopRecording(shouldSend) {
 // ── Téléphone : glisser le micro vers la gauche pour annuler (comme WhatsApp mobile) ──
 function fcOnMicPointerDown(e) {
   const micBtn = document.getElementById('fcMicBtn');
-  if (!micBtn || !isMobileView() || micBtn.dataset.mode !== 'mic') return;
+  if (!micBtn || !micHoldMode() || micBtn.dataset.mode !== 'mic') return;
   e.preventDefault();
   fcDragStartX = e.clientX;
   fcDragArmed = false;
@@ -1759,7 +1835,7 @@ function fcOnMicPointerDown(e) {
   fcStartRecording();
 }
 function fcOnMicPointerMove(e) {
-  if (!isMobileView() || !fcMediaRecorder) return;
+  if (!micHoldMode() || !fcMediaRecorder) return;
   const micBtn = document.getElementById('fcMicBtn');
   if (!micBtn) return;
   let dx = Math.min(0, e.clientX - fcDragStartX);
@@ -1773,7 +1849,7 @@ function fcOnMicPointerMove(e) {
   }
 }
 function fcOnMicPointerUp() {
-  if (!isMobileView()) return;
+  if (!micHoldMode()) return;
   const micBtn = document.getElementById('fcMicBtn');
   if (micBtn) {
     micBtn.style.transition = '';
@@ -1795,7 +1871,7 @@ function fcOnMicClick() {
     fcSendTextMessage();
   } else if (mode === 'recording-send') {
     fcStopRecording(true);
-  } else if (mode === 'mic' && !isMobileView()) {
+  } else if (mode === 'mic' && !micHoldMode()) {
     fcStartRecording();
   }
 }
@@ -1832,6 +1908,11 @@ function fcUpdateMicSendBtn() {
   const hasText = input.value.trim().length > 0;
   btn.dataset.mode = hasText ? 'send' : 'mic';
   btn.innerHTML = hasText ? FC_ICON_SEND : FC_ICON_MIC;
+  btn.title = hasText
+    ? 'Envoyer'
+    : typeof micHoldMode === 'function' && !micHoldMode()
+      ? 'Message vocal (clique pour enregistrer)'
+      : 'Message vocal (rester appuyé)';
 }
 function fcBindInputBarEvents() {
   const input = document.getElementById('fcTextInput');
@@ -1940,6 +2021,7 @@ function fcHandleIncomingMessage(m) {
     if (m.sender_id === other) fcMarkRead(other); // vue en direct : reste marqué comme lu
   }
   fcActivityMap[other] = m.created_at;
+  fcLastMsgMap[other] = m;
   if (fcContacts.some((c) => c.friendId === other)) fcRefreshActivityOrder();
   else fcLoadContacts();
 }
@@ -1998,6 +2080,7 @@ function fcReset() {
   fcMessages = [];
   fcActiveFriendId = null;
   fcActivityMap = {};
+  fcLastMsgMap = {};
   fcUnreadCounts = {};
   fcReactionsMap = {};
   fcReactPickerTargetId = null;

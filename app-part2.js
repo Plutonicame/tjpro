@@ -3221,7 +3221,7 @@ function iaShowRecordingUI(on) {
   const attachBtn = document.getElementById('iaAttachBtn');
   const cancelBtn = document.getElementById('iaCancelBtn');
   const micBtn = document.getElementById('iaMicBtn');
-  const mobile = typeof isMobileView === 'function' ? isMobileView() : window.innerWidth <= 1100;
+  const mobile = micHoldMode();
   if (indicator) indicator.style.display = on ? 'flex' : 'none';
   if (input) input.style.display = on ? 'none' : 'block';
   if (attachBtn) attachBtn.style.display = on ? 'none' : 'flex';
@@ -3331,7 +3331,7 @@ function iaStopRecording(shouldSend) {
 // ── Téléphone : glisser le micro vers la gauche pour annuler (comme le chat Ami) ──
 function iaOnMicPointerDown(e) {
   const micBtn = document.getElementById('iaMicBtn');
-  if (!micBtn || !isMobileView() || micBtn.dataset.mode !== 'mic') return;
+  if (!micBtn || !micHoldMode() || micBtn.dataset.mode !== 'mic') return;
   e.preventDefault();
   iaDragStartX = e.clientX;
   iaDragArmed = false;
@@ -3351,7 +3351,7 @@ function iaOnMicPointerDown(e) {
   iaStartRecording();
 }
 function iaOnMicPointerMove(e) {
-  if (!isMobileView() || !iaRecording) return;
+  if (!micHoldMode() || !iaRecording) return;
   const micBtn = document.getElementById('iaMicBtn');
   if (!micBtn) return;
   let dx = Math.min(0, e.clientX - iaDragStartX);
@@ -3365,7 +3365,7 @@ function iaOnMicPointerMove(e) {
   }
 }
 function iaOnMicPointerUp() {
-  if (!isMobileView()) return;
+  if (!micHoldMode()) return;
   const micBtn = document.getElementById('iaMicBtn');
   if (micBtn) {
     micBtn.style.transition = '';
@@ -3387,7 +3387,7 @@ function iaOnMicClick() {
     sendPcMessage();
   } else if (mode === 'recording-send') {
     iaStopRecording(true);
-  } else if (mode === 'mic' && !isMobileView()) {
+  } else if (mode === 'mic' && !micHoldMode()) {
     iaStartRecording();
   }
 }
@@ -3436,6 +3436,15 @@ function escapeHtml(s) {
 // Détecte le mode téléphone (même seuil que les media queries CSS)
 function isMobileView() {
   return window.innerWidth <= 1100;
+}
+// Micro des chats (IA et Amis) : le mode « rester appuyé pour parler, glisser
+// pour annuler » ne concerne QUE le mode d'affichage Téléphone. Dans tous les
+// modes PC (normal, ultra wide, vertical) — même si la fenêtre fait moins de
+// 1100 px de large, ce que isMobileView() prend pour un téléphone — on clique
+// une fois pour démarrer, puis sur l'avion pour envoyer ou la corbeille pour
+// annuler, sans rien maintenir appuyé.
+function micHoldMode() {
+  return typeof cfIsMobile === 'function' ? cfIsMobile() : isMobileView();
 }
 // Retire les émojis décoratifs d'un texte si on est en mode téléphone (laisse les symboles fonctionnels intacts)
 function stripDecoEmoji(s) {
