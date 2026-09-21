@@ -153,7 +153,7 @@ const FC_CSS = `
 .fc-contact-item.active{background:var(--fc-contact-active-bg,color-mix(in srgb, var(--green) 10%, transparent));}
 .fc-avatar{width:40px;height:40px;border-radius:50%;overflow:hidden;flex-shrink:0;display:flex;align-items:center;justify-content:center;background:var(--surface);border:1px solid var(--border);font-size:15px;color:var(--muted);font-family:var(--mono);}
 .fc-avatar img{width:100%;height:100%;object-fit:cover;display:block;}
-.fc-contact-name{font-size:13px;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;}
+.fc-contact-name{font-size:14px;font-weight:600;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;}
 .fc-contact-body{flex:1;min-width:0;display:flex;flex-direction:column;gap:4px;}
 .fc-contact-top{display:flex;align-items:baseline;justify-content:space-between;gap:8px;min-width:0;}
 .fc-contact-time{font-family:var(--mono);font-size:10px;color:var(--muted);flex-shrink:0;white-space:nowrap;}
@@ -269,23 +269,18 @@ body.cf-mode-ultrawide .fc-trade-card{width:330px;}
   .fc-wrap.fc-chat-open .fc-sidebar{display:none;}
   .fc-wrap.fc-chat-open .fc-chat{display:flex;}
   .fc-back-btn{display:inline-flex;}
-  .fc-contact-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(64px,1fr));gap:14px;padding:14px;}
-  .fc-contact-item{flex-direction:column;gap:5px;padding:4px;border-bottom:none;text-align:center;}
-  .fc-contact-name{display:none;}
-  .fc-contact-body{display:none;}
+  .fc-contact-item{gap:14px;}
   .fc-avatar{width:56px;height:56px;font-size:19px;margin:0 auto;}
+  .fc-contact-avatar-wrap .fc-avatar{margin:0;}
   .fc-msg-inner{max-width:82%;}
 }
-/* ── Modes PC (normal, ultra wide, vertical) : liste en UNE colonne, photos ×2, dernier message + heure.
-   Le mode Téléphone garde la grille de photos. Toute la ligne est cliquable / surlignée. ── */
+/* ── Liste des amis (tous les modes) : une colonne, photo à gauche, pseudo + heure et dernier message à droite,
+   toute la ligne cliquable / surlignée. Photos ×2 en modes PC (normal, ultra wide, vertical) ; en mode
+   Téléphone elles gardent leur taille d'origine (56 px). ── */
 body:not(.cf-mode-phone) .fc-contact-item{gap:14px;}
 body:not(.cf-mode-phone) .fc-contact-avatar-wrap .fc-avatar{width:80px;height:80px;font-size:30px;margin:0;}
-body:not(.cf-mode-phone) .fc-contact-name{font-size:14px;font-weight:600;}
 @media (max-width:1100px){
-  body:not(.cf-mode-phone) .fc-contact-list{display:block;padding:0;}
-  body:not(.cf-mode-phone) .fc-contact-item{flex-direction:row;gap:18px;padding:12px 16px;border-bottom:1px solid var(--border);text-align:left;}
-  body:not(.cf-mode-phone) .fc-contact-name{display:block;}
-  body:not(.cf-mode-phone) .fc-contact-body{display:flex;}
+  body:not(.cf-mode-phone) .fc-contact-item{gap:18px;padding:12px 16px;}
   body:not(.cf-mode-phone) .fc-contact-avatar-wrap .fc-avatar{width:112px;height:112px;font-size:38px;}
   body:not(.cf-mode-phone) .fc-contact-last{font-size:13px;}
 }

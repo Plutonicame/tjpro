@@ -1990,6 +1990,21 @@ body.cf-mode-ultrawide #editModal .cp-modal {
   margin-right: 6px;
   flex-shrink: 0;
   font-size: 13px;
+  /* Sans ça, sur écran tactile le doigt posé sur la poignée fait défiler la page
+     au lieu de déplacer l'élément (impossible de réordonner au téléphone). */
+  touch-action: none;
+}
+/* Écran tactile : poignée et lignes plus grandes pour être attrapées au doigt. */
+@media (pointer: coarse) {
+  .mod-item {
+    padding-top: 10px;
+    padding-bottom: 10px;
+  }
+  .drag-h {
+    font-size: 18px;
+    padding: 10px 14px 10px 6px;
+    margin: -10px 4px -10px -6px;
+  }
 }
 .item-tx {
   flex: 1;

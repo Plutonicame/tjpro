@@ -158,6 +158,11 @@ function cfLoad() {
   APP.cfFields = cfg && Array.isArray(cfg.fields) ? cfg.fields : [];
   APP.cfColOrder = cfg && Array.isArray(cfg.colOrder) ? cfg.colOrder : null;
   APP.cfKpiOrder = cfg && Array.isArray(cfg.kpiOrder) ? cfg.kpiOrder : null;
+  // Ordre des questions du formulaire et des cases à cocher : sauvegardé avec le
+  // reste de la config (jusqu'ici il n'était ni gardé au rechargement, ni
+  // envoyé au cloud — donc jamais synchronisé entre appareils).
+  APP.cfQuestionOrder = cfg && Array.isArray(cfg.questionOrder) ? cfg.questionOrder : null;
+  APP.cfToggleOrder = cfg && Array.isArray(cfg.toggleOrder) ? cfg.toggleOrder : null;
   APP.cfChartOrderByMode = cfNormalizeChartOrderByMode(cfg);
   APP.cfNavColumnByMode =
     cfg && cfg.navColumnByMode && typeof cfg.navColumnByMode === 'object'
@@ -175,6 +180,8 @@ function cfConfigSnapshot() {
     fields: APP.cfFields,
     colOrder: APP.cfColOrder,
     kpiOrder: APP.cfKpiOrder,
+    questionOrder: APP.cfQuestionOrder,
+    toggleOrder: APP.cfToggleOrder,
     chartOrderByMode: APP.cfChartOrderByMode,
     navColumnByMode: APP.cfNavColumnByMode,
     chartLinksByMode: APP.cfChartLinksByMode,
@@ -1650,6 +1657,15 @@ function cfBuildThemeVars() {
 }
 
 // ── Paramètres : carte "Champs personnalisés" ──
+// Une seule instance Sortable par liste : chaque rendu des Paramètres en créait
+// une nouvelle sur le même conteneur sans détruire la précédente (glisser
+// déclenchait alors plusieurs gestionnaires à la fois).
+function cfMakeSortable(el, options) {
+  if (!window.Sortable || !el) return null;
+  const old = Sortable.get ? Sortable.get(el) : null;
+  if (old) old.destroy();
+  return new Sortable(el, options);
+}
 function cfRenderOrderList(containerId, order, labelMap, onReorder) {
   const el = document.getElementById(containerId);
   if (!el) return;
@@ -1659,16 +1675,14 @@ function cfRenderOrderList(containerId, order, labelMap, onReorder) {
         `<div class="mod-item" data-id="${escapeHtml(id)}"><span class="drag-h">⣿</span><span class="item-tx">${escapeHtml(labelMap[id] || id)}</span></div>`
     )
     .join('');
-  if (window.Sortable) {
-    new Sortable(el, {
-      animation: 120,
-      handle: '.drag-h',
-      onEnd: () => {
-        const newOrder = Array.from(el.children).map(c => c.dataset.id);
-        onReorder(newOrder);
-      }
-    });
-  }
+  cfMakeSortable(el, {
+    animation: 120,
+    handle: '.drag-h',
+    onEnd: () => {
+      const newOrder = Array.from(el.children).map(c => c.dataset.id);
+      onReorder(newOrder);
+    }
+  });
 }
 // ── Ordre des questions du questionnaire "nouveau trade" (18/09/2026,
 // demande de Paul) : stocké tel quel dans APP.cfQuestionOrder, exactement
@@ -1687,16 +1701,14 @@ function cfRenderQuestionOrderList(containerId, order, labelMap, onReorder) {
       return `<div class="mod-item" data-id="${escapeHtml(id)}"><span class="drag-h">⣿</span><span class="item-tx">${escapeHtml(labelMap[id] || id)}</span></div>`;
     })
     .join('');
-  if (window.Sortable) {
-    new Sortable(el, {
-      animation: 120,
-      handle: '.drag-h',
-      onEnd: () => {
-        const newOrder = Array.from(el.children).map(c => c.dataset.id);
-        onReorder(newOrder);
-      }
-    });
-  }
+  cfMakeSortable(el, {
+    animation: 120,
+    handle: '.drag-h',
+    onEnd: () => {
+      const newOrder = Array.from(el.children).map(c => c.dataset.id);
+      onReorder(newOrder);
+    }
+  });
 }
 function cfRenderOptionsEditor(containerEl, arr, onChange) {
   if (!containerEl) return;
@@ -1713,17 +1725,15 @@ function cfRenderOptionsEditor(containerEl, arr, onChange) {
       onChange();
     });
   });
-  if (window.Sortable) {
-    new Sortable(containerEl, {
-      animation: 120,
-      handle: '.drag-h',
-      onEnd: evt => {
-        const [m] = arr.splice(evt.oldIndex, 1);
-        arr.splice(evt.newIndex, 0, m);
-        onChange();
-      }
-    });
-  }
+  cfMakeSortable(containerEl, {
+    animation: 120,
+    handle: '.drag-h',
+    onEnd: evt => {
+      const [m] = arr.splice(evt.oldIndex, 1);
+      arr.splice(evt.newIndex, 0, m);
+      onChange();
+    }
+  });
 }
 // Éditeur d'options d'un menu déroulant personnalisé, injecté directement à
 // la suite des 6 listes natives (Paires, Sessions, Confluences, Timeframes,
@@ -2538,6 +2548,11 @@ if (typeof window.buildSyncPayload === 'function') {
 if (typeof window._applyCloudDataDirect === 'function') {
   const _cfOrigApplyCloudDataDirect = window._applyCloudDataDirect;
   window._applyCloudDataDirect = function (data, cloudTrades) {
+    // La fonction d'origine recharge elle-même la config locale (cfLoad) : on garde
+    // de côté l'ordre local pour le rendre si la config reçue n'en contient pas
+    // (envoyée par un autre appareil qui n'a pas encore la mise à jour).
+    const prevQuestionOrder = APP.cfQuestionOrder;
+    const prevToggleOrder = APP.cfToggleOrder;
     _cfOrigApplyCloudDataDirect(data, cloudTrades);
     try {
       if (data && data.cf_config) {
@@ -2545,6 +2560,8 @@ if (typeof window._applyCloudDataDirect === 'function') {
         APP.cfFields = Array.isArray(cfg.fields) ? cfg.fields : [];
         APP.cfColOrder = Array.isArray(cfg.colOrder) ? cfg.colOrder : null;
         APP.cfKpiOrder = Array.isArray(cfg.kpiOrder) ? cfg.kpiOrder : null;
+        APP.cfQuestionOrder = Array.isArray(cfg.questionOrder) ? cfg.questionOrder : prevQuestionOrder;
+        APP.cfToggleOrder = Array.isArray(cfg.toggleOrder) ? cfg.toggleOrder : prevToggleOrder;
         APP.cfChartOrderByMode = cfNormalizeChartOrderByMode(cfg);
         APP.cfNavColumnByMode =
           cfg.navColumnByMode && typeof cfg.navColumnByMode === 'object'
