@@ -23,6 +23,17 @@
 // ISO) : chaque semaine apparaît donc une seule fois dans l'année, et ses
 // trades ne sont jamais comptés deux fois.
 //
+// Infos de synthèse (en plus des cases) :
+//   J    — sous le titre de chaque mois : nombre de trades, résultat, RR moyen.
+//   SEM  — dans chaque case semaine : RR moyen et variation du résultat en % par
+//        rapport à la semaine précédente ; en tête de chaque colonne-mois : le
+//        nombre de trades du mois ; sous le titre de l'année : trades, résultat, RR moyen.
+//   MOIS — dans chaque case mois : RR moyen et variation du résultat en % par rapport
+//        au mois précédent ; sous le titre de l'année : trades, résultat, RR moyen.
+//   (Pas de comparaison en % en mode J.) La variation = (résultat − résultat précédent)
+//   ÷ |résultat précédent| ; « — » si la période précédente n'a aucun trade.
+//   RR moyen = total des RR ÷ nombre de trades. Les trades BT suivent la case BT.
+//
 // Aucune couleur nouvelle : les boutons réutilisent les boutons de période des
 // graphiques (.pbtn) et les cases celles du calendrier (.cal-day, .cal-dow,
 // .cal-month-header...) — tout reste réglable avec les couleurs de thème déjà
@@ -52,6 +63,19 @@
   display: grid; grid-template-columns: repeat(6, minmax(0, 1fr));
   gap: 2px; padding: 5px;
 }
+/* Ligne de synthèse sous le titre d'un mois (J) ou d'une année (SEM / MOIS) */
+.cal-stats {
+  display: flex; flex-wrap: wrap; justify-content: center; gap: 3px 16px;
+  padding: 7px 10px; font-family: var(--mono); font-size: 10px;
+  color: var(--cal-rr-cal-tc-color); border-bottom: 1px solid var(--cal-day-border);
+}
+.cal-stats b { font-weight: 700; }
+.cal-stats .pos, .cal-delta.up { color: var(--cal-day-pos-cal-pnl-color); }
+.cal-stats .neg, .cal-delta.down { color: var(--cal-day-neg-cal-pnl-color); }
+/* Cases semaine / mois : deux lignes de plus (RR moyen, variation), donc plus hautes */
+.cal-grid-weeks .cal-day, .cal-grid-months .cal-day { height: auto; min-height: 76px; }
+.cal-delta { font-family: var(--mono); font-size: 7px; font-weight: 700; margin-top: 1px; color: var(--cal-rr-cal-tc-color); }
+.cal-colstat { margin-top: 2px; font-size: 7px; opacity: 0.85; white-space: nowrap; }
 .cal-nav-surface.cal-tf-year > .cal-arr,
 .cal-nav-surface.cal-tf-year > .cal-label { display: none; }
 @media (max-width: 700px) {
@@ -119,20 +143,82 @@
     return {wk: wk, mo: mo};
   }
 
-  // Même contenu que les cases « jour » : numéro / libellé, résultat, RR, trades.
-  function cellHtml(label, info, isToday, title) {
+  // ── Formats et synthèse (nombre de trades, RR moyen, variation) ──
+  function sgn(v) {
+    return v >= 0 ? '+' : '';
+  }
+  function fmtEur(v) {
+    return sgn(v) + v.toLocaleString('fr-FR') + '€';
+  }
+  function fmtAvgR(info) {
+    return sgn(info.rr / info.count) + (info.rr / info.count).toFixed(2) + 'R';
+  }
+  function plural(n) {
+    return n + ' trade' + (n > 1 ? 's' : '');
+  }
+  // Variation du résultat par rapport à la période précédente, en % :
+  // (résultat − précédent) ÷ |précédent|. null si la période précédente n'a aucun
+  // trade (ou un résultat nul) : pas de base de comparaison.
+  function variation(cur, prev) {
+    if (!cur || !prev || !prev.count || !prev.pnl) return null;
+    return ((cur.pnl - prev.pnl) / Math.abs(prev.pnl)) * 100;
+  }
+  function fmtPct(p) {
+    if (Math.abs(p) > 999) return (p > 0 ? '>+999%' : '<-999%');
+    return sgn(p) + (Math.abs(p) < 10 ? p.toFixed(1) : String(Math.round(p))) + '%';
+  }
+  function deltaHtml(pct) {
+    if (pct === null) return '<div class="cal-delta">—</div>';
+    return '<div class="cal-delta ' + (pct >= 0 ? 'up' : 'down') + '">' + (pct >= 0 ? '▲ ' : '▼ ') + fmtPct(pct) + '</div>';
+  }
+  // Ligne de synthèse : nombre de trades · résultat · RR moyen
+  function statsHtml(info) {
+    if (!info || !info.count) return '<div class="cal-stats"><span>Aucun trade</span></div>';
+    return (
+      '<div class="cal-stats"><span><b>' + plural(info.count) + '</b></span>' +
+      '<span>Résultat <b class="' + (info.pnl >= 0 ? 'pos' : 'neg') + '">' + fmtEur(info.pnl) + '</b></span>' +
+      '<span>RR moyen <b>' + fmtAvgR(info) + '</b></span></div>'
+    );
+  }
+  function sumYear(moAgg, Y) {
+    var tot = {pnl: 0, rr: 0, count: 0};
+    Object.keys(moAgg).forEach(function (k) {
+      if (k.slice(0, 4) === String(Y)) {
+        tot.pnl += moAgg[k].pnl;
+        tot.rr += moAgg[k].rr;
+        tot.count += moAgg[k].count;
+      }
+    });
+    return tot;
+  }
+  function ymdUTC(d) {
+    return d.getUTCFullYear() + '-' + String(d.getUTCMonth() + 1).padStart(2, '0') + '-' + String(d.getUTCDate()).padStart(2, '0');
+  }
+
+  // Même contenu que les cases « jour » : numéro / libellé, résultat, RR, trades ;
+  // en semaine / mois (cmp fourni) : + RR moyen et variation vs la période précédente.
+  function cellHtml(label, info, isToday, title, cmp) {
     var cls = 'cal-day';
     if (isToday) cls += ' today';
     if (info) cls += info.pnl >= 0 ? ' pos' : ' neg';
     return (
       '<div class="' + cls + '" title="' + title + '"><div class="cal-day-num">' + label + '</div>' +
       (info
-        ? '<div class="cal-pnl">' + (info.pnl >= 0 ? '+' : '') + info.pnl.toLocaleString('fr-FR') + '€</div>' +
+        ? '<div class="cal-pnl">' + fmtEur(info.pnl) + '</div>' +
           '<div class="cal-rr">' + (info.rr >= 0 ? '+' : '') + info.rr.toFixed(1) + 'R</div>' +
-          '<div class="cal-tc">' + info.count + 'T</div>'
+          '<div class="cal-tc">' + info.count + 'T</div>' +
+          (cmp ? '<div class="cal-rr cal-avg">moy ' + fmtAvgR(info) + '</div>' + deltaHtml(variation(info, cmp.prev)) : '')
         : '') +
       '</div>'
     );
+  }
+  // Infobulle d'une case semaine / mois : détail complet
+  function cellTitle(name, info, prev, prevName) {
+    if (!info) return name;
+    var t = name + ' — ' + plural(info.count) + ' · résultat ' + fmtEur(info.pnl) + ' · RR moyen ' + fmtAvgR(info);
+    var v = variation(info, prev);
+    if (v !== null) t += ' · ' + fmtPct(v) + ' vs ' + prevName + ' (' + fmtEur(prev.pnl) + ')';
+    return t;
   }
 
   function todayStr() {
@@ -141,7 +227,7 @@
   }
 
   // ── 4. Une année en semaines (12 colonnes = 12 mois) ou en mois ─────
-  function weeksHtml(Y, wkAgg, todayWeekKey) {
+  function weeksHtml(Y, wkAgg, moAgg, todayWeekKey) {
     var weeks = isoWeeksOfYear(Y);
     var cols = '';
     for (var m = 0; m < 12; m++) {
@@ -151,15 +237,25 @@
         })
         .map(function (w) {
           var key = Y + '-' + w.week;
+          var pw = isoWeekOf(ymdUTC(new Date(w.mon.getTime() - 7 * DAY_MS))); // semaine précédente
+          var prev = wkAgg[pw.year + '-' + pw.week];
           return cellHtml(
             'S' + w.week,
             wkAgg[key],
             key === todayWeekKey,
-            'Semaine ' + w.week + ' — du ' + frDate(w.mon) + ' au ' + frDate(w.sun)
+            cellTitle('Semaine ' + w.week + ' (du ' + frDate(w.mon) + ' au ' + frDate(w.sun) + ')', wkAgg[key], prev, 'S' + pw.week),
+            {prev: prev}
           );
         })
         .join('');
-      cols += '<div class="cal-wcol"><div class="cal-dow">' + MONTH_SHORT[m] + '</div>' + cells + '</div>';
+      var mInfo = moAgg[Y + '-' + String(m + 1).padStart(2, '0')];
+      var head =
+        MONTH_SHORT[m] +
+        '<div class="cal-colstat">' + (mInfo ? plural(mInfo.count) : '0 trade') + '</div>';
+      cols +=
+        '<div class="cal-wcol"><div class="cal-dow" title="' +
+        (mInfo ? MNL[m] + ' ' + Y + ' — ' + plural(mInfo.count) + ' · résultat ' + fmtEur(mInfo.pnl) + ' · RR moyen ' + fmtAvgR(mInfo) : MNL[m] + ' ' + Y + ' — aucun trade') +
+        '">' + head + '</div>' + cells + '</div>';
     }
     return '<div class="cal-yscroll"><div class="cal-grid-weeks">' + cols + '</div></div>';
   }
@@ -167,7 +263,9 @@
     var cells = '';
     for (var m = 0; m < 12; m++) {
       var key = Y + '-' + String(m + 1).padStart(2, '0');
-      cells += cellHtml(MNL[m], moAgg[key], key === todayMonthKey, MNL[m] + ' ' + Y);
+      var pkey = m === 0 ? Y - 1 + '-12' : Y + '-' + String(m).padStart(2, '0'); // mois précédent
+      var pName = m === 0 ? MNL[11] + ' ' + (Y - 1) : MNL[m - 1] + ' ' + Y;
+      cells += cellHtml(MNL[m], moAgg[key], key === todayMonthKey, cellTitle(MNL[m] + ' ' + Y, moAgg[key], moAgg[pkey], pName), {prev: moAgg[pkey]});
     }
     return '<div class="cal-grid-months">' + cells + '</div>';
   }
@@ -185,8 +283,8 @@
       var Y = y + p[0];
       var head =
         '<div class="cal-month-header' + (p[0] === 0 ? ' cur' : '') + '">' + Y + (Y === nowYear ? ' — Année en cours' : '') + '</div>';
-      var body = mode === 'semaine' ? weeksHtml(Y, agg.wk, todayWeekKey) : monthsHtml(Y, agg.mo, todayMonthKey);
-      document.getElementById(p[1]).innerHTML = head + body;
+      var body = mode === 'semaine' ? weeksHtml(Y, agg.wk, agg.mo, todayWeekKey) : monthsHtml(Y, agg.mo, todayMonthKey);
+      document.getElementById(p[1]).innerHTML = head + statsHtml(sumYear(agg.mo, Y)) + body;
     });
   }
 
@@ -195,11 +293,26 @@
     var bar = document.querySelector('.cal-nav-surface');
     if (bar) bar.classList.toggle('cal-tf-year', mode !== 'jour');
   }
+  // Mode J : la synthèse (trades, résultat, RR moyen — sans comparaison en %) est
+  // ajoutée sous le titre de chacun des 3 mois affichés.
+  function addMonthStats() {
+    var mo = aggregate().mo;
+    [[-1, 'calPrev'], [0, 'calCur'], [1, 'calNext']].forEach(function (p) {
+      var d = new Date(calD.getFullYear(), calD.getMonth() + p[0], 1);
+      var key = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
+      var hdr = document.querySelector('#' + p[1] + ' .cal-month-header');
+      if (hdr) hdr.insertAdjacentHTML('afterend', statsHtml(mo[key]));
+    });
+  }
   if (typeof window.renderCalendar === 'function') {
     var _origRenderCalendar = window.renderCalendar;
     window.renderCalendar = function () {
       applyBarState();
-      if (mode === 'jour') return _origRenderCalendar.apply(this, arguments);
+      if (mode === 'jour') {
+        var r = _origRenderCalendar.apply(this, arguments);
+        addMonthStats();
+        return r;
+      }
       return renderYears();
     };
   }

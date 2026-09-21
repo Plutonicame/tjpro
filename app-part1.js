@@ -1687,7 +1687,7 @@ function showPage(id, btn) {
   const te = document.getElementById('themeEditor');
   if (te && te.style.display !== 'none') {
     te.style.display = 'none';
-    document.querySelectorAll('#teGrid details.te-page[open]').forEach(d => d.removeAttribute('open'));
+    teCollapseAll();
   }
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
   document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
@@ -5355,11 +5355,20 @@ function buildTV() {
 let teVals = {},
   teHist = [],
   TE_LABELS = {};
+// Referme toutes les pages (Général, Connexion, Track Record...) ouvertes à
+// l'intérieur de l'éditeur de thème et vide la recherche (une recherche en cours
+// rouvrirait toutes les pages) : à la prochaine ouverture du menu, tout est replié.
+function teCollapseAll() {
+  document.querySelectorAll('#teGrid details.te-page[open]').forEach(d => d.removeAttribute('open'));
+  const q = document.getElementById('teSearch');
+  if (q && q.value) q.value = '';
+}
 function toggleTE() {
   const ed = document.getElementById('themeEditor');
   const o = ed.style.display === 'none';
   ed.style.display = o ? 'block' : 'none';
   if (o) renderTE();
+  else teCollapseAll(); // « ▲ REPLIER LES COULEURS » / « Thème » : le menu se ferme ET tout ce qui était ouvert dedans aussi
 }
 function renderTE() {
   ensureMgmtThemeDefaults();
