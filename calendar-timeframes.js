@@ -23,16 +23,21 @@
 // ISO) : chaque semaine apparaît donc une seule fois dans l'année, et ses
 // trades ne sont jamais comptés deux fois.
 //
-// Infos de synthèse (en plus des cases) :
+// Infos de synthèse (en plus des 4 lignes déjà présentes dans chaque case — numéro,
+// résultat, RR, trades — sans jamais ajouter de ligne supplémentaire, pour que les
+// cases jour / semaine / mois gardent TOUTES la même taille) :
 //   J    — sous le titre de chaque mois : nombre de trades, résultat, RR moyen.
-//   SEM  — dans chaque case semaine : RR moyen et variation du résultat en % par
-//        rapport à la semaine précédente ; en tête de chaque colonne-mois : le
+//   SEM  — dans chaque case semaine : la ligne RR devient le RR MOYEN de la semaine,
+//        et la variation vs la semaine précédente s'ajoute à la SUITE de la ligne
+//        résultat (ex. « +379€ ▲+3.6% ») ; en tête de chaque colonne-mois : le
 //        nombre de trades du mois ; sous le titre de l'année : trades, résultat, RR moyen.
-//   MOIS — dans chaque case mois : RR moyen et variation du résultat en % par rapport
-//        au mois précédent ; sous le titre de l'année : trades, résultat, RR moyen.
-//   (Pas de comparaison en % en mode J.) La variation = (résultat − résultat précédent)
-//   ÷ |résultat précédent| ; « — » si la période précédente n'a aucun trade.
-//   RR moyen = total des RR ÷ nombre de trades. Les trades BT suivent la case BT.
+//   MOIS — même principe, RR moyen de mois et variation vs le mois précédent sur la
+//        ligne résultat ; sous le titre de l'année : trades, résultat, RR moyen.
+//   (Pas de comparaison en % en mode J.) Variation = résultat de la période ÷ CAPITAL
+//   À LA FIN de la période précédente (ex. capital de 10 000€ en fin de semaine
+//   dernière + 500€ cette semaine = +5%) ; « — » si ce capital est nul.
+//   RR moyen = total des RR de la période ÷ nombre de trades. Les trades BT suivent
+//   la case BT.
 //
 // Aucune couleur nouvelle : les boutons réutilisent les boutons de période des
 // graphiques (.pbtn) et les cases celles du calendrier (.cal-day, .cal-dow,
@@ -72,9 +77,11 @@
 .cal-stats b { font-weight: 700; }
 .cal-stats .pos, .cal-delta.up { color: var(--cal-day-pos-cal-pnl-color); }
 .cal-stats .neg, .cal-delta.down { color: var(--cal-day-neg-cal-pnl-color); }
-/* Cases semaine / mois : deux lignes de plus (RR moyen, variation), donc plus hautes */
-.cal-grid-weeks .cal-day, .cal-grid-months .cal-day { height: auto; min-height: 76px; }
-.cal-delta { font-family: var(--mono); font-size: 7px; font-weight: 700; margin-top: 1px; color: var(--cal-rr-cal-tc-color); }
+/* Semaine / mois : mêmes 4 lignes que les cases jour (numéro, résultat, RR, trades) —
+   AUCUNE ligne de plus, donc même taille de case partout : la variation s'ajoute à la
+   SUITE de la ligne résultat, et RR devient le RR moyen sur sa ligne existante. */
+.cal-pnl, .cal-rr { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+.cal-delta { font-size: 0.92em; font-weight: 700; margin-left: 3px; color: var(--cal-rr-cal-tc-color); }
 .cal-colstat { margin-top: 2px; font-size: 7px; opacity: 0.85; white-space: nowrap; }
 .cal-nav-surface.cal-tf-year > .cal-arr,
 .cal-nav-surface.cal-tf-year > .cal-label { display: none; }
@@ -120,10 +127,14 @@
   }
 
   // ── 3. Totaux par semaine et par mois (même calcul que les cases « jour ») ──
+  // + un index du capital cumulé (trades de la période choisie + payouts), pour
+  // pouvoir répondre à « quel était le capital à la fin de telle date ? » (sert au
+  // calcul de la variation en %, qui compare au capital de fin de période précédente).
   function aggregate() {
     var src = BT_STATE.cal ? APP.trades : realTrades();
     var wk = {},
-      mo = {};
+      mo = {},
+      byDate = {};
     src.forEach(function (t) {
       if (!t.date) return;
       var pnl = t.res || 0,
@@ -139,8 +150,52 @@
       m.pnl += pnl;
       m.rr += rr;
       m.count++;
+      byDate[t.date] = (byDate[t.date] || 0) + pnl;
     });
-    return {wk: wk, mo: mo};
+    // Cumul des trades, jour par jour, trié par date croissante.
+    var capDates = Object.keys(byDate).sort();
+    var cum = 0,
+      capCum = [];
+    capDates.forEach(function (d) {
+      cum += byDate[d];
+      capCum.push(cum);
+    });
+    // Cumul des payouts. Un payout sans date (ancien format) est traité comme déjà
+    // survenu, donc toujours déduit — même règle que sur la carte KPI « Pay Out ».
+    var alwaysPO = 0,
+      byPO = {};
+    lsAcc('tj_payouts', []).forEach(function (po) {
+      var a = po.amount || 0;
+      if (!po.date) alwaysPO += a;
+      else byPO[po.date] = (byPO[po.date] || 0) + a;
+    });
+    var poDates = Object.keys(byPO).sort();
+    var poCumV = 0,
+      poCum = [];
+    poDates.forEach(function (d) {
+      poCumV += byPO[d];
+      poCum.push(poCumV);
+    });
+    // Plus grand index d'un tableau de dates triées dont la date est ≤ dateStr (-1 si aucune).
+    function floorIdx(dates, dateStr) {
+      var lo = 0,
+        hi = dates.length - 1,
+        idx = -1;
+      while (lo <= hi) {
+        var mid = (lo + hi) >> 1;
+        if (dates[mid] <= dateStr) {
+          idx = mid;
+          lo = mid + 1;
+        } else hi = mid - 1;
+      }
+      return idx;
+    }
+    function capAtEnd(dateStr) {
+      var i1 = floorIdx(capDates, dateStr),
+        i2 = floorIdx(poDates, dateStr);
+      return CAPITAL() + (i1 >= 0 ? capCum[i1] : 0) - ((i2 >= 0 ? poCum[i2] : 0) + alwaysPO);
+    }
+    return {wk: wk, mo: mo, capAtEnd: capAtEnd};
   }
 
   // ── Formats et synthèse (nombre de trades, RR moyen, variation) ──
@@ -156,20 +211,22 @@
   function plural(n) {
     return n + ' trade' + (n > 1 ? 's' : '');
   }
-  // Variation du résultat par rapport à la période précédente, en % :
-  // (résultat − précédent) ÷ |précédent|. null si la période précédente n'a aucun
-  // trade (ou un résultat nul) : pas de base de comparaison.
-  function variation(cur, prev) {
-    if (!cur || !prev || !prev.count || !prev.pnl) return null;
-    return ((cur.pnl - prev.pnl) / Math.abs(prev.pnl)) * 100;
+  // Variation en % : résultat de la période ÷ capital à la FIN de la période
+  // précédente (ex. 10 000€ en fin de semaine dernière, +500€ cette semaine → +5%).
+  // null si ce capital est nul (rien à quoi rapporter la variation).
+  function pctVsPrevCapital(cur, prevCapEnd) {
+    if (!cur || Math.abs(prevCapEnd) < 0.005) return null;
+    return (cur.pnl / prevCapEnd) * 100;
   }
   function fmtPct(p) {
     if (Math.abs(p) > 999) return (p > 0 ? '>+999%' : '<-999%');
     return sgn(p) + (Math.abs(p) < 10 ? p.toFixed(1) : String(Math.round(p))) + '%';
   }
+  // Élément EN LIGNE (pas de bloc) : s'ajoute à la suite du texte déjà présent sur
+  // la ligne résultat, sans jamais créer de nouvelle ligne dans la case.
   function deltaHtml(pct) {
-    if (pct === null) return '<div class="cal-delta">—</div>';
-    return '<div class="cal-delta ' + (pct >= 0 ? 'up' : 'down') + '">' + (pct >= 0 ? '▲ ' : '▼ ') + fmtPct(pct) + '</div>';
+    if (pct === null) return ' <span class="cal-delta">—</span>';
+    return ' <span class="cal-delta ' + (pct >= 0 ? 'up' : 'down') + '">' + (pct >= 0 ? '▲' : '▼') + fmtPct(pct) + '</span>';
   }
   // Ligne de synthèse : nombre de trades · résultat · RR moyen
   function statsHtml(info) {
@@ -195,29 +252,31 @@
     return d.getUTCFullYear() + '-' + String(d.getUTCMonth() + 1).padStart(2, '0') + '-' + String(d.getUTCDate()).padStart(2, '0');
   }
 
-  // Même contenu que les cases « jour » : numéro / libellé, résultat, RR, trades ;
-  // en semaine / mois (cmp fourni) : + RR moyen et variation vs la période précédente.
+  // Même 4 lignes que les cases « jour » (numéro, résultat, RR, trades) — jamais une
+  // ligne de plus : en semaine / mois (cmp fourni), la ligne RR affiche la MOYENNE
+  // au lieu du total, et la variation s'ajoute à la suite de la ligne résultat.
   function cellHtml(label, info, isToday, title, cmp) {
     var cls = 'cal-day';
     if (isToday) cls += ' today';
     if (info) cls += info.pnl >= 0 ? ' pos' : ' neg';
+    var rrTxt = info ? (cmp ? fmtAvgR(info) : (info.rr >= 0 ? '+' : '') + info.rr.toFixed(1) + 'R') : '';
     return (
       '<div class="' + cls + '" title="' + title + '"><div class="cal-day-num">' + label + '</div>' +
       (info
-        ? '<div class="cal-pnl">' + fmtEur(info.pnl) + '</div>' +
-          '<div class="cal-rr">' + (info.rr >= 0 ? '+' : '') + info.rr.toFixed(1) + 'R</div>' +
-          '<div class="cal-tc">' + info.count + 'T</div>' +
-          (cmp ? '<div class="cal-rr cal-avg">moy ' + fmtAvgR(info) + '</div>' + deltaHtml(variation(info, cmp.prev)) : '')
+        ? '<div class="cal-pnl">' + fmtEur(info.pnl) + (cmp ? deltaHtml(pctVsPrevCapital(info, cmp.prevCapEnd)) : '') + '</div>' +
+          '<div class="cal-rr">' + rrTxt + '</div>' +
+          '<div class="cal-tc">' + info.count + 'T</div>'
         : '') +
       '</div>'
     );
   }
-  // Infobulle d'une case semaine / mois : détail complet
-  function cellTitle(name, info, prev, prevName) {
+  // Infobulle d'une case semaine / mois : détail complet (le RR de la ligne étant
+  // déjà la moyenne, l'infobulle ne fait que la nommer explicitement).
+  function cellTitle(name, info, prevCapEnd, prevName) {
     if (!info) return name;
     var t = name + ' — ' + plural(info.count) + ' · résultat ' + fmtEur(info.pnl) + ' · RR moyen ' + fmtAvgR(info);
-    var v = variation(info, prev);
-    if (v !== null) t += ' · ' + fmtPct(v) + ' vs ' + prevName + ' (' + fmtEur(prev.pnl) + ')';
+    var v = pctVsPrevCapital(info, prevCapEnd);
+    if (v !== null) t += ' · ' + fmtPct(v) + ' du capital de fin ' + prevName + ' (' + fmtEur(prevCapEnd) + ')';
     return t;
   }
 
@@ -227,7 +286,7 @@
   }
 
   // ── 4. Une année en semaines (12 colonnes = 12 mois) ou en mois ─────
-  function weeksHtml(Y, wkAgg, moAgg, todayWeekKey) {
+  function weeksHtml(Y, wkAgg, moAgg, todayWeekKey, capAtEnd) {
     var weeks = isoWeeksOfYear(Y);
     var cols = '';
     for (var m = 0; m < 12; m++) {
@@ -238,13 +297,14 @@
         .map(function (w) {
           var key = Y + '-' + w.week;
           var pw = isoWeekOf(ymdUTC(new Date(w.mon.getTime() - 7 * DAY_MS))); // semaine précédente
-          var prev = wkAgg[pw.year + '-' + pw.week];
+          var prevSun = new Date(w.mon.getTime() - DAY_MS); // dimanche précédent = fin de la semaine d'avant
+          var prevCapEnd = capAtEnd(ymdUTC(prevSun));
           return cellHtml(
             'S' + w.week,
             wkAgg[key],
             key === todayWeekKey,
-            cellTitle('Semaine ' + w.week + ' (du ' + frDate(w.mon) + ' au ' + frDate(w.sun) + ')', wkAgg[key], prev, 'S' + pw.week),
-            {prev: prev}
+            cellTitle('Semaine ' + w.week + ' (du ' + frDate(w.mon) + ' au ' + frDate(w.sun) + ')', wkAgg[key], prevCapEnd, 'S' + pw.week),
+            {prevCapEnd: prevCapEnd}
           );
         })
         .join('');
@@ -259,13 +319,15 @@
     }
     return '<div class="cal-yscroll"><div class="cal-grid-weeks">' + cols + '</div></div>';
   }
-  function monthsHtml(Y, moAgg, todayMonthKey) {
+  function monthsHtml(Y, moAgg, todayMonthKey, capAtEnd) {
     var cells = '';
     for (var m = 0; m < 12; m++) {
       var key = Y + '-' + String(m + 1).padStart(2, '0');
-      var pkey = m === 0 ? Y - 1 + '-12' : Y + '-' + String(m).padStart(2, '0'); // mois précédent
       var pName = m === 0 ? MNL[11] + ' ' + (Y - 1) : MNL[m - 1] + ' ' + Y;
-      cells += cellHtml(MNL[m], moAgg[key], key === todayMonthKey, cellTitle(MNL[m] + ' ' + Y, moAgg[key], moAgg[pkey], pName), {prev: moAgg[pkey]});
+      // Dernier jour du mois précédent : Date.UTC(Y, m, 0) recule automatiquement d'une
+      // année en janvier (mois -1 → décembre de Y-1).
+      var prevCapEnd = capAtEnd(ymdUTC(new Date(Date.UTC(Y, m, 0))));
+      cells += cellHtml(MNL[m], moAgg[key], key === todayMonthKey, cellTitle(MNL[m] + ' ' + Y, moAgg[key], prevCapEnd, pName), {prevCapEnd: prevCapEnd});
     }
     return '<div class="cal-grid-months">' + cells + '</div>';
   }
@@ -283,7 +345,10 @@
       var Y = y + p[0];
       var head =
         '<div class="cal-month-header' + (p[0] === 0 ? ' cur' : '') + '">' + Y + (Y === nowYear ? ' — Année en cours' : '') + '</div>';
-      var body = mode === 'semaine' ? weeksHtml(Y, agg.wk, agg.mo, todayWeekKey) : monthsHtml(Y, agg.mo, todayMonthKey);
+      var body =
+        mode === 'semaine'
+          ? weeksHtml(Y, agg.wk, agg.mo, todayWeekKey, agg.capAtEnd)
+          : monthsHtml(Y, agg.mo, todayMonthKey, agg.capAtEnd);
       document.getElementById(p[1]).innerHTML = head + statsHtml(sumYear(agg.mo, Y)) + body;
     });
   }
