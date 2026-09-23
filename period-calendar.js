@@ -22,6 +22,18 @@
 // les retraits datés dans la période ; « Drawdown Max » est mesuré dans la période.
 // Les dates choisies restent affichées à côté du bouton tant que la période est active.
 //
+// Un DERNIER bouton calendrier, dans la barre de navigation (à droite des
+// horloges, à côté des cases session / trades / P&L / risque — desktop ET
+// mobile), donne une période GLOBALE : la choisir force TOUT le Track Record
+// (chaque graphique, personnalisé ou non, et les KPI) et TOUT le Journal de
+// trading (la liste des trades) à n'analyser que cette période — comme si on
+// avait choisi cette même période sur chacun des calendriers un par un. Rien
+// d'autre n'est concerné (Calendrier, Analyse IA, Ami, Paramètres restent
+// inchangés). On garde la main ensuite : changer un graphique en particulier
+// après coup ne touche que lui. « Effacer » sur ce bouton remet tout —
+// graphiques, KPI et Journal — sur TOUT, y compris ce qui avait été
+// personnalisé individuellement entre-temps.
+//
 // Fonctionnement : la plage est stockée dans ST[clé] sous la forme
 // 'plage:AAAA-MM-JJ:AAAA-MM-JJ'. filterT() est enveloppée pour la comprendre ;
 // le reste (libellés, BT, redessin) est déjà générique. Les boutons sont
@@ -380,9 +392,24 @@
     var lbl = btn.parentNode.querySelector('.pcal-range-label');
     if (lbl) lbl.textContent = r ? 'du ' + fr(r.from) + ' au ' + fr(r.to) : '';
   }
+  // Bouton global (barre de navigation) : deux exemplaires dans le DOM (desktop
+  // et mobile, un seul visible à la fois selon la largeur d'écran) — on met les
+  // deux à jour pour qu'ils restent cohérents si la fenêtre est redimensionnée.
+  function syncGlobalBtn() {
+    var r = parseRange(ST.global);
+    document.querySelectorAll('.pcal-btn[data-chart="global"]').forEach(function (btn) {
+      btn.classList.toggle('active', !!r);
+      btn.title = r
+        ? 'Période active pour tout le Track Record et le Journal de trading : du ' + fr(r.from) + ' au ' + fr(r.to) + ' (clic pour modifier)'
+        : 'Choisir une période pour tout le Track Record et le Journal de trading';
+      var lbl = btn.parentNode.querySelector('.pcal-range-label');
+      if (lbl) lbl.textContent = r ? 'du ' + fr(r.from) + ' au ' + fr(r.to) : '';
+    });
+  }
   function syncAll() {
     document.querySelectorAll('.period-btns').forEach(syncGroup);
     syncKpiBtn();
+    syncGlobalBtn();
   }
 
   // Le bouton calendrier est un carré dont le côté = la hauteur des boutons de
@@ -416,6 +443,18 @@
     document.querySelectorAll('.pcal-btn[data-chart="kpi"]').forEach(function (b) {
       b.style.setProperty('--pcal-size', Math.round((ref || 17) * 100) / 100 + 'px');
     });
+    // Bouton global (barre de navigation) : à la hauteur des badges de SA barre
+    // (desktop ou mobile — pas celle des graphiques, sans rapport visuel ici).
+    [
+      ['navRisk', 'global-desktop'],
+      ['navRisk2', 'global-mobile']
+    ].forEach(function (pair) {
+      var badge = document.getElementById(pair[0]);
+      var h2 = badge ? badge.getBoundingClientRect().height : 0;
+      document.querySelectorAll('.pcal-btn[data-nav="' + pair[1] + '"]').forEach(function (b) {
+        b.style.setProperty('--pcal-size', Math.round((h2 || 17) * 100) / 100 + 'px');
+      });
+    });
   }
   function queueFit() {
     if (fitQueued) return;
@@ -440,6 +479,14 @@
         var ref = group.querySelector('.pbtn');
         if (sizeObserver && ref) sizeObserver.observe(ref);
         added = true;
+        // Graphique tout juste apparu (ex. graphique personnalisé créé après coup) :
+        // s'il y a déjà une période globale active, il en hérite tout de suite au
+        // lieu de démarrer sur TOUT, comme les autres graphiques déjà présents.
+        var g = parseRange(ST.global);
+        if (g) {
+          ST[key] = ST.global;
+          redraw(key);
+        }
       }
       syncGroup(group);
     });
@@ -460,6 +507,31 @@
       added = true;
     }
     syncKpiBtn();
+    // Barre de navigation : bouton global, desktop puis mobile (même clé
+    // 'global', deux exemplaires dans le DOM — un seul visible à la fois).
+    [
+      ['navRisk', 'global-desktop'],
+      ['navRisk2', 'global-mobile']
+    ].forEach(function (spec) {
+      var badge = document.getElementById(spec[0]);
+      if (!badge || badge.parentNode.querySelector('.pcal-btn[data-nav="' + spec[1] + '"]')) return;
+      var gb = document.createElement('button');
+      gb.type = 'button';
+      gb.className = 'pcal-btn';
+      gb.dataset.chart = 'global';
+      gb.dataset.nav = spec[1];
+      gb.setAttribute(
+        'aria-label',
+        'Choisir une période pour tout le Track Record et le Journal de trading'
+      );
+      gb.innerHTML = ICON;
+      badge.parentNode.insertBefore(gb, badge.nextSibling);
+      var gl = document.createElement('span');
+      gl.className = 'pcal-range-label';
+      badge.parentNode.insertBefore(gl, gb.nextSibling);
+      added = true;
+    });
+    syncGlobalBtn();
     if (added) queueFit();
   }
 
@@ -665,11 +737,30 @@
     if (typeof redrawForKey === 'function') redrawForKey(key);
   }
 
+  // Applique une période à TOUS les graphiques (natifs et personnalisés), aux
+  // KPI et au Journal de trading (clé 'hist' : pas de bouton visible pour lui,
+  // il suit simplement le mouvement) — exactement comme si on avait choisi
+  // cette période sur chacun de leurs calendriers un par un. On peut toujours
+  // changer un graphique en particulier ensuite, indépendamment.
+  function propagateGlobal(period) {
+    var keys = {hist: true}; // Journal de trading, sans bouton à lui
+    document.querySelectorAll('.pcal-btn[data-chart]').forEach(function (b) {
+      var k = b.dataset.chart;
+      if (k && k !== 'global') keys[k] = true;
+    });
+    Object.keys(keys).forEach(function (k) {
+      ST[k] = period;
+      redraw(k);
+    });
+    syncAll();
+  }
+
   function applyRange(key, a, b) {
     closePop();
     ST[key] = makePeriod(a, b);
     syncAll();
     redraw(key);
+    if (key === 'global') propagateGlobal(ST.global);
   }
 
   function clearRange(key) {
@@ -684,6 +775,29 @@
     }
     syncAll();
     redraw(key);
+    if (key === 'global') propagateGlobal('tout');
+  }
+
+  // Journal de trading (Historique) : pas de bouton calendrier à lui, mais il
+  // suit ST.hist — donc la période globale — en filtrant temporairement
+  // APP.trades le temps du rendu (renderTable() lit APP.trades directement et
+  // n'expose pas de point d'accroche plus fin ; la liste complète est remise en
+  // place aussitôt après, avant qu'aucun autre code ne s'exécute).
+  if (typeof window.renderTable === 'function') {
+    var _origRenderTable = window.renderTable;
+    window.renderTable = function () {
+      var r = parseRange(ST.hist);
+      if (!r) return _origRenderTable.apply(this, arguments);
+      var saved = APP.trades;
+      APP.trades = APP.trades.filter(function (t) {
+        return t.date && t.date >= r.from && t.date <= r.to;
+      });
+      try {
+        return _origRenderTable.apply(this, arguments);
+      } finally {
+        APP.trades = saved;
+      }
+    };
   }
 
   // Clics dans le calendrier et sur les boutons calendrier (délégation : les
