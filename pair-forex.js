@@ -1,10 +1,13 @@
 // ═══════════════════════════════════════════════════════════════════════
-// PAIRE / ACTIF → BOUTON BASCULE + COMPARAISON PAR DEVISE — TJP · module
-// additif, zéro-édition (demande de Paul, 24/09/2026)
+// PAIRE / ACTIF → LIBELLÉ CLIQUABLE + COMPARAISON PAR DEVISE — TJP · module
+// additif, zéro-édition (demande de Paul, 24 et 25/09/2026)
 // ═══════════════════════════════════════════════════════════════════════
 // Remplace le simple menu déroulant "Paire / Actif" du formulaire (ajout
-// ET édition) par un bouton bascule "Actif" / "Paire" à gauche du champ
-// (même esprit visuel que le bouton "+" de partial-results.js) :
+// ET édition) par un champ élargi (span2, comme "Note ⭐") dont le libellé
+// "Paire / Actif" devient lui-même le sélecteur de mode : les 2 mots sont
+// cliquables, celui actif est mis en évidence (couleur + gras), tout tient
+// sur la même ligne que les autres libellés de champ (25/09/2026 — remplace
+// le 1er essai avec un bouton séparé, jugé trop petit et pas assez lisible).
 //  - Mode "Actif" (par défaut) : comportement inchangé, le menu déroulant
 //    natif (#f-paire / #e-paire, liste "Paires / Actifs" existante) reste
 //    seul visible.
@@ -42,28 +45,14 @@
 :root {
   --mt-devises: #0984e3;
   --ct-comp-devises: #00e5a0;
-  --pxd-toggle-bg: #111827;
-  --pxd-toggle-bd: #1e2d45;
-  --pxd-toggle-tx: #e2e8f0;
+  --pxd-mode-active-tx: #00e5a0;
 }
-.pxd-top { display: flex; align-items: center; gap: 6px; }
-.pxd-top > select { flex: 1; min-width: 0; }
-.pxd-toggle-btn {
-  flex-shrink: 0;
-  display: flex; align-items: center; justify-content: center;
-  border-radius: 5px;
-  font-family: var(--sans);
-  font-size: 11px; font-weight: 700; line-height: 1;
-  white-space: nowrap;
-  padding: 7px 10px;
-  cursor: pointer;
-  background: var(--pxd-toggle-bg);
-  border: 1px solid var(--pxd-toggle-bd);
-  color: var(--pxd-toggle-tx);
-  transition: border-color 0.15s;
-}
-.pxd-toggle-btn:hover { border-color: var(--pxd-toggle-tx); }
-.pxd-pair-wrap { display: flex; align-items: center; gap: 6px; flex: 1; min-width: 0; }
+.pxd-mode-label { display: flex; align-items: center; gap: 2px; cursor: default; }
+.pxd-mode-opt { cursor: pointer; transition: color 0.15s; }
+.pxd-mode-opt:hover { color: var(--pxd-mode-active-tx); }
+.pxd-mode-opt.active { color: var(--pxd-mode-active-tx); font-weight: 700; }
+.pxd-mode-sep { opacity: 0.5; }
+.pxd-pair-wrap { display: flex; align-items: center; gap: 6px; }
 .pxd-pair-wrap select { flex: 1; min-width: 0; }
 .pxd-sep { flex-shrink: 0; font-family: var(--mono); color: var(--muted); font-size: 13px; }
 `;
@@ -72,34 +61,51 @@
   styleTag.textContent = CSS;
   document.head.appendChild(styleTag);
 
-  // ── 2. Champ du formulaire : bouton bascule + double menu déroulant ────
-  // Le menu natif (#f-paire / #e-paire) est déplacé DANS la ligne, à côté
-  // du bouton, plutôt que recréé — on garde donc gratuitement tout son
-  // fonctionnement existant (population, sauvegarde, etc.) en mode Actif.
+  // ── 2. Champ du formulaire : libellé cliquable + double menu déroulant ──
+  // Le champ est élargi (span2, comme "Note ⭐") pour laisser la place aux 2
+  // menus côte à côte (25/09/2026, demande de Paul). Le menu natif
+  // (#f-paire / #e-paire) n'est pas déplacé — il garde sa position et tout
+  // son fonctionnement existant (population, sauvegarde, etc.) en mode
+  // Actif ; seul son libellé devient interactif.
   function pxdSetupFieldGroup(prefix) {
     var sel = document.getElementById(prefix + '-paire');
     if (!sel || sel.dataset.pxdDone) return;
     sel.dataset.pxdDone = '1';
     var fg = sel.closest('.fg');
     if (!fg) return;
+    fg.classList.add('span2');
+
     var label = fg.querySelector('label');
+    if (label) {
+      label.id = 'pxdModeLabel-' + prefix;
+      label.classList.add('pxd-mode-label');
+      // Devient un sélecteur de mode cliquable : le mode stylo (édition de
+      // texte libre) ne s'applique plus à ce libellé précis.
+      label.removeAttribute('data-editable');
+      label.dataset.mode = 'actif';
+      label.innerHTML = '';
 
-    var row = document.createElement('div');
-    row.className = 'pxd-top';
-    fg.insertBefore(row, sel);
-
-    var btn = document.createElement('button');
-    btn.type = 'button';
-    btn.className = 'pxd-toggle-btn';
-    btn.id = 'pxdToggleBtn-' + prefix;
-    btn.dataset.mode = 'actif';
-    btn.textContent = 'Actif';
-    btn.title = 'Basculer entre un actif unique et une paire de 2 devises';
-    btn.onclick = function () {
-      pxdToggleMode(prefix);
-    };
-    row.appendChild(btn);
-    row.appendChild(sel); // déplace le select natif existant dans la ligne
+      var optPaire = document.createElement('span');
+      optPaire.className = 'pxd-mode-opt';
+      optPaire.dataset.mode = 'devise';
+      optPaire.textContent = 'Paire';
+      optPaire.onclick = function () {
+        pxdSetMode(prefix, 'devise');
+      };
+      var sep = document.createElement('span');
+      sep.className = 'pxd-mode-sep';
+      sep.textContent = ' / ';
+      var optActif = document.createElement('span');
+      optActif.className = 'pxd-mode-opt active';
+      optActif.dataset.mode = 'actif';
+      optActif.textContent = 'Actif';
+      optActif.onclick = function () {
+        pxdSetMode(prefix, 'actif');
+      };
+      label.appendChild(optPaire);
+      label.appendChild(sep);
+      label.appendChild(optActif);
+    }
 
     var pairWrap = document.createElement('div');
     pairWrap.className = 'pxd-pair-wrap';
@@ -107,20 +113,15 @@
     pairWrap.style.display = 'none';
     var s1 = document.createElement('select');
     s1.id = prefix + '-devise1';
-    var sep = document.createElement('span');
-    sep.className = 'pxd-sep';
-    sep.textContent = '/';
+    var sep2 = document.createElement('span');
+    sep2.className = 'pxd-sep';
+    sep2.textContent = '/';
     var s2 = document.createElement('select');
     s2.id = prefix + '-devise2';
     pairWrap.appendChild(s1);
-    pairWrap.appendChild(sep);
+    pairWrap.appendChild(sep2);
     pairWrap.appendChild(s2);
-    row.appendChild(pairWrap);
-
-    // Le texte "Paire / Actif" repasse en dernier enfant de .fg (qui est en
-    // colonne) : il se retrouve donc affiché sous la ligne bouton+menu(s),
-    // à la même taille qu'avant (sa classe .fg label n'est pas touchée).
-    if (label) fg.appendChild(label);
+    fg.insertBefore(pairWrap, sel.nextSibling); // juste après le select natif
 
     pxdPopulateDeviseSelects(prefix);
   }
@@ -145,20 +146,16 @@
   }
 
   function pxdSetMode(prefix, mode) {
-    var btn = document.getElementById('pxdToggleBtn-' + prefix);
+    var label = document.getElementById('pxdModeLabel-' + prefix);
     var sel = document.getElementById(prefix + '-paire');
     var wrap = document.getElementById('pxdPairWrap-' + prefix);
-    if (!btn || !sel || !wrap) return;
-    btn.dataset.mode = mode;
-    btn.textContent = mode === 'devise' ? 'Paire' : 'Actif';
+    if (!label || !sel || !wrap) return;
+    label.dataset.mode = mode;
+    label.querySelectorAll('.pxd-mode-opt').forEach(function (s) {
+      s.classList.toggle('active', s.dataset.mode === mode);
+    });
     sel.style.display = mode === 'devise' ? 'none' : '';
     wrap.style.display = mode === 'devise' ? 'flex' : 'none';
-  }
-
-  function pxdToggleMode(prefix) {
-    var btn = document.getElementById('pxdToggleBtn-' + prefix);
-    var current = btn ? btn.dataset.mode : 'actif';
-    pxdSetMode(prefix, current === 'devise' ? 'actif' : 'devise');
   }
 
   // Valeur à appliquer au trade selon le mode courant du formulaire donné.
@@ -166,8 +163,8 @@
   // se comporte comme si le champ était resté en mode Actif (pas de
   // pollution du graphique de comparaison avec une paire incomplète).
   function pxdReadFormValue(prefix) {
-    var btn = document.getElementById('pxdToggleBtn-' + prefix);
-    var mode = btn ? btn.dataset.mode : 'actif';
+    var label = document.getElementById('pxdModeLabel-' + prefix);
+    var mode = label ? label.dataset.mode : 'actif';
     if (mode === 'devise') {
       var d1 = (document.getElementById(prefix + '-devise1') || {}).value || '';
       var d2 = (document.getElementById(prefix + '-devise2') || {}).value || '';
@@ -375,20 +372,8 @@
         {v: '--mt-devises', l: 'Titre Paire de Forex', page: 'Paramètres', section: 'Listes personnalisables'},
         {v: '--ct-comp-devises', l: 'Titre — Par devise', page: 'Track Record', section: 'Comparaisons'},
         {
-          v: '--pxd-toggle-bg',
-          l: 'Bouton Paire/Actif - fond',
-          page: 'Journal de trading',
-          section: 'Formulaire nouveau trade'
-        },
-        {
-          v: '--pxd-toggle-bd',
-          l: 'Bouton Paire/Actif - bordure',
-          page: 'Journal de trading',
-          section: 'Formulaire nouveau trade'
-        },
-        {
-          v: '--pxd-toggle-tx',
-          l: 'Bouton Paire/Actif - texte',
+          v: '--pxd-mode-active-tx',
+          l: 'Paire/Actif - mode sélectionné',
           page: 'Journal de trading',
           section: 'Formulaire nouveau trade'
         }

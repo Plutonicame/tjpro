@@ -509,9 +509,15 @@
     syncKpiBtn();
     // Barre de navigation : bouton global, desktop puis mobile (même clé
     // 'global', deux exemplaires dans le DOM — un seul visible à la fois).
+    // Desktop/PC ultra wide : à gauche du badge Session (donc à droite des
+    // horloges, à gauche des 4 badges Session/Trades/P&L/Risk).
+    // Mobile/PC vertical (25/09/2026, demande de Paul — correction d'un
+    // 1er essai qui le mettait tout à droite, après Risk) : le badge
+    // Session est seul sur sa ligne, donc le bouton va à gauche du groupe
+    // des 3 badges Trades/P&L/Risk (qui se retrouve sur la ligne du bas).
     [
-      ['navRisk', 'global-desktop'],
-      ['navRisk2', 'global-mobile']
+      ['sessionBadge', 'global-desktop'],
+      ['navTrades2', 'global-mobile']
     ].forEach(function (spec) {
       var badge = document.getElementById(spec[0]);
       if (!badge || badge.parentNode.querySelector('.pcal-btn[data-nav="' + spec[1] + '"]')) return;
@@ -525,10 +531,10 @@
         'Choisir une période pour tout le Track Record et le Journal de trading'
       );
       gb.innerHTML = ICON;
-      badge.parentNode.insertBefore(gb, badge.nextSibling);
+      badge.parentNode.insertBefore(gb, badge);
       var gl = document.createElement('span');
       gl.className = 'pcal-range-label';
-      badge.parentNode.insertBefore(gl, gb.nextSibling);
+      badge.parentNode.insertBefore(gl, badge);
       added = true;
     });
     syncGlobalBtn();
@@ -546,7 +552,16 @@
       decorate();
     }, 60);
   }
-  new MutationObserver(scheduleDecorate).observe(document.documentElement, {
+  // Observé sur #page-trackrecord SEULEMENT (pas toute la page) : c'est la seule
+  // zone où un nouveau graphique personnalisé peut apparaître dynamiquement
+  // (cfFullRerender()). Observer TOUTE la page (document.documentElement)
+  // réagissait aussi aux mutations internes d'autres bibliothèques ailleurs
+  // (ex. les éléments temporaires de Sortable.js pendant un glisser-déposer
+  // dans Paramètres), et le travail fait ici à chaque déclenchement (requêtes
+  // DOM + mesures de tailles, forçant des recalculs de mise en page) pouvait
+  // perturber leur propre suivi tactile en plein geste.
+  var pcalObserveRoot = document.getElementById('page-trackrecord') || document.documentElement;
+  new MutationObserver(scheduleDecorate).observe(pcalObserveRoot, {
     childList: true,
     subtree: true
   });
