@@ -18,9 +18,6 @@ window.sb = supabase.createClient(window.SUPABASE_URL, window.SUPABASE_KEY, {
     headers: {'Cache-Control': 'no-cache, no-store, must-revalidate'}
   }
 });
-function getSb() {
-  return window.sb;
-}
 
 // ══ GOOGLE LOGIN ══
 async function signInWithGoogle() {
@@ -978,10 +975,6 @@ function addNewAccount() {
   if (typeof currentUser !== 'undefined' && currentUser && typeof schedulePush === 'function') {
     schedulePush(0, {force: true});
   }
-}
-
-function updateAccountMenuInNav() {
-  renderAccountMenu();
 }
 
 function updateClocks() {
@@ -5576,12 +5569,32 @@ document.addEventListener('DOMContentLoaded', function () {
 
 // ── EDIT TRADE ──
 let _editId = null;
+let _editReturnToList = false;
 // ══ Popup "trades derrière un graphique" (18/09/2026, demande de Paul) ══
 // Ouverte par un clic sur une barre/tranche/point de n'importe quel
 // graphique de comparaison ou d'analyse : liste, dans le même esprit
 // visuel que "Top 5 Trades", les trades derrière la donnée cliquée. Clic
 // sur un trade ⇒ sa fiche en lecture seule (openEditTrade, readOnly=true).
 let TLM_TRADES = [];
+// Bloque le défilement de la page derrière une popup (liste de trades
+// d'une zone de graphique, fiche de trade) : jusque là, arrivé en bas de
+// la popup, continuer à tourner la molette faisait défiler la page
+// derrière (25/09/2026, demande de Paul). Compteur plutôt qu'un simple
+// booléen : ces 2 popups peuvent s'enchaîner (liste → fiche → retour à la
+// liste) sans jamais repasser par un état "tout fermé" entre les deux.
+let _bgScrollLockCount = 0;
+function lockBgScroll() {
+  _bgScrollLockCount++;
+  document.documentElement.style.overflow = 'hidden';
+  document.body.style.overflow = 'hidden';
+}
+function unlockBgScroll() {
+  _bgScrollLockCount = Math.max(0, _bgScrollLockCount - 1);
+  if (_bgScrollLockCount === 0) {
+    document.documentElement.style.overflow = '';
+    document.body.style.overflow = '';
+  }
+}
 function openTradesListModal(title, trades) {
   TLM_TRADES = trades || [];
   const titleEl = document.getElementById('tlm-title');
@@ -5591,23 +5604,35 @@ function openTradesListModal(title, trades) {
   tlmRender();
   const modal = document.getElementById('tradesListModal');
   if (modal) modal.classList.add('open');
+  lockBgScroll();
 }
 function closeTradesListModal() {
   const modal = document.getElementById('tradesListModal');
   if (modal) modal.classList.remove('open');
+  unlockBgScroll();
 }
 // Ferme la liste avant d'ouvrir la fiche du trade cliqué (18/09/2026,
 // demande de Paul) : les deux popups ne doivent pas rester ouvertes en
-// même temps.
+// même temps. Le 3e argument (returnToList) dit à closeEditTrade() de
+// rouvrir la liste au lieu de tout fermer quand on quitte la fiche
+// (21/09/2026, demande de Paul).
 function tlmOpenTrade(id) {
   closeTradesListModal();
-  openEditTrade(id, true);
+  openEditTrade(id, true, true);
 }
 function tlmRender() {
   const body = document.getElementById('tlmBody');
   if (!body) return;
   const includeBT = document.getElementById('tlm-bt') ? document.getElementById('tlm-bt').checked : false;
-  const list = includeBT ? TLM_TRADES : TLM_TRADES.filter(t => !t.backtest);
+  // Plus récent en haut, plus ancien en bas (25/09/2026, demande de Paul) —
+  // btFilter()/filterT() trient par défaut du plus ancien au plus récent
+  // (nécessaire pour la courbe d'équité entre autres), donc on ré-ordonne
+  // uniquement ici, pour cet affichage.
+  const list = (includeBT ? TLM_TRADES : TLM_TRADES.filter(t => !t.backtest))
+    .slice()
+    .sort((a, b) => (b.date || '').localeCompare(a.date || '') || (b.heure || '').localeCompare(a.heure || ''));
+  const modalBox = body.closest('.cp-modal');
+  if (modalBox) modalBox.scrollTop = 0;
   if (!list.length) {
     body.innerHTML =
       '<div style="color:var(--muted);font-size:12px;padding:10px 0;">Aucun trade</div>';
@@ -5631,7 +5656,12 @@ function tlmRender() {
     })
     .join('');
 }
-function openEditTrade(id, readOnly) {
+function openEditTrade(id, readOnly, returnToList) {
+  // D'où vient l'ouverture de la fiche : sert à closeEditTrade() pour savoir si
+  // fermer doit rouvrir la liste des trades ou tout fermer. Ne s'active qu'en
+  // lecture seule (readOnly) : ne change rien au bouton ANNULER de l'édition
+  // normale d'un trade, pour ne pas risquer de perdre une modification en cours.
+  _editReturnToList = !!(readOnly && returnToList);
   id = parseInt(id, 10);
   const t = APP.trades.find(x => x.id === id);
   if (!t) {
@@ -5714,6 +5744,7 @@ function openEditTrade(id, readOnly) {
     )
     .join('');
   document.getElementById('editModal').classList.add('open');
+  lockBgScroll();
   cfSetEditModalReadOnly(!!readOnly);
   // Init étoiles + ajustement du champ Notes après ouverture réelle du modal (mise en page pas garantie stable avant)
   setTimeout(() => {
@@ -5802,8 +5833,28 @@ function addEditImage() {
 }
 function closeEditTrade() {
   document.getElementById('editModal').classList.remove('open');
+  unlockBgScroll();
   _editId = null;
+  // Fiche ouverte depuis la liste des trades d'une zone de graphique : ANNULER /
+  // FERMER (bouton, ou clic à côté — voir plus bas) ramène à cette liste, là où
+  // on était avant d'ouvrir la fiche, au lieu de tout fermer.
+  if (_editReturnToList) {
+    _editReturnToList = false;
+    tlmRender();
+    const tlm = document.getElementById('tradesListModal');
+    if (tlm) tlm.classList.add('open');
+    lockBgScroll(); // le fond doit rester figé : on revient sur une popup, pas sur la page
+  }
 }
+// Clic en dehors de la fiche (pas sur son contenu) : ferme comme le bouton
+// FERMER. Seulement en lecture seule (FICHE DU TRADE) : en édition, un clic à
+// côté par mégarde ne doit pas faire perdre une saisie en cours ; là, ANNULER
+// (ou la croix) reste le seul moyen de sortir, comme avant.
+document.addEventListener('mousedown', e => {
+  if (e.target.id === 'editModal' && e.target.classList.contains('cp-readonly')) {
+    closeEditTrade();
+  }
+});
 // Exposer sur window pour les onclick inline dans renderTable
 window.openEditTrade = openEditTrade;
 window.deleteTrade = deleteTrade;

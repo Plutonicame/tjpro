@@ -1774,6 +1774,7 @@ tbody td {
   max-width: calc(100vw - 24px);
   max-height: 90vh;
   overflow-y: auto;
+  overscroll-behavior: contain;
 }
 /* Fenêtre "Modifier le trade" élargie de 20% (420px -> 504px) en PC normal,
    PC vertical et PC ultra wide uniquement (pas en mode téléphone, où

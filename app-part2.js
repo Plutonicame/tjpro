@@ -488,10 +488,12 @@ async function exportLocalBackup() {
       }
     };
     const blob = new Blob([JSON.stringify(backup, null, 2)], {type: 'application/json'});
-    // Nombre total de trades toutes comptes confondus, dans le nom du
-    // fichier pour s'y retrouver entre plusieurs sauvegardes (16/09/2026).
-    const totalTrades = exportAccounts.reduce((sum, acc) => sum + (acc.trades ? acc.trades.length : 0), 0);
-    const filename = `tjp-sauvegarde-${new Date().toISOString().slice(0, 10)}-${totalTrades}trades.json`;
+    // Nom fixe (25/09/2026, demande de Paul) : dans le dossier choisi, une
+    // sauvegarde du même nom écrase la précédente (getFileHandle plus bas,
+    // create:true) — un nom qui varie (date, nombre de trades) empêchait
+    // ça et faisait s'accumuler les fichiers. Un seul fichier, toujours à
+    // jour.
+    const filename = `Sauvegarde TJP.json`;
 
     // Dossier choisi via le bouton "Lieu de sauvegarde" (voir plus haut) :
     // écrit directement
@@ -2042,36 +2044,6 @@ document.addEventListener('DOMContentLoaded', () => {
 // AGENT IA — RÉCAP MARCHÉS
 // ══════════════════════════════════════════
 
-// Variables pour le module Récap IA (fonctionnalité désactivée)
-let currentRecapData = null;
-function getIaConfig() {
-  return {assets: []};
-}
-
-function exportRecapPdf() {
-  if (!currentRecapData) return;
-  const cfg = getIaConfig();
-  const tsEl = document.getElementById('recapTimestamp');
-  let html = `<html><head><meta charset="UTF-8"><title>Récap Marchés TJPro</title>
-  <style>body{font-family:Arial,sans-serif;max-width:900px;margin:40px auto;color:#1a1a2e;}
-  h1{color:#4f8ef7;}h2{color:#0d7377;border-bottom:1px solid #eee;padding-bottom:6px;}
-  pre{white-space:pre-wrap;font-family:inherit;line-height:1.7;}
-  .asset{page-break-before:always;margin-bottom:40px;}</style></head><body>
-  <h1>Récap Marchés — Trading Journal Pro</h1>
-  <p style="color:#666">${tsEl ? tsEl.textContent : new Date().toLocaleString('fr-FR')}</p>`;
-  cfg.assets.forEach(a => {
-    if (currentRecapData[a])
-      html += `<div class="asset"><h2>${a}</h2><pre>${currentRecapData[a]}</pre></div>`;
-  });
-  html += '</body></html>';
-  const w = window.open('', '_blank');
-  w.document.write(html);
-  w.document.close();
-  setTimeout(() => w.print(), 500);
-}
-
-// Init au chargement de la page Récap
-
 // Animation shake pour les PIN incorrects
 document.addEventListener('DOMContentLoaded', () => {
   const shakeStyle = document.createElement('style');
@@ -2084,14 +2056,6 @@ document.addEventListener('DOMContentLoaded', () => {
 // POINTS CLÉS IA INTERNE
 // ══════════════════════════════════════
 let _pcHistory = [];
-
-function showPcStatus(msg, color = 'var(--muted)') {
-  const el = document.getElementById('pcStatus');
-  if (!el) return;
-  el.textContent = msg;
-  el.style.color = color;
-  el.style.display = 'block';
-}
 
 // ══ TOP 5 / PIRES 5 TRADES ══
 function renderTop5() {
