@@ -3,11 +3,12 @@
 // additif, zéro-édition (demande de Paul, 24 et 25/09/2026)
 // ═══════════════════════════════════════════════════════════════════════
 // Remplace le simple menu déroulant "Paire / Actif" du formulaire (ajout
-// ET édition) par un champ élargi (span2, comme "Note ⭐") dont le libellé
-// "Paire / Actif" devient lui-même le sélecteur de mode : les 2 mots sont
-// cliquables, celui actif est mis en évidence (couleur + gras), tout tient
-// sur la même ligne que les autres libellés de champ (25/09/2026 — remplace
-// le 1er essai avec un bouton séparé, jugé trop petit et pas assez lisible).
+// ET édition) par un champ de taille normale dont le libellé "Paire / Actif"
+// devient lui-même le sélecteur de mode : les 2 mots sont cliquables, celui
+// actif est mis en évidence (couleur + gras), tout tient sur la même ligne
+// que les autres libellés de champ (25/09/2026 — remplace le 1er essai avec
+// un bouton séparé + champ élargi, jugé trop petit puis, une fois corrigé,
+// devenu inutilement large).
 //  - Mode "Actif" (par défaut) : comportement inchangé, le menu déroulant
 //    natif (#f-paire / #e-paire, liste "Paires / Actifs" existante) reste
 //    seul visible.
@@ -62,8 +63,9 @@
   document.head.appendChild(styleTag);
 
   // ── 2. Champ du formulaire : libellé cliquable + double menu déroulant ──
-  // Le champ est élargi (span2, comme "Note ⭐") pour laisser la place aux 2
-  // menus côte à côte (25/09/2026, demande de Paul). Le menu natif
+  // Taille normale (25/09/2026, demande de Paul — le champ avait été élargi
+  // en span2 le temps du 1er essai avec un bouton séparé ; le libellé
+  // cliquable tient très bien sans ce surplus de largeur). Le menu natif
   // (#f-paire / #e-paire) n'est pas déplacé — il garde sa position et tout
   // son fonctionnement existant (population, sauvegarde, etc.) en mode
   // Actif ; seul son libellé devient interactif.
@@ -73,7 +75,6 @@
     sel.dataset.pxdDone = '1';
     var fg = sel.closest('.fg');
     if (!fg) return;
-    fg.classList.add('span2');
 
     var label = fg.querySelector('label');
     if (label) {
@@ -244,6 +245,38 @@
   // Réutilise directement drawComp() en mode "multi" (comme les graphiques
   // Confluence/Timeframe) : le résultat total du trade est ajouté à CHAQUE
   // devise de la paire — exactement le comportement demandé.
+  // Intégration au système d'ordre des graphiques (Paramètres → "ORDRE DES
+  // GRAPHIQUES / WIDGETS") de custom-fields.js (25/09/2026, demande de Paul
+  // — sans ça, ce graphique n'apparaissait ni dans cette liste ni dans le
+  // conteneur réordonnable, et restait donc coincé à une position fixe).
+  // CF_BUILTIN_CHARTS/CF_SCREEN_MODES sont des const de haut niveau dans
+  // custom-fields.js, donc visibles ici par leur nom (même portée globale
+  // de script classique que ST/MODE/BT_STATE plus haut).
+  if (typeof CF_BUILTIN_CHARTS !== 'undefined' && !CF_BUILTIN_CHARTS.some(function (c) {
+      return c.id === 'devises';
+    })) {
+    CF_BUILTIN_CHARTS.push({id: 'devises', label: 'Comparaison par devise'});
+  }
+  if (typeof window.cfEnsureOrders === 'function') {
+    var _pxdOrigCfEnsureOrders = window.cfEnsureOrders;
+    window.cfEnsureOrders = function () {
+      var r = _pxdOrigCfEnsureOrders.apply(this, arguments);
+      // Un compte déjà existant a un cfChartOrderByMode déjà rempli AVANT
+      // l'ajout de 'devises' ci-dessus (qui ne sert que de valeur par
+      // défaut pour un tableau encore vide) — on le rajoute donc à la main,
+      // à la fin, exactement comme custom-fields.js le fait déjà pour un
+      // champ personnalisé de type graphique nouvellement créé.
+      if (APP.cfChartOrderByMode && typeof CF_SCREEN_MODES !== 'undefined') {
+        CF_SCREEN_MODES.forEach(function (m) {
+          if (APP.cfChartOrderByMode[m] && APP.cfChartOrderByMode[m].indexOf('devises') === -1) {
+            APP.cfChartOrderByMode[m].push('devises');
+          }
+        });
+      }
+      return r;
+    };
+  }
+
   if (typeof window.ST !== 'undefined' && ST.devises === undefined) ST.devises = 'tout';
   if (typeof window.MODE !== 'undefined' && MODE.devises === undefined) MODE.devises = false;
   if (typeof window.BT_STATE !== 'undefined' && BT_STATE.devises === undefined)
@@ -260,7 +293,7 @@
 
   function pxdCardHtml() {
     return (
-      '<div class="chart-card" style="background:var(--comp-bg)" id="pxdChartCard">' +
+      '<div class="chart-card" style="background:var(--comp-bg)" id="pxdChartCard" data-chart-id="devises">' +
       '<div class="chart-header">' +
       '<div class="chart-title" data-editable data-tvar="--ct-comp-devises" style="color:var(--ct-comp-devises,#00e5a0)">COMPARAISON PAR DEVISE</div>' +
       '<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">' +
@@ -288,7 +321,12 @@
   }
 
   function pxdSyncChartCard() {
-    var container = document.getElementById('compCharts');
+    // #compCharts n'existe que jusqu'à la 1ère fusion de custom-fields.js
+    // (cfEnsureChartsContainer) : une fois #chartsContainer créé, c'est LUI
+    // la bonne cible — sinon une carte créée après coup (1er trade en mode
+    // Paire saisi après le tout premier chargement) atterrirait dans un
+    // #compCharts abandonné, invisible.
+    var container = document.getElementById('chartsContainer') || document.getElementById('compCharts');
     if (!container) return;
     var existing = document.getElementById('pxdChartCard');
     if (pxdHasDeviseTrades()) {
@@ -298,6 +336,9 @@
         if (tgl) tgl.classList.toggle('on', !!MODE.devises);
         var bt = document.getElementById('bt-devises');
         if (bt) bt.checked = !!BT_STATE.devises;
+        // La carte vient d'apparaître : la repositionner tout de suite selon
+        // l'ordre sauvegardé plutôt que d'attendre le prochain passage.
+        if (typeof cfApplyChartOrder === 'function') cfApplyChartOrder();
       }
       pxdDrawComp(ST.devises);
     } else if (existing) {

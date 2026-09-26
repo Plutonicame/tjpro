@@ -507,36 +507,63 @@
       added = true;
     }
     syncKpiBtn();
-    // Barre de navigation : bouton global, desktop puis mobile (même clé
-    // 'global', deux exemplaires dans le DOM — un seul visible à la fois).
-    // Desktop/PC ultra wide : à gauche du badge Session (donc à droite des
-    // horloges, à gauche des 4 badges Session/Trades/P&L/Risk).
-    // Mobile/PC vertical (25/09/2026, demande de Paul — correction d'un
-    // 1er essai qui le mettait tout à droite, après Risk) : le badge
-    // Session est seul sur sa ligne, donc le bouton va à gauche du groupe
-    // des 3 badges Trades/P&L/Risk (qui se retrouve sur la ligne du bas).
-    [
-      ['sessionBadge', 'global-desktop'],
-      ['navTrades2', 'global-mobile']
-    ].forEach(function (spec) {
-      var badge = document.getElementById(spec[0]);
-      if (!badge || badge.parentNode.querySelector('.pcal-btn[data-nav="' + spec[1] + '"]')) return;
-      var gb = document.createElement('button');
-      gb.type = 'button';
-      gb.className = 'pcal-btn';
-      gb.dataset.chart = 'global';
-      gb.dataset.nav = spec[1];
-      gb.setAttribute(
-        'aria-label',
-        'Choisir une période pour tout le Track Record et le Journal de trading'
-      );
-      gb.innerHTML = ICON;
-      badge.parentNode.insertBefore(gb, badge);
-      var gl = document.createElement('span');
-      gl.className = 'pcal-range-label';
-      badge.parentNode.insertBefore(gl, badge);
+    // Barre de navigation : bouton global. Desktop et mobile partagent la
+    // même clé de fonctionnement mais le mobile a 2 emplacements possibles
+    // (25/09/2026, demande de Paul) : PC vertical et téléphone utilisent la
+    // même barre .nav-mobile, mais pas le même endroit dedans. On recalcule
+    // l'emplacement à CHAQUE passage (y compris au redimensionnement, voir
+    // l'écoute 'resize' plus bas) : bouton+étiquette sont retrouvés via
+    // data-nav/data-for et simplement déplacés si besoin, jamais recréés.
+    //  - Desktop/PC ultra wide : à gauche du badge Session.
+    //  - PC vertical : ligne du HAUT (celle des horloges), tout à droite.
+    //  - Téléphone : ligne du bas, à gauche du groupe Trades/P&L/Risk
+    //    (le badge Session étant seul sur sa ligne).
+    function pcalGlobalParts(navKey) {
+      var gb = document.querySelector('.pcal-btn[data-nav="' + navKey + '"]');
+      var gl = gb && gb.parentNode ? gb.parentNode.querySelector('.pcal-range-label[data-for="' + navKey + '"]') : null;
+      if (!gb) {
+        gb = document.createElement('button');
+        gb.type = 'button';
+        gb.className = 'pcal-btn';
+        gb.dataset.chart = 'global';
+        gb.dataset.nav = navKey;
+        gb.setAttribute(
+          'aria-label',
+          'Choisir une période pour tout le Track Record et le Journal de trading'
+        );
+        gb.innerHTML = ICON;
+      }
+      if (!gl) {
+        gl = document.createElement('span');
+        gl.className = 'pcal-range-label';
+        gl.dataset.for = navKey;
+      }
+      return [gb, gl];
+    }
+    (function () {
+      var anchor = document.getElementById('sessionBadge');
+      if (!anchor) return;
+      var parts = pcalGlobalParts('global-desktop');
+      anchor.parentNode.insertBefore(parts[0], anchor);
+      anchor.parentNode.insertBefore(parts[1], anchor);
       added = true;
-    });
+    })();
+    (function () {
+      var parts = pcalGlobalParts('global-mobile');
+      var vertical = typeof cfScreenMode === 'function' && cfScreenMode() === 'vertical';
+      if (vertical) {
+        var clocks = document.querySelector('.nav-mobile-clocks');
+        if (!clocks) return;
+        clocks.parentNode.appendChild(parts[0]);
+        clocks.parentNode.appendChild(parts[1]);
+      } else {
+        var anchor2 = document.getElementById('navTrades2');
+        if (!anchor2) return;
+        anchor2.parentNode.insertBefore(parts[0], anchor2);
+        anchor2.parentNode.insertBefore(parts[1], anchor2);
+      }
+      added = true;
+    })();
     syncGlobalBtn();
     if (added) queueFit();
   }
@@ -567,6 +594,12 @@
   });
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', decorate);
   else decorate();
+  // PC vertical et téléphone partagent la même barre .nav-mobile mais pas le
+  // même emplacement pour le bouton global (25/09/2026) : un redimensionnement
+  // de fenêtre peut faire changer cfScreenMode() sans qu'aucun élément ne soit
+  // ajouté/retiré du DOM (donc sans déclencher le MutationObserver ci-dessus),
+  // d'où cette écoute dédiée.
+  window.addEventListener('resize', scheduleDecorate);
 
   // Un clic sur J / SEM / MOIS / TRIM / AN / TOUT remplace la période (les
   // gestionnaires d'origine écrivent ST[clé]) : on remet le bouton calendrier
