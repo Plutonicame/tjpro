@@ -4318,6 +4318,7 @@ function buildTV() {
     {v: '--tgl-off', l: 'Toggle off', page: 'Paramètres', section: 'Interrupteurs'},
     {v: '--tgl-on', l: 'Toggle on', page: 'Paramètres', section: 'Interrupteurs'},
     {v: '--tgl-thumb', l: 'Toggle rond', page: 'Paramètres', section: 'Interrupteurs'},
+    {v: '--tgl-border', l: 'Toggle bordure', page: 'Paramètres', section: 'Interrupteurs'},
     {v: '--btn-pin-bg', l: 'Changer PIN - fond', page: 'Général', section: 'Profil'},
     {v: '--btn-pin-bd', l: 'Changer PIN - bordure', page: 'Général', section: 'Profil'},
     {v: '--btn-pin-tx', l: 'Changer PIN - texte', page: 'Général', section: 'Profil'},

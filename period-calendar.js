@@ -514,7 +514,10 @@
     // l'emplacement à CHAQUE passage (y compris au redimensionnement, voir
     // l'écoute 'resize' plus bas) : bouton+étiquette sont retrouvés via
     // data-nav/data-for et simplement déplacés si besoin, jamais recréés.
-    //  - Desktop/PC ultra wide : à gauche du badge Session.
+    //  - Desktop/PC ultra wide : tout à gauche des 4 cases (Session,
+    //    Trades, P&L, Risk) — étiquette de période à gauche du bouton
+    //    (25/09/2026, demande de Paul : avant, l'étiquette était à droite
+    //    du bouton, entre lui et le badge Session).
     //  - PC vertical : ligne du HAUT (celle des horloges), tout à droite.
     //  - Téléphone : ligne du bas, à gauche du groupe Trades/P&L/Risk
     //    (le badge Session étant seul sur sa ligne).
@@ -544,8 +547,8 @@
       var anchor = document.getElementById('sessionBadge');
       if (!anchor) return;
       var parts = pcalGlobalParts('global-desktop');
-      anchor.parentNode.insertBefore(parts[0], anchor);
-      anchor.parentNode.insertBefore(parts[1], anchor);
+      anchor.parentNode.insertBefore(parts[1], anchor); // étiquette d'abord...
+      anchor.parentNode.insertBefore(parts[0], anchor); // ...puis le bouton, entre les 2
       added = true;
     })();
     (function () {

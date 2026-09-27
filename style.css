@@ -127,6 +127,7 @@
   --tgl-off: #1e2d45;
   --tgl-on: #00e5a0;
   --tgl-thumb: #ffffff;
+  --tgl-border: #bababa;
   --mt-paires: #0984e3;
   --mt-sessions: #8b5cf6;
   --mt-confluences: #00e5a0;
@@ -1206,6 +1207,7 @@ tbody td {
   width: 38px;
   height: 20px;
   background: var(--tgl-off);
+  border: 1px solid var(--tgl-border);
   border-radius: 10px;
   position: relative;
   cursor: pointer;

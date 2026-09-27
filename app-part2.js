@@ -1490,6 +1490,7 @@ function _applyCloudDataDirect(data, cloudTrades) {
   renderTable();
   updateNavBadges();
   setTimeout(() => {
+    if (typeof populateSelects === 'function') populateSelects();
     refreshAllCharts();
     renderTop5();
     if (document.getElementById('page-modifs')?.classList.contains('active')) renderModifs();

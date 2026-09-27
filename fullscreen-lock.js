@@ -2,35 +2,48 @@
 // PLEIN ÉCRAN APRÈS CONNEXION — TJP · module additif, zéro-édition
 // ═══════════════════════════════════════════════════════════════════════
 // Dès que le code PIN est validé, l'app passe en plein écran total (plus
-// de barre de titre, plus de croix / agrandir / réduire) et y reste
-// jusqu'à la déconnexion (bouton ⏻ ou menu mobile), qui rétablit
-// l'affichage normal.
+// de barre de titre, plus de croix / agrandir / réduire) — sauf si la
+// préférence ci-dessous est décochée.
+//
+// Réglage dans Paramètres, carte "PLEIN ÉCRAN" (activé par défaut ; à
+// décocher manuellement pour ne plus jamais passer en plein écran à la
+// connexion — 25/09/2026, demande de Paul).
+//
+// Si le plein écran est quitté volontairement (Échap, F11, croix native du
+// navigateur) une fois qu'il a été obtenu, ce choix est respecté pour le
+// reste de la session : contrairement à la version précédente, un clic
+// quelconque ne le remet plus de force (25/09/2026, demande de Paul). On ne
+// retente automatiquement que dans un seul cas : la toute première tentative
+// juste après la connexion, si le navigateur l'a refusée (geste trop
+// ancien) — auquel cas on réessaie au prochain clic/touche, une fois.
 //
 // N'édite aucune fonction existante : enveloppe afterPinValidated() et
 // _doResetPin(), comme friends-chat.js. Pour désactiver entièrement :
 // retirer la balise <script src="fullscreen-lock.js"> d'index.html.
 //
-// Détails :
-//  - Un navigateur n'accepte le plein écran qu'à la suite d'un geste de
-//    l'utilisateur : on le demande donc tout de suite après la validation
-//    du PIN (le dernier chiffre tapé sert de geste). Si le navigateur
-//    refuse (connexion lente, geste trop ancien), on retente au premier
-//    clic ou à la première touche suivante.
-//  - Si le plein écran est quitté (Échap, F11) alors qu'on est connecté,
-//    il revient au clic / à la touche suivante — jusqu'à la déconnexion.
-//  - Ne s'applique pas aux écrans tactiles (téléphone, tablette) : la
-//    barre de titre à masquer n'existe que sur ordinateur. Passer
-//    DESKTOP_ONLY à false pour l'activer partout.
+// Ne s'applique pas aux écrans tactiles (téléphone, tablette) : la barre de
+// titre à masquer n'existe que sur ordinateur. Passer DESKTOP_ONLY à false
+// pour l'activer partout.
 // ═══════════════════════════════════════════════════════════════════════
 
 (function () {
   'use strict';
 
   var DESKTOP_ONLY = true;
+  var PREF_KEY = 'tjp_fullscreen_pref';
 
   var root = document.documentElement;
   var wanted = false; // vrai entre la validation du PIN et la déconnexion
-  var armed = false; // vrai quand on attend un geste pour retenter
+  var established = false; // vrai dès que le plein écran a été obtenu au moins une fois depuis la connexion
+  var armed = false; // vrai quand on attend un geste pour retenter la 1ère entrée
+
+  function prefEnabled() {
+    var v = localStorage.getItem(PREF_KEY);
+    return v === null ? true : v === '1'; // activé par défaut
+  }
+  function setPrefEnabled(v) {
+    localStorage.setItem(PREF_KEY, v ? '1' : '0');
+  }
 
   function supported() {
     return !!(root.requestFullscreen || root.webkitRequestFullscreen);
@@ -70,9 +83,11 @@
     } catch (e) {}
   }
 
-  // ── Nouvelle tentative au prochain geste (clic / touche) ────────────
+  // ── Nouvelle tentative au prochain geste (clic / touche) — seulement pour
+  // récupérer une 1ère tentative refusée par le navigateur juste après la
+  // connexion (voir onFsChange plus bas, qui décide seul quand armer).
   function onGesture(e) {
-    if (!wanted) {
+    if (!wanted || established) {
       disarm();
       return;
     }
@@ -93,10 +108,25 @@
     document.removeEventListener('keydown', onGesture, true);
   }
 
-  // Plein écran perdu alors qu'on est toujours connecté → on le redemande
-  // au prochain geste.
   function onFsChange() {
-    if (wanted && !isFs()) arm();
+    if (!wanted) return;
+    if (isFs()) {
+      established = true;
+      disarm();
+      return;
+    }
+    // Plein écran perdu.
+    if (!established) {
+      // Pas encore obtenu depuis la connexion (1ère tentative refusée) : on
+      // retente au prochain geste.
+      arm();
+    } else {
+      // Obtenu, puis quitté volontairement (Échap, F11, croix native...) :
+      // on respecte ce choix pour le reste de la session, jusqu'à la
+      // prochaine connexion — on n'essaie plus d'y revenir.
+      wanted = false;
+      disarm();
+    }
   }
   document.addEventListener('fullscreenchange', onFsChange);
   document.addEventListener('webkitfullscreenchange', onFsChange);
@@ -107,9 +137,12 @@
   if (typeof window.afterPinValidated === 'function') {
     var _origAfterPinValidated = window.afterPinValidated;
     window.afterPinValidated = function () {
-      if (allowed()) {
+      established = false;
+      if (prefEnabled() && allowed()) {
         wanted = true;
         enterFs().catch(arm);
+      } else {
+        wanted = false;
       }
       return _origAfterPinValidated.apply(this, arguments);
     };
@@ -119,9 +152,59 @@
     var _origDoResetPin = window._doResetPin;
     window._doResetPin = function () {
       wanted = false;
+      established = false;
       disarm();
       exitFs();
       return _origDoResetPin.apply(this, arguments);
     };
   }
+
+  // ── Réglage dans Paramètres ──────────────────────────────────────────
+  var CSS = ':root{--crt-fullscreen:#00e5a0;}';
+  var styleTag = document.createElement('style');
+  styleTag.textContent = CSS;
+  document.head.appendChild(styleTag);
+
+  function renderToggle() {
+    var t = document.getElementById('tglFsPref');
+    var l = document.getElementById('fsPrefLbl');
+    if (!t || !l) return;
+    var on = prefEnabled();
+    t.classList.toggle('on', on);
+    l.textContent = on ? 'Activé' : 'Désactivé';
+  }
+  window.fsTogglePref = function () {
+    setPrefEnabled(!prefEnabled());
+    renderToggle();
+  };
+
+  function injectCard() {
+    if (document.getElementById('fsPrefCard')) return;
+    var page = document.getElementById('page-modifs');
+    var grid = document.getElementById('modGrid');
+    if (!page || !grid) return;
+    var html =
+      '<div class="card" id="fsPrefCard">' +
+      '<div class="card-header"><div class="card-title" data-editable data-tvar="--crt-fullscreen" style="color:var(--crt-fullscreen,#00e5a0)">PLEIN ÉCRAN</div></div>' +
+      '<div class="card-body">' +
+      '<div class="tgl-row">' +
+      '<span data-editable>Plein écran à la connexion :</span>' +
+      '<div class="tgl-track" id="tglFsPref" onclick="fsTogglePref()"><div class="tgl-thumb"></div></div>' +
+      '<span id="fsPrefLbl" style="color:var(--muted)">Activé</span>' +
+      '</div>' +
+      '</div>' +
+      '</div>';
+    grid.insertAdjacentHTML('beforebegin', html);
+    renderToggle();
+  }
+  if (typeof window.buildTV === 'function') {
+    var _origBuildTV = window.buildTV;
+    window.buildTV = function () {
+      var tv = _origBuildTV.apply(this, arguments);
+      tv.push({v: '--crt-fullscreen', l: 'Titre Plein écran', page: 'Paramètres', section: 'Plein écran'});
+      return tv;
+    };
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', injectCard);
+  else injectCard();
 })();
