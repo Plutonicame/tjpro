@@ -691,6 +691,8 @@ body {
 }
 .nav-mobile-session {
   flex-shrink: 0;
+  font-size: 13px;
+  padding: 5px 10px;
 }
 .nav-mobile-badges {
   display: flex;
@@ -2247,10 +2249,6 @@ body.cf-mode-ultrawide #editModal .cp-modal {
   .hamburger {
     display: flex;
     align-items: center;
-  }
-  .nav-mobile-session.session-badge {
-    font-size: 13px;
-    padding: 5px 14px;
   }
 
   .kpi-icon {

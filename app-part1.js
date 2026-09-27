@@ -3356,13 +3356,18 @@ function drawComp(cid, chKey, trKey, period, pct, multi = false) {
   const map = {};
   const mapTrades = {};
   tr.forEach(t => {
-    const keys =
-      multi && t[trKey]
-        ? t[trKey]
-            .split(/[|,]/)
-            .map(s => s.trim())
-            .filter(Boolean)
-        : [t[trKey] || '?'];
+    // En mode multi (valeurs séparées par | ou ,), une valeur vide doit
+    // donner AUCUNE clé — pas de repli sur '?' — sinon tous les trades sans
+    // cette valeur (ex. les trades en mode Actif, sans devises) se
+    // retrouvent comptés ensemble dans une fausse catégorie '?' (25/09/2026,
+    // demande de Paul : ça polluait Comparaison par devise avec les trades
+    // de Comparaison par Paire/Actif).
+    const keys = multi
+      ? (t[trKey] || '')
+          .split(/[|,]/)
+          .map(s => s.trim())
+          .filter(Boolean)
+      : [t[trKey] || '?'];
     keys.forEach(k => {
       if (!map[k]) {
         map[k] = {pnl: 0, wins: 0, total: 0};

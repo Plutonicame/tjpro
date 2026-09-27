@@ -5,9 +5,11 @@
 // de barre de titre, plus de croix / agrandir / réduire) — sauf si la
 // préférence ci-dessous est décochée.
 //
-// Réglage dans Paramètres, carte "PLEIN ÉCRAN" (activé par défaut ; à
-// décocher manuellement pour ne plus jamais passer en plein écran à la
-// connexion — 25/09/2026, demande de Paul).
+// Réglage dans Paramètres → carte "PRÉFÉRENCES" (à côté de "Menu de
+// navigation en colonne"), activé par défaut ; à décocher manuellement pour
+// ne plus jamais passer en plein écran à la connexion (25/09/2026, demande
+// de Paul — d'abord posé dans sa propre carte "PLEIN ÉCRAN", déplacé ici
+// ensuite).
 //
 // Si le plein écran est quitté volontairement (Échap, F11, croix native du
 // navigateur) une fois qu'il a été obtenu, ce choix est respecté pour le
@@ -159,12 +161,9 @@
     };
   }
 
-  // ── Réglage dans Paramètres ──────────────────────────────────────────
-  var CSS = ':root{--crt-fullscreen:#00e5a0;}';
-  var styleTag = document.createElement('style');
-  styleTag.textContent = CSS;
-  document.head.appendChild(styleTag);
-
+  // ── Réglage dans Paramètres → PRÉFÉRENCES (25/09/2026, demande de Paul :
+  // à côté de "Menu de navigation en colonne", plutôt que dans sa propre
+  // carte "PLEIN ÉCRAN") ─────────────────────────────────────────────────
   function renderToggle() {
     var t = document.getElementById('tglFsPref');
     var l = document.getElementById('fsPrefLbl');
@@ -178,33 +177,35 @@
     renderToggle();
   };
 
-  function injectCard() {
-    if (document.getElementById('fsPrefCard')) return;
-    var page = document.getElementById('page-modifs');
-    var grid = document.getElementById('modGrid');
-    if (!page || !grid) return;
-    var html =
-      '<div class="card" id="fsPrefCard">' +
-      '<div class="card-header"><div class="card-title" data-editable data-tvar="--crt-fullscreen" style="color:var(--crt-fullscreen,#00e5a0)">PLEIN ÉCRAN</div></div>' +
-      '<div class="card-body">' +
-      '<div class="tgl-row">' +
-      '<span data-editable>Plein écran à la connexion :</span>' +
-      '<div class="tgl-track" id="tglFsPref" onclick="fsTogglePref()"><div class="tgl-thumb"></div></div>' +
-      '<span id="fsPrefLbl" style="color:var(--muted)">Activé</span>' +
-      '</div>' +
-      '</div>' +
-      '</div>';
-    grid.insertAdjacentHTML('beforebegin', html);
+  function injectRow() {
+    if (document.getElementById('fsPrefRow')) {
+      renderToggle();
+      return;
+    }
+    var body = document.querySelector('#cfNavCard .card-body');
+    if (!body) return;
+    body.insertAdjacentHTML(
+      'beforeend',
+      '<div class="tgl-row" id="fsPrefRow">' +
+        '<span data-editable>Plein écran à la connexion :</span>' +
+        '<div class="tgl-track" id="tglFsPref" onclick="fsTogglePref()"><div class="tgl-thumb"></div></div>' +
+        '<span id="fsPrefLbl" style="color:var(--muted)">Activé</span>' +
+        '</div>'
+    );
     renderToggle();
   }
-  if (typeof window.buildTV === 'function') {
-    var _origBuildTV = window.buildTV;
-    window.buildTV = function () {
-      var tv = _origBuildTV.apply(this, arguments);
-      tv.push({v: '--crt-fullscreen', l: 'Titre Plein écran', page: 'Paramètres', section: 'Plein écran'});
-      return tv;
+  // #cfNavCard est créé par cfRenderSettings() (custom-fields.js), appelée
+  // au chargement puis à chaque rafraîchissement des Paramètres — on
+  // s'accroche juste après pour y ajouter la ligne, sans jamais recréer la
+  // carte nous-même.
+  if (typeof window.cfRenderSettings === 'function') {
+    var _origCfRenderSettings = window.cfRenderSettings;
+    window.cfRenderSettings = function () {
+      var r = _origCfRenderSettings.apply(this, arguments);
+      injectRow();
+      return r;
     };
   }
-  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', injectCard);
-  else injectCard();
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', injectRow);
+  else injectRow();
 })();

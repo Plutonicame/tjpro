@@ -514,13 +514,23 @@
     // l'emplacement à CHAQUE passage (y compris au redimensionnement, voir
     // l'écoute 'resize' plus bas) : bouton+étiquette sont retrouvés via
     // data-nav/data-for et simplement déplacés si besoin, jamais recréés.
-    //  - Desktop/PC ultra wide : tout à gauche des 4 cases (Session,
-    //    Trades, P&L, Risk) — étiquette de période à gauche du bouton
-    //    (25/09/2026, demande de Paul : avant, l'étiquette était à droite
-    //    du bouton, entre lui et le badge Session).
+    //  - Desktop/PC ultra wide (barre .nav-desktop, donc menu burger PAS
+    //    forcé dans Paramètres) : tout à gauche des 4 cases (Session,
+    //    Trades, P&L, Risk) — étiquette de période à gauche du bouton.
+    //  - Menu burger forcé (Paramètres) alors que le mode détecté/choisi
+    //    est PC normal ou ultra wide (25/09/2026, demande de Paul) : la
+    //    barre .nav-mobile est affichée sur une seule ligne façon desktop
+    //    (voir cf-nav-force-column dans custom-fields.js) — même
+    //    emplacement que la vraie barre desktop, mais autour de
+    //    sessionBadge2 cette fois.
     //  - PC vertical : ligne du HAUT (celle des horloges), tout à droite.
-    //  - Téléphone : ligne du bas, à gauche du groupe Trades/P&L/Risk
+    //  - Téléphone (ou menu burger forcé en mode réellement détecté
+    //    téléphone) : ligne du bas, à gauche du groupe Trades/P&L/Risk
     //    (le badge Session étant seul sur sa ligne).
+    // Dans tous les cas, c'est le mode LOGIQUE (cfScreenMode(), forçable
+    // dans Paramètres) qui décide — jamais la barre visible seule : le menu
+    // burger peut être affiché sur un PC normal/ultra wide sans que ça
+    // change où va le bouton.
     function pcalGlobalParts(navKey) {
       var gb = document.querySelector('.pcal-btn[data-nav="' + navKey + '"]');
       var gl = gb && gb.parentNode ? gb.parentNode.querySelector('.pcal-range-label[data-for="' + navKey + '"]') : null;
@@ -553,17 +563,22 @@
     })();
     (function () {
       var parts = pcalGlobalParts('global-mobile');
-      var vertical = typeof cfScreenMode === 'function' && cfScreenMode() === 'vertical';
-      if (vertical) {
+      var mode = typeof cfScreenMode === 'function' ? cfScreenMode() : 'phone';
+      if (mode === 'vertical') {
         var clocks = document.querySelector('.nav-mobile-clocks');
         if (!clocks) return;
         clocks.parentNode.appendChild(parts[0]);
         clocks.parentNode.appendChild(parts[1]);
-      } else {
-        var anchor2 = document.getElementById('navTrades2');
+      } else if (mode === 'normal' || mode === 'ultrawide') {
+        var anchor2 = document.getElementById('sessionBadge2');
         if (!anchor2) return;
-        anchor2.parentNode.insertBefore(parts[0], anchor2);
         anchor2.parentNode.insertBefore(parts[1], anchor2);
+        anchor2.parentNode.insertBefore(parts[0], anchor2);
+      } else {
+        var anchor3 = document.getElementById('navTrades2');
+        if (!anchor3) return;
+        anchor3.parentNode.insertBefore(parts[0], anchor3);
+        anchor3.parentNode.insertBefore(parts[1], anchor3);
       }
       added = true;
     })();
