@@ -2676,3 +2676,6 @@ body.cf-mode-phone .chart-header .bt-toggle {
   top: 10px; /* = padding haut de .chart-header : aligné sur la ligne du titre */
   right: 14px; /* = padding droit de .chart-header */
 }
+body.cf-mode-phone .nav-mobile-clocks .clock-sec {
+  font-size: 70%; /* -30 % sur les chiffres des secondes (25/09/2026) */
+}

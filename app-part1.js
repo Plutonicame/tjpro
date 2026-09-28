@@ -987,15 +987,16 @@ function updateClocks() {
       second: '2-digit',
       hour12: false
     });
+  const wrapSec = t => t.slice(0, -2) + '<span class="clock-sec">' + t.slice(-2) + '</span>';
   const ny = f('America/New_York'),
     ln = f('Europe/London'),
     tk = f('Asia/Tokyo');
-  document.getElementById('clkNY').textContent = ny;
-  document.getElementById('clkLN').textContent = ln;
-  document.getElementById('clkTK').textContent = tk;
-  document.getElementById('clkNY2').textContent = ny;
-  document.getElementById('clkLN2').textContent = ln;
-  document.getElementById('clkTK2').textContent = tk;
+  document.getElementById('clkNY').innerHTML = wrapSec(ny);
+  document.getElementById('clkLN').innerHTML = wrapSec(ln);
+  document.getElementById('clkTK').innerHTML = wrapSec(tk);
+  document.getElementById('clkNY2').innerHTML = wrapSec(ny);
+  document.getElementById('clkLN2').innerHTML = wrapSec(ln);
+  document.getElementById('clkTK2').innerHTML = wrapSec(tk);
   const h = n.getUTCHours();
   let s = 'Hors session';
   if (h < 7) s = 'Asie';
