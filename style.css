@@ -2617,3 +2617,63 @@ body.cf-mode-ultrawide #editModal .cp-modal {
   cursor: pointer;
   margin-top: 4px;
 }
+
+/* ===== Mode TÉLÉPHONE (cfScreenMode() = 'phone' → body.cf-mode-phone) =====
+   25/09/2026, demande de Paul. Cible le mode logique (détecté ou forcé dans
+   Paramètres → Préférences), pas seulement la largeur de la fenêtre.
+
+   1) 2e ligne de la barre de navigation (Session, calendrier, Trades, P&L,
+      Risk) : tout est réduit de 20 % (police, marges intérieures) pour tenir
+      en largeur au lieu de dépasser. Le bouton calendrier prend la hauteur du
+      badge Risk (voir fitAll dans period-calendar.js), donc il rapetisse aussi.
+      Les 2 badges Session et Trades/P&L/Risk gardent exactement la même taille.
+      Si malgré ça la ligne est trop large (période affichée à côté du bouton),
+      elle passe à la ligne au lieu de déborder de l'écran. */
+body.cf-mode-phone .nav-mobile-row2 {
+  gap: 5px;
+  row-gap: 4px;
+  padding: 4px 8px 5px;
+  flex-wrap: wrap;
+}
+body.cf-mode-phone .nav-mobile-badges {
+  gap: 5px;
+  row-gap: 4px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+body.cf-mode-phone .nav-mobile-session.session-badge,
+body.cf-mode-phone .nav-mobile-badges .nbadge {
+  font-size: 10.4px; /* 13px - 20 % */
+  padding: 4px 8px; /* 5px 10px - 20 % */
+  letter-spacing: 0.2px;
+}
+body.cf-mode-phone .nav-mobile .pcal-btn {
+  margin-left: 3px;
+}
+body.cf-mode-phone .nav-mobile .pcal-range-label {
+  font-size: 7.2px; /* 9px - 20 % */
+  margin-left: 5px;
+}
+@media (max-width: 480px) {
+  body.cf-mode-phone .nav-mobile-session.session-badge,
+  body.cf-mode-phone .nav-mobile-badges .nbadge {
+    font-size: calc(clamp(8px, 2.2vw, 11px) * 0.8); /* taille actuelle - 20 % */
+    padding: 2.4px 4.8px; /* 3px 6px - 20 % */
+  }
+}
+
+/* 2) Graphiques : le bouton BT (backtest) tout en haut à droite de la zone de
+      titre, à l'opposé du titre — le titre, puis en dessous les boutons de
+      période et le calendrier, comme avant. */
+body.cf-mode-phone .chart-header {
+  position: relative;
+}
+body.cf-mode-phone .chart-header > :first-child {
+  padding-right: 48px; /* la place du bouton BT, pour ne jamais passer dessous */
+  box-sizing: border-box;
+}
+body.cf-mode-phone .chart-header .bt-toggle {
+  position: absolute;
+  top: 10px; /* = padding haut de .chart-header : aligné sur la ligne du titre */
+  right: 14px; /* = padding droit de .chart-header */
+}

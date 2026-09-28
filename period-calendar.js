@@ -553,13 +553,48 @@
       }
       return [gb, gl];
     }
+    // Déplacement SEULEMENT si le bouton/l'étiquette ne sont pas déjà au bon
+    // endroit : les retirer puis les remettre à chaque passage (decorate()
+    // tourne à chaque mutation de #page-trackrecord et à chaque redimensionnement)
+    // pouvait faire perdre un clic tombé entre l'appui et le relâchement de la
+    // souris, alors que le bouton n'avait pourtant pas bougé.
+    function pcalIsBefore(anchor, nodes) {
+      var cur = anchor.previousElementSibling;
+      for (var i = nodes.length - 1; i >= 0; i--) {
+        if (cur !== nodes[i]) return false;
+        cur = cur.previousElementSibling;
+      }
+      return true;
+    }
+    function pcalPlaceBefore(anchor, nodes) {
+      if (pcalIsBefore(anchor, nodes)) return false;
+      nodes.forEach(function (n) {
+        anchor.parentNode.insertBefore(n, anchor);
+      });
+      return true;
+    }
+    function pcalPlaceAtEnd(parent, nodes) {
+      var cur = parent.lastElementChild,
+        ok = true;
+      for (var i = nodes.length - 1; i >= 0; i--) {
+        if (cur !== nodes[i]) {
+          ok = false;
+          break;
+        }
+        cur = cur.previousElementSibling;
+      }
+      if (ok) return false;
+      nodes.forEach(function (n) {
+        parent.appendChild(n);
+      });
+      return true;
+    }
     (function () {
       var anchor = document.getElementById('sessionBadge');
       if (!anchor) return;
       var parts = pcalGlobalParts('global-desktop');
-      anchor.parentNode.insertBefore(parts[1], anchor); // étiquette d'abord...
-      anchor.parentNode.insertBefore(parts[0], anchor); // ...puis le bouton, entre les 2
-      added = true;
+      // étiquette d'abord, puis le bouton, juste avant la case Session
+      if (pcalPlaceBefore(anchor, [parts[1], parts[0]])) added = true;
     })();
     (function () {
       var parts = pcalGlobalParts('global-mobile');
@@ -567,21 +602,25 @@
       if (mode === 'vertical') {
         var clocks = document.querySelector('.nav-mobile-clocks');
         if (!clocks) return;
-        clocks.parentNode.appendChild(parts[0]);
-        clocks.parentNode.appendChild(parts[1]);
+        if (pcalPlaceAtEnd(clocks.parentNode, [parts[0], parts[1]])) added = true;
       } else if (mode === 'normal' || mode === 'ultrawide') {
         var anchor2 = document.getElementById('sessionBadge2');
         if (!anchor2) return;
-        anchor2.parentNode.insertBefore(parts[1], anchor2);
-        anchor2.parentNode.insertBefore(parts[0], anchor2);
+        if (pcalPlaceBefore(anchor2, [parts[1], parts[0]])) added = true;
       } else {
         var anchor3 = document.getElementById('navTrades2');
         if (!anchor3) return;
-        anchor3.parentNode.insertBefore(parts[0], anchor3);
-        anchor3.parentNode.insertBefore(parts[1], anchor3);
+        if (pcalPlaceBefore(anchor3, [parts[0], parts[1]])) added = true;
       }
-      added = true;
     })();
+    // Mesure de la taille du bouton : à re-faire quand un badge de référence
+    // change de taille (mode d'affichage, thème...), pas seulement au déplacement.
+    if (sizeObserver) {
+      ['navRisk', 'navRisk2'].forEach(function (id) {
+        var b = document.getElementById(id);
+        if (b) sizeObserver.observe(b);
+      });
+    }
     syncGlobalBtn();
     if (added) queueFit();
   }
@@ -617,7 +656,10 @@
   // de fenêtre peut faire changer cfScreenMode() sans qu'aucun élément ne soit
   // ajouté/retiré du DOM (donc sans déclencher le MutationObserver ci-dessus),
   // d'où cette écoute dédiée.
-  window.addEventListener('resize', scheduleDecorate);
+  window.addEventListener('resize', function () {
+    scheduleDecorate();
+    queueFit();
+  });
 
   // Un clic sur J / SEM / MOIS / TRIM / AN / TOUT remplace la période (les
   // gestionnaires d'origine écrivent ST[clé]) : on remet le bouton calendrier
@@ -776,7 +818,13 @@
 
   function openPop(btn) {
     var key = btn.dataset.chart;
-    if (pop && popKey === key) {
+    // Un calendrier resté référencé alors qu'il n'est plus dans la page (retiré
+    // par autre chose que closePop) ne doit pas faire croire qu'il est ouvert :
+    // sinon le clic suivant ne ferait que le "refermer" et rien ne s'afficherait
+    // (25/09/2026, bug signalé : impossible de rouvrir le calendrier de la barre
+    // de navigation après avoir choisi une période).
+    if (pop && !document.body.contains(pop)) closePop();
+    if (pop && popKey === key && popBtn === btn) {
       closePop(); // 2e clic sur le même bouton : on referme
       return;
     }
@@ -825,8 +873,13 @@
     closePop();
     ST[key] = makePeriod(a, b);
     syncAll();
-    redraw(key);
-    if (key === 'global') propagateGlobal(ST.global);
+    try {
+      redraw(key);
+      if (key === 'global') propagateGlobal(ST.global);
+    } catch (e) {
+      console.warn('PCAL applyRange:', e);
+    }
+    syncAll();
   }
 
   function clearRange(key) {

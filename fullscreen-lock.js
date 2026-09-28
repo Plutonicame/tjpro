@@ -172,9 +172,25 @@
     t.classList.toggle('on', on);
     l.textContent = on ? 'Activé' : 'Désactivé';
   }
+  // Passer de désactivé à activé met tout de suite en plein écran, pour voir
+  // sur quoi ce réglage agit (25/09/2026, demande de Paul) : le clic sur la
+  // bascule est déjà un geste valide pour le navigateur, pas besoin d'attendre
+  // la prochaine connexion. Même règle qu'à la connexion ensuite : s'il est
+  // quitté volontairement, on ne le remet plus de force.
   window.fsTogglePref = function () {
-    setPrefEnabled(!prefEnabled());
+    var on = !prefEnabled();
+    setPrefEnabled(on);
     renderToggle();
+    if (on) {
+      if (allowed()) {
+        wanted = true;
+        established = false;
+        enterFs().catch(function () {});
+      }
+    } else {
+      wanted = false;
+      disarm();
+    }
   };
 
   function injectRow() {
