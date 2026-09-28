@@ -2651,8 +2651,7 @@ body.cf-mode-phone .nav-mobile .pcal-btn {
   margin-left: 3px;
 }
 body.cf-mode-phone .nav-mobile .pcal-range-label {
-  font-size: 5.8px; /* 7.2px - encore 20 % */
-  margin-left: 5px;
+  display: none; /* déjà visible en bas du popup une fois le calendrier rouvert (25/09/2026) */
 }
 @media (max-width: 480px) {
   body.cf-mode-phone .nav-mobile-session.session-badge,
