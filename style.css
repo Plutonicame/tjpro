@@ -2643,22 +2643,22 @@ body.cf-mode-phone .nav-mobile-badges {
 }
 body.cf-mode-phone .nav-mobile-session.session-badge,
 body.cf-mode-phone .nav-mobile-badges .nbadge {
-  font-size: 10.4px; /* 13px - 20 % */
-  padding: 4px 8px; /* 5px 10px - 20 % */
+  font-size: 8.3px; /* 10.4px - encore 20 % (25/09/2026) */
+  padding: 3.2px 6.4px; /* 4px 8px - encore 20 % */
   letter-spacing: 0.2px;
 }
 body.cf-mode-phone .nav-mobile .pcal-btn {
   margin-left: 3px;
 }
 body.cf-mode-phone .nav-mobile .pcal-range-label {
-  font-size: 7.2px; /* 9px - 20 % */
+  font-size: 5.8px; /* 7.2px - encore 20 % */
   margin-left: 5px;
 }
 @media (max-width: 480px) {
   body.cf-mode-phone .nav-mobile-session.session-badge,
   body.cf-mode-phone .nav-mobile-badges .nbadge {
-    font-size: calc(clamp(8px, 2.2vw, 11px) * 0.8); /* taille actuelle - 20 % */
-    padding: 2.4px 4.8px; /* 3px 6px - 20 % */
+    font-size: calc(clamp(8px, 2.2vw, 11px) * 0.64); /* taille actuelle - encore 20 % */
+    padding: 1.9px 3.8px; /* 2.4px 4.8px - encore 20 % */
   }
 }
 

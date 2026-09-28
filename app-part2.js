@@ -1508,6 +1508,7 @@ function _applyCloudDataDirect(data, cloudTrades) {
 }
 
 // ── Temps réel ──
+let _realtimeRetryCount = 0;
 function startRealtime() {
   if (!currentUser || _realtimeChannel) return;
   _realtimeChannel = sb
@@ -1569,23 +1570,31 @@ function startRealtime() {
     )
     .subscribe(status => {
       if (status === 'SUBSCRIBED') {
+        _realtimeRetryCount = 0;
         showSync('✓ Temps réel actif', '#22c55e');
       } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
         // Le canal est mort (réseau coupé, veille, jeton expiré...) : sans ça
         // il reste bloqué silencieusement pour toujours, car startRealtime()
         // refuse de relancer tant que _realtimeChannel référence encore
-        // l'ancien canal (même mort). On le libère et on retente sous 3s.
+        // l'ancien canal (même mort). On le libère et on retente, avec un
+        // délai qui double à chaque échec (3s, 6s, 12s... plafonné à 60s) —
+        // sans ça, un réseau durablement coupé fait retenter toutes les 3s
+        // indéfiniment, ce qui inonde la console d'erreurs sans jamais
+        // s'arrêter (25/09/2026, bug signalé par Paul).
         if (_realtimeChannel) {
           sb.removeChannel(_realtimeChannel);
           _realtimeChannel = null;
         }
+        const delay = Math.min(3000 * Math.pow(2, _realtimeRetryCount), 60000);
+        _realtimeRetryCount++;
         setTimeout(() => {
           if (currentUser) startRealtime();
-        }, 3000);
+        }, delay);
       }
     });
 }
 function stopRealtime() {
+  _realtimeRetryCount = 0;
   if (_realtimeChannel) {
     sb.removeChannel(_realtimeChannel);
     _realtimeChannel = null;

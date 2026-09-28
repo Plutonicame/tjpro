@@ -190,6 +190,7 @@
     } else {
       wanted = false;
       disarm();
+      exitFs(); // aussi instantané que l'entrée (25/09/2026, demande de Paul)
     }
   };
 
