@@ -342,7 +342,7 @@ function _doSwitchAccount(accId) {
   // Recharger tout l'état depuis les clés du nouveau compte
   APP.trades = ls(accKey('tj_trades'), []);
   APP.lists = ls(accKey('tj_lists'), DEF);
-  APP.nextId = ls(accKey('tj_nextId'), 9000);
+  APP.nextId = tjpSafeNextId(ls(accKey('tj_nextId'), 9000));
   ['confluences', 'mgmt_opts', 'reprend_opts'].forEach(k => {
     if (!APP.lists[k]) APP.lists[k] = DEF[k];
   });
@@ -652,12 +652,26 @@ function lssAcc(k, v) {
 // l'heure (ms) + 3 chiffres aléatoires : reste un nombre entier (< 2^53), donc
 // tout le code existant (parseInt, tris, onclick) continue de fonctionner, et
 // les anciens ids (petits nombres) restent valides et plus petits que les nouveaux.
+// ATTENTION : ces ids dépassent la limite d'une colonne Postgres « integer » (~2,1
+// milliards). Ils ne doivent donc JAMAIS être écrits ailleurs que dans le JSON des
+// trades (colonne jsonb). En particulier APP.nextId (colonne next_id, integer) n'est
+// plus touché ici : c'était la cause de l'erreur « value ... is out of range for type integer ».
 function newTradeId() {
   let id = Date.now() * 1000 + Math.floor(Math.random() * 1000);
   const used = new Set(APP.trades.map(t => t.id));
   while (used.has(id)) id++;
-  APP.nextId = Math.max(APP.nextId || 0, id + 1);
   return id;
+}
+// Valeur de next_id compatible avec la colonne integer de Supabase. Répare aussi un
+// compteur déjà « gonflé » par la version précédente (conservé dans le stockage local).
+const TJP_INT32_MAX = 2147483647;
+function tjpSafeNextId(n) {
+  if (Number.isSafeInteger(n) && n >= 0 && n <= TJP_INT32_MAX) return n;
+  let max = 9000;
+  (APP.trades || []).forEach(t => {
+    if (Number.isSafeInteger(t.id) && t.id >= max && t.id < 1e9) max = t.id + 1;
+  });
+  return max;
 }
 
 // Crochets pour les modules additifs (champs perso, paire/devise...) : ils

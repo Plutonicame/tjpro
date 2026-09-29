@@ -978,7 +978,7 @@ function buildSyncPayload(trades) {
     acc_name: (getAccounts().find(a => a.id === _currentAccId) || {}).name || null, // permet de redécouvrir ce compte (nom inclus) depuis un autre appareil, voir discoverCloudAccounts()
     trades,
     lists: APP.lists,
-    next_id: APP.nextId,
+    next_id: typeof tjpSafeNextId === 'function' ? tjpSafeNextId(APP.nextId) : APP.nextId, // colonne integer : jamais au-delà de 2 147 483 647
     capital: localStorage.getItem(accKey('tj_capital')),
     risk: localStorage.getItem(accKey('tj_risk')),
     smart_risk: localStorage.getItem(accKey('tj_smart_risk')),
@@ -1508,7 +1508,7 @@ function _applyCloudDataDirect(data, cloudTrades) {
     });
     APP.lists = merged;
   }
-  APP.nextId = data.next_id || APP.nextId;
+  APP.nextId = tjpSafeNextId(data.next_id || APP.nextId);
 
   if (data.capital) localStorage.setItem(accKey('tj_capital'), data.capital);
   if (data.risk) localStorage.setItem(accKey('tj_risk'), data.risk);
