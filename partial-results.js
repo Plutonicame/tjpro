@@ -142,13 +142,13 @@
     var wrap = document.getElementById('pf-wrap-' + inputId);
     if (!wrap) {
       var el = document.getElementById(inputId);
-      return el ? parseFloat(el.value) || 0 : 0;
+      return el ? Math.round((parseFloat(el.value) || 0) * 100) / 100 : 0;
     }
     var total = 0;
     wrap.querySelectorAll('input').forEach(function (inp) {
       total += parseFloat(inp.value) || 0;
     });
-    return total;
+    return Math.round(total * 100) / 100; // évite 0,1 + 0,2 = 0,30000000000000004
   }
 
   // Ne garde que la case de base, retire celles ajoutées en trop.
@@ -233,8 +233,17 @@
     var _origAddTrade = window.addTrade;
     window.addTrade = function () {
       var el = document.getElementById('f-res');
+      var base = el ? el.value : '';
+      var before = APP.trades.length;
       if (el) el.value = pfTotal('f-res');
-      return _origAddTrade.apply(this, arguments);
+      try {
+        return _origAddTrade.apply(this, arguments);
+      } finally {
+        // Ajout refusé (date manquante...) : les cases « + » restent affichées, donc
+        // on remet la valeur de la case de base. Sinon le total y restait écrit et
+        // était recompté (100 + 50 → 150 dans la case de base, puis 200 au 2e essai).
+        if (el && APP.trades.length === before) el.value = base;
+      }
     };
   }
   if (typeof window.resetForm === 'function') {

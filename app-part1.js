@@ -644,6 +644,106 @@ function lsAcc(k, d) {
 function lssAcc(k, v) {
   lss(accKey(k), v);
 }
+
+// ── Identifiants de trades, suppressions et images en attente ────────────
+// Identifiant unique entre appareils : l'ancien compteur local (APP.nextId++)
+// donnait le MÊME id à deux trades ajoutés en même temps sur deux appareils, et
+// l'un des deux disparaissait à la fusion. L'id est maintenant dérivé de
+// l'heure (ms) + 3 chiffres aléatoires : reste un nombre entier (< 2^53), donc
+// tout le code existant (parseInt, tris, onclick) continue de fonctionner, et
+// les anciens ids (petits nombres) restent valides et plus petits que les nouveaux.
+function newTradeId() {
+  let id = Date.now() * 1000 + Math.floor(Math.random() * 1000);
+  const used = new Set(APP.trades.map(t => t.id));
+  while (used.has(id)) id++;
+  APP.nextId = Math.max(APP.nextId || 0, id + 1);
+  return id;
+}
+
+// Crochets pour les modules additifs (champs perso, paire/devise...) : ils
+// enregistrent une fonction qui complète le trade en cours d'ajout ('add') ou
+// de modification ('edit'), au lieu d'envelopper addTrade()/saveEditTrade()
+// (ce qui provoquait une 2e et 3e sauvegarde + rendu à chaque trade).
+window.TJP_TRADE_HOOKS = window.TJP_TRADE_HOOKS || {add: [], edit: []};
+function tjpRunTradeHooks(kind, trade) {
+  (window.TJP_TRADE_HOOKS[kind] || []).forEach(fn => {
+    try {
+      fn(trade);
+    } catch (e) {
+      console.warn('Crochet trade (' + kind + ') :', e);
+    }
+  });
+}
+
+// Pierres tombales : ids des trades supprimés. Elles voyagent avec la ligne
+// cloud (colonne deleted_trades) pour qu'un appareil resté en retard ne
+// ressuscite pas un trade supprimé ailleurs. « pending » = pas encore confirmé
+// côté cloud (à appliquer aussi quand on reçoit des données, sinon un trade
+// supprimé hors ligne réapparaîtrait au rechargement).
+function tjpGetDeletedIds() {
+  const a = lsAcc('tj_deleted_ids', []);
+  return Array.isArray(a) ? a : [];
+}
+function tjpSetDeletedIds(arr) {
+  lssAcc('tj_deleted_ids', Array.from(new Set(arr)).slice(-1000));
+}
+function tjpGetPendingDeletedIds() {
+  const a = lsAcc('tj_deleted_pending', []);
+  return Array.isArray(a) ? a : [];
+}
+function tjpSetPendingDeletedIds(arr) {
+  lssAcc('tj_deleted_pending', Array.from(new Set(arr)).slice(-1000));
+}
+function tjpMarkDeleted(ids) {
+  ids = [].concat(ids);
+  tjpSetDeletedIds(tjpGetDeletedIds().concat(ids));
+  tjpSetPendingDeletedIds(tjpGetPendingDeletedIds().concat(ids));
+}
+function tjpUnmarkDeleted(id) {
+  tjpSetDeletedIds(tjpGetDeletedIds().filter(x => x !== id));
+  tjpSetPendingDeletedIds(tjpGetPendingDeletedIds().filter(x => x !== id));
+}
+
+// Images des trades supprimés : on ne les efface du stockage qu'une fois
+// l'annulation impossible (sortie de la pile d'annulation, ou session suivante),
+// pour qu'« Annuler » restaure vraiment le trade AVEC ses images.
+function tjpQueueImageDeletion(trade) {
+  const urls = (trade.images || []).filter(u => typeof u === 'string' && !u.startsWith('data:'));
+  if (!urls.length) return;
+  const q = lsAcc('tj_pending_img_del', []).filter(e => e.id !== trade.id);
+  q.push({id: trade.id, urls});
+  lssAcc('tj_pending_img_del', q.slice(-200));
+}
+function tjpUnqueueImageDeletion(tradeId) {
+  lssAcc(
+    'tj_pending_img_del',
+    lsAcc('tj_pending_img_del', []).filter(e => e.id !== tradeId)
+  );
+}
+function tjpRunImageDeletion(tradeId) {
+  const q = lsAcc('tj_pending_img_del', []);
+  const e = q.find(x => x.id === tradeId);
+  if (!e) return;
+  if (typeof deleteTradeImageFromStorage === 'function')
+    e.urls.forEach(u => deleteTradeImageFromStorage(u));
+  lssAcc(
+    'tj_pending_img_del',
+    q.filter(x => x.id !== tradeId)
+  );
+}
+// Appelé à la connexion : la pile d'annulation (en mémoire) est vide, tout ce
+// qui reste en attente ne peut plus être annulé.
+function tjpFlushPendingImageDeletions() {
+  try {
+    const inUse = new Set(APP.trades.map(t => t.id));
+    lsAcc('tj_pending_img_del', []).forEach(e => {
+      if (!inUse.has(e.id)) tjpRunImageDeletion(e.id);
+    });
+    lssAcc('tj_pending_img_del', []);
+  } catch (e) {
+    console.warn('Purge des images en attente échouée (ignorée) :', e);
+  }
+}
 // ── Ancrage de l'état sur le compte connecté ──
 // CAUSE DU BUG des trades de démo / listes réinitialisées : au démarrage,
 // APP contient seulement les valeurs par défaut (avant même de savoir qui est
@@ -705,7 +805,7 @@ function saveState() {
       console.trace();
       APP.trades = prevTrades; // on restaure la version connue plutôt que de perdre la donnée
       showSync(
-        '⚠ Sauvegarde bloquée (anti-perte) — ouvre la console (F12) et envoie la trace',
+        '⚠ Sauvegarde bloquée (anti-perte) — recharge l\'app ; si ça se reproduit, exporte tes trades',
         '#ef4444'
       );
       renderTable();
@@ -978,6 +1078,7 @@ function addNewAccount() {
 }
 
 function updateClocks() {
+  if (document.hidden) return; // inutile de redessiner en arrière-plan
   const n = new Date();
   const f = tz =>
     n.toLocaleTimeString('fr-FR', {
@@ -1768,7 +1869,7 @@ function addTrade() {
     .join('|');
   const fRrAutoOn = document.getElementById('f-tglRrAuto')?.classList.contains('on');
   const t = {
-    id: APP.nextId++,
+    id: 0, // attribué après validation (voir newTradeId)
     date: g('f-date').trim(),
     heure: g('f-heure').trim(),
     paire: g('f-paire'),
@@ -1788,9 +1889,12 @@ function addTrade() {
     backtest: document.getElementById('f-backtest')?.checked || false
   };
   if (!t.date) {
-    alert('Date obligatoire.');
+    showSync('⚠ Date obligatoire', '#f59e0b');
+    document.getElementById('f-date')?.focus();
     return;
   }
+  t.id = newTradeId();
+  tjpRunTradeHooks('add', t);
   APP.trades.unshift(t);
   saveState();
   renderTable();
@@ -1815,18 +1919,32 @@ function deleteAllTradeImages(trade) {
     if (typeof deleteTradeImageFromStorage === 'function') deleteTradeImageFromStorage(img);
   });
 }
+function tjpPushDeletedStack(trade, index) {
+  window._deletedTradesStack.push({trade: trade, index: index});
+  tjpQueueImageDeletion(trade);
+  while (window._deletedTradesStack.length > 20) {
+    const old = window._deletedTradesStack.shift();
+    tjpRunImageDeletion(old.trade.id); // ne peut plus être annulé : on libère ses images
+  }
+}
 function deleteTrade(id) {
   markUserAction();
   const idx = APP.trades.findIndex(t => t.id === parseInt(id, 10));
   if (idx === -1) return;
   const removed = APP.trades[idx];
-  window._deletedTradesStack.push({trade: removed, index: idx});
-  if (window._deletedTradesStack.length > 20) window._deletedTradesStack.shift();
   APP.trades.splice(idx, 1);
-  // Supprimé tout de suite, y compris côté stockage : si tu annules via le bouton
-  // "Annuler", le trade revient mais SES IMAGES, elles, ne reviendront pas.
-  deleteAllTradeImages(removed);
-  saveState();
+  tjpPushDeletedStack(removed, idx);
+  tjpMarkDeleted(removed.id);
+  // Supprimer le TOUT DERNIER trade est légitime : sans cette autorisation, le
+  // garde-fou anti-perte de saveState() (« jamais de N trades à 0 ») le
+  // bloquait et le trade revenait.
+  const wasLast = APP.trades.length === 0;
+  if (wasLast) window._allowEmptySave = true;
+  try {
+    saveState();
+  } finally {
+    if (wasLast) window._allowEmptySave = false;
+  }
   renderTable();
   updateNavBadges();
   schedulePush(250);
@@ -1837,6 +1955,8 @@ function undoDeleteTrade() {
   const last = window._deletedTradesStack.pop();
   if (!last) return;
   markUserAction();
+  tjpUnmarkDeleted(last.trade.id);
+  tjpUnqueueImageDeletion(last.trade.id);
   const insertAt = Math.min(last.index, APP.trades.length);
   APP.trades.splice(insertAt, 0, last.trade);
   saveState();
@@ -1879,13 +1999,9 @@ function executeDeleteAllTrades() {
   markUserAction();
   window._intentionalBulkDelete = true;
   // On garde une copie pour permettre l'annulation via le système existant
-  APP.trades.forEach((t, i) => {
-    window._deletedTradesStack.push({trade: t, index: i});
-  });
-  if (window._deletedTradesStack.length > 20) {
-    window._deletedTradesStack = window._deletedTradesStack.slice(-20);
-  }
-  APP.trades.forEach(t => deleteAllTradeImages(t));
+  // (les images ne sont libérées que pour les trades qui sortent de la pile).
+  tjpMarkDeleted(APP.trades.map(t => t.id));
+  APP.trades.forEach((t, i) => tjpPushDeletedStack(t, i));
   APP.trades = [];
   saveState();
   renderTable();
@@ -5896,6 +6012,7 @@ function saveEditTrade() {
   t.conf = Array.from(document.querySelectorAll('#e-conf-wrap .chip.sel'))
     .map(c => c.dataset.v)
     .join('|');
+  tjpRunTradeHooks('edit', t);
   // Gestion images
   const newImgs = window._editImages || [];
   if (!t.images) t.images = [];

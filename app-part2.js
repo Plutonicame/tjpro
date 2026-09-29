@@ -54,6 +54,34 @@ async function callPinAuth(payload, accessToken) {
   return data;
 }
 
+// Essais de PIN ratés, conservés d'un chargement de page à l'autre (avant, un
+// simple rechargement remettait le compteur à 0 : les 5 essais étaient sans
+// limite réelle). Fenêtre de 15 minutes. Le verrou côté serveur reste
+// indispensable pour la reconnexion sur un appareil sans session.
+const PIN_FAIL_WINDOW_MS = 15 * 60 * 1000;
+function pinFailKey(uid) {
+  return 'tjp_pin_fail_' + uid;
+}
+function pinFailRead(uid) {
+  try {
+    const o = JSON.parse(localStorage.getItem(pinFailKey(uid)) || 'null');
+    if (o && Date.now() - o.t < PIN_FAIL_WINDOW_MS) return o.n || 0;
+  } catch (e) {}
+  return 0;
+}
+function pinFailAdd(uid) {
+  const n = pinFailRead(uid) + 1;
+  try {
+    localStorage.setItem(pinFailKey(uid), JSON.stringify({n: n, t: Date.now()}));
+  } catch (e) {}
+  return n;
+}
+function pinFailClear(uid) {
+  try {
+    localStorage.removeItem(pinFailKey(uid));
+  } catch (e) {}
+}
+
 // Un seul écouteur clavier PIN actif à la fois : chaque nouvel appel à buildPad()
 // retire l'écouteur du pavé précédent avant d'attacher le sien (évite l'empilement
 // et toute fuite d'un pavé PIN caché qui continuerait à intercepter des touches).
@@ -153,11 +181,21 @@ function setupConfirmPin() {
           // sans ça, aucun autre appareil ne pourrait jamais se reconnecter avec ce PIN.
           const {data: sessionData} = await sb.auth.getSession();
           const accessToken = sessionData?.session?.access_token;
-          if (accessToken) await callPinAuth({action: 'set', pin: val}, accessToken);
+          if (!accessToken) throw new Error('Session absente');
+          await callPinAuth({action: 'set', pin: val}, accessToken);
           afterPinValidated();
         } catch (e) {
           console.warn('Enregistrement PIN cloud échoué (reste utilisable sur cet appareil) :', e);
           afterPinValidated(); // ne bloque pas l'utilisateur pour un souci réseau ponctuel
+          // Avant, cet échec restait invisible : tes autres appareils gardaient
+          // l'ancien PIN sans que tu le saches.
+          setTimeout(
+            () =>
+              alert(
+                "Ton nouveau PIN est enregistré sur cet appareil, mais PAS encore sur le serveur (problème réseau). Sur tes autres appareils, l'ancien PIN reste valable. Refais « Changer le PIN » dès que le réseau revient."
+              ),
+            600
+          );
         }
       } else {
         err.textContent = 'PIN non identique. Recommence.';
@@ -177,7 +215,12 @@ function setupConfirmPin() {
 // Déverrouillage RAPIDE (session déjà valide sur cet appareil) : vérif locale seulement.
 let pinAttempts = 0;
 function setupEnterPin() {
-  pinAttempts = 0;
+  pinAttempts = currentUser ? pinFailRead(currentUser.id) : 0;
+  if (pinAttempts >= 5) {
+    // Déjà 5 échecs récents (page rechargée entre-temps) : reconnexion exigée.
+    setTimeout(() => resetPin(), 0);
+    return;
+  }
   buildPad(
     'enterPad',
     'enterDots',
@@ -190,6 +233,7 @@ function setupEnterPin() {
       const isLegacyMatch = stored === val;
       if (attempt === stored || isLegacyMatch) {
         pinAttempts = 0;
+        pinFailClear(currentUser.id);
         if (isLegacyMatch) {
           try {
             localStorage.setItem(pinKey(currentUser.id), attempt);
@@ -205,7 +249,7 @@ function setupEnterPin() {
         }
         afterPinValidated();
       } else {
-        pinAttempts++;
+        pinAttempts = pinFailAdd(currentUser.id);
         const err = document.getElementById('enterErr');
         if (pinAttempts >= 5) {
           err.textContent = 'Trop de tentatives. Reconnexion requise.';
@@ -308,6 +352,10 @@ async function afterPinValidated() {
   if (le) le.remove();
 
   if (pulled) showSync('✓ Données chargées', '#22c55e');
+
+  // Images des trades supprimés lors d'une session précédente (annulation
+  // désormais impossible) : on les libère du stockage.
+  if (typeof tjpFlushPendingImageDeletions === 'function') tjpFlushPendingImageDeletions();
 
   // Migration automatique des images encore en local vers le stockage cloud —
   // une seule fois par compte (marqueur posé uniquement en cas de succès complet,
@@ -642,6 +690,7 @@ async function resetPin() {
 }
 
 async function _doResetPin() {
+  if (currentUser && currentUser.id) pinFailClear(currentUser.id);
   stopRealtime();
   stopPolling();
   if (typeof unanchorState === 'function') unanchorState();
@@ -654,13 +703,19 @@ async function _doResetPin() {
   APP.lists = DEF;
   APP.nextId = 9000;
   localStorage.removeItem('tjp_last_uid');
-  await sb.auth.signOut();
+  // scope 'local' : ne déconnecte QUE cet appareil (par défaut, signOut() coupait
+  // aussi la session de tous tes autres appareils).
+  try {
+    await sb.auth.signOut({scope: 'local'});
+  } catch (e) {
+    console.warn('signOut local :', e);
+  }
   showOverlay('overlayGoogle');
 }
 
 function changePinFlow() {
   if (!currentUser) return;
-  pinAttempts = 0;
+  pinAttempts = pinFailRead(currentUser.id);
   document.getElementById('enterPinSub').textContent = 'Confirme ton code PIN actuel';
   document.getElementById('enterPinChangeEmailBtn').style.display = 'none';
   document.getElementById('enterPinCancelBtn').style.display = '';
@@ -674,13 +729,16 @@ function changePinFlow() {
       const isLegacyMatch = stored === val; // migration silencieuse, comme à la connexion
       if (attempt === stored || isLegacyMatch) {
         pinAttempts = 0;
-        localStorage.removeItem(pinKey(currentUser.id));
+        pinFailClear(currentUser.id);
+        // L'ancien PIN reste en place tant que le nouveau n'est pas confirmé :
+        // avant, l'effacer ici permettait — en fermant la fenêtre en cours de
+        // route — de recréer un PIN SANS connaître l'ancien.
         pinFirstEntry = '';
         restoreEnterPinOverlayDefaults();
         showOverlay('overlayCreatePin');
         setupCreatePin();
       } else {
-        pinAttempts++;
+        pinAttempts = pinFailAdd(currentUser.id);
         const err = document.getElementById('enterErr');
         if (pinAttempts >= 5) {
           err.textContent = 'Trop de tentatives.';
@@ -959,6 +1017,7 @@ function buildSyncPayload(trades) {
     }),
     // ia_chat_data retiré d'ici : les conversations IA sont désormais globales
     // (synchronisées séparément par pushGlobalChatData, pas liées à un acc_id).
+    deleted_trades: typeof tjpGetDeletedIds === 'function' ? tjpGetDeletedIds() : [], // pierres tombales (colonne jsonb, voir migration)
     updated_at: now
   };
 }
@@ -1028,7 +1087,9 @@ async function pushToCloud(opts) {
   _isPushing = true;
   const myGen = ++_pushGeneration; // identifie ce push précis parmi d'éventuels chevauchements
   try {
-    await sb.auth.refreshSession();
+    // getSession() renouvelle le jeton seulement s'il est proche de l'expiration
+    // (refreshSession() faisait un aller-retour réseau à CHAQUE envoi).
+    await sb.auth.getSession();
   } catch (e) {}
 
   try {
@@ -1037,31 +1098,56 @@ async function pushToCloud(opts) {
     // que cet appareil ne connaît pas encore — sans jamais en supprimer un local.
     // Ignorée si opts.force (sauvegarde manuelle, suppression totale, restauration).
     let finalTrades = APP.trades;
+    let tombstonesChangedTrades = false;
     if (!opts.force) {
       try {
-        const {data: cloudRow, error: fetchErr} = await sb
+        let res = await sb
           .from('journal_data')
-          .select('trades')
+          .select('trades, deleted_trades')
           .eq('user_id', currentUser.id)
           .eq('acc_id', _currentAccId)
           .maybeSingle();
-        if (!fetchErr && cloudRow && Array.isArray(cloudRow.trades) && cloudRow.trades.length) {
-          const localIds = new Set(APP.trades.map(t => t.id));
-          // Trades explicitement supprimés localement récemment : à exclure de la
-          // fusion même s'ils traînent encore dans le cloud.
-          const deletedIds = new Set(
-            (window._deletedTradesStack || [])
-              .map(d => d.trade && d.trade.id)
-              .filter(id => id != null)
-          );
-          const recovered = cloudRow.trades.filter(
-            t => !localIds.has(t.id) && !deletedIds.has(t.id)
-          );
-          if (recovered.length) finalTrades = APP.trades.concat(recovered);
+        if (res.error && isMissingProfileColumnError(res.error)) {
+          // Migration « deleted_trades » pas encore faite : fusion sans pierres tombales.
+          res = await sb
+            .from('journal_data')
+            .select('trades')
+            .eq('user_id', currentUser.id)
+            .eq('acc_id', _currentAccId)
+            .maybeSingle();
+        }
+        const {data: cloudRow, error: fetchErr} = res;
+        if (!fetchErr && cloudRow) {
+          // Suppressions connues : cloud + locales + pile d'annulation de la session.
+          const cloudDead = Array.isArray(cloudRow.deleted_trades) ? cloudRow.deleted_trades : [];
+          const stackDead = (window._deletedTradesStack || [])
+            .map(d => d.trade && d.trade.id)
+            .filter(id => id != null);
+          const allDead = Array.from(new Set(tjpGetDeletedIds().concat(cloudDead, stackDead)));
+          if (allDead.length !== tjpGetDeletedIds().length) tjpSetDeletedIds(allDead);
+          const dead = new Set(allDead);
+
+          // 1) Un trade supprimé ailleurs ne doit pas être renvoyé par un appareil en retard.
+          const alive = APP.trades.filter(t => !dead.has(t.id));
+          if (alive.length !== APP.trades.length) {
+            finalTrades = alive;
+            tombstonesChangedTrades = true;
+          }
+          // 2) Réintègre les trades du cloud inconnus localement (jamais un supprimé).
+          if (Array.isArray(cloudRow.trades) && cloudRow.trades.length) {
+            const localIds = new Set(finalTrades.map(t => t.id));
+            const recovered = cloudRow.trades.filter(t => !localIds.has(t.id) && !dead.has(t.id));
+            if (recovered.length) finalTrades = finalTrades.concat(recovered);
+          }
         }
       } catch (e) {
         console.warn('Fusion cloud impossible, envoi de la version locale seule :', e);
       }
+    } else {
+      // Envoi FORCÉ (sauvegarde manuelle, restauration...) : la version locale est
+      // la vérité, donc un trade présent localement n'est plus « supprimé ».
+      const present = new Set(APP.trades.map(t => t.id));
+      tjpSetDeletedIds(tjpGetDeletedIds().filter(id => !present.has(id)));
     }
     if (myGen !== _pushGeneration) return true; // un envoi plus récent a pris le relais entre-temps
 
@@ -1079,7 +1165,7 @@ async function pushToCloud(opts) {
         'Colonnes profil absentes côté Supabase, nouvel essai sans elles :',
         error.message
       );
-      const {profile_pseudo, profile_photo, cf_config, acc_name, ...dataWithoutProfile} = data;
+      const {profile_pseudo, profile_photo, cf_config, acc_name, deleted_trades, ...dataWithoutProfile} = data;
       ({error} = await pushJournalDataRow(dataWithoutProfile));
       if (myGen !== _pushGeneration) return true;
     }
@@ -1095,11 +1181,19 @@ async function pushToCloud(opts) {
       _lastSeenCloudUpdatedAt[_currentAccId] = data.updated_at;
       pcHideSyncFailureWarning();
       window._blockPull = false;
-      // Si des trades cloud inconnus ont été réintégrés par la fusion, on les
-      // reflète aussi tout de suite dans l'affichage local.
+      // Suppressions désormais confirmées côté cloud.
+      if (typeof tjpSetPendingDeletedIds === 'function') tjpSetPendingDeletedIds([]);
+      // Si la fusion a réintégré des trades du cloud (ou retiré des trades supprimés
+      // ailleurs), on le reflète aussi tout de suite dans l'affichage local.
       if (finalTrades !== APP.trades) {
         APP.trades = finalTrades;
-        saveState();
+        // Retirer des trades supprimés ailleurs peut légitimement vider la liste.
+        if (tombstonesChangedTrades) window._allowEmptySave = true;
+        try {
+          saveState();
+        } finally {
+          window._allowEmptySave = false;
+        }
         renderTable();
         updateNavBadges();
       }
@@ -1111,7 +1205,9 @@ async function pushToCloud(opts) {
   } finally {
     if (myGen === _pushGeneration)
       setTimeout(() => {
-        _isPushing = false;
+        // Ne pas lever le verrou si un nouvel envoi est déjà programmé
+        // (sinon le sondage pouvait écraser l'état local par une version périmée).
+        if (!window._pushPending) _isPushing = false;
       }, 500);
   }
 }
@@ -1146,11 +1242,13 @@ async function manualSyncSave() {
 // s'intercaler avec une version périmée pendant qu'on s'apprête à sauvegarder.
 function schedulePush(delay, opts) {
   _isPushing = true;
+  window._pushPending = true;
   window._pushOpts = Object.assign({}, window._pushOpts, opts || {});
   clearTimeout(window._pushTimer);
   window._pushTimer = setTimeout(() => {
     const o = window._pushOpts || {};
     window._pushOpts = {};
+    window._pushPending = false;
     pushToCloud(o);
   }, delay);
 }
@@ -1339,13 +1437,27 @@ function applyCloudData(data, skipSafetyCheck) {
 // N'est appelé qu'après que applyCloudData ait validé que c'est sûr de le faire.
 function _applyCloudDataDirect(data, cloudTrades) {
   if (data.updated_at) _lastSeenCloudUpdatedAt[_currentAccId] = data.updated_at;
-  const incomingTrades = cloudTrades || data.trades || [];
+  const incomingTradesRaw = cloudTrades || data.trades || [];
+  // Le cloud fait foi pour les suppressions confirmées ; on y ajoute celles faites
+  // ici et pas encore confirmées (sinon un trade supprimé hors ligne réapparaîtrait
+  // au rechargement).
+  const _remoteDead = Array.isArray(data.deleted_trades) ? data.deleted_trades : null;
+  let incomingTrades = incomingTradesRaw;
+  if (_remoteDead && typeof tjpSetDeletedIds === 'function') {
+    const pending = tjpGetPendingDeletedIds();
+    tjpSetDeletedIds(_remoteDead.concat(pending));
+    const dead = new Set(_remoteDead.concat(pending));
+    incomingTrades = incomingTradesRaw.filter(t => !dead.has(t.id));
+  } else if (typeof tjpGetPendingDeletedIds === 'function') {
+    const dead = new Set(tjpGetPendingDeletedIds());
+    if (dead.size) incomingTrades = incomingTradesRaw.filter(t => !dead.has(t.id));
+  }
 
   // Garde-fou générique : on ne remplace jamais silencieusement des trades
   // existants par un tableau vide, sauf confirmation explicite (suppression
   // volontaire, restauration avec force).
   const prevCount = Array.isArray(APP.trades) ? APP.trades.length : 0;
-  const nextCount = Array.isArray(incomingTrades) ? incomingTrades.length : 0;
+  const nextCount = Array.isArray(incomingTradesRaw) ? incomingTradesRaw.length : 0;
   if (
     prevCount > 0 &&
     nextCount === 0 &&
@@ -1359,7 +1471,7 @@ function _applyCloudDataDirect(data, cloudTrades) {
     );
     console.trace();
     showSync(
-      '⚠ Synchronisation bloquée (anti-perte) — ouvre la console (F12) et envoie la trace',
+      '⚠ Synchronisation bloquée (anti-perte) — recharge l\'app ; si ça se reproduit, exporte tes trades',
       '#ef4444'
     );
     return;
@@ -1682,28 +1794,42 @@ function startPolling() {
   window._pollInterval = setInterval(async () => {
     if (!currentUser || _isSyncing || _isPushing) return;
     try {
-      const {data: rd} = await sb.auth.refreshSession();
-      if (rd?.session?.user) currentUser = rd.session.user;
-      if (rd?.session?.access_token && sb.realtime && typeof sb.realtime.setAuth === 'function') {
-        sb.realtime.setAuth(rd.session.access_token); // voir startRealtime() : jeton du canal temps réel tenu à jour
+      // getSession() : lit la session locale (renouvelée toute seule si besoin par
+      // autoRefreshToken) — refreshSession() faisait une requête réseau toutes les
+      // 15 s et pouvait entrer en collision avec le renouvellement automatique.
+      const {data: sd} = await sb.auth.getSession();
+      if (sd?.session?.user) currentUser = sd.session.user;
+      if (sd?.session?.access_token && sb.realtime && typeof sb.realtime.setAuth === 'function') {
+        sb.realtime.setAuth(sd.session.access_token); // voir startRealtime() : jeton du canal temps réel tenu à jour
       }
       // Filet de sécurité : si le canal temps réel a disparu sans même passer
       // par un statut d'erreur explicite (websocket mort en silence), on le
       // relance ici — pire cas, la synchro reste au moins réactive sous 15s.
       if (!_realtimeChannel) startRealtime();
-      const {data, error} = await sb
+      // 1) Requête légère : seulement l'horodatage de la ligne cloud.
+      const {data: head, error: headErr} = await sb
         .from('journal_data')
-        .select('*')
+        .select('updated_at')
         .eq('user_id', currentUser.id)
         .eq('acc_id', _currentAccId)
         .order('updated_at', {ascending: false})
         .limit(1);
-      if (!error && data && data.length) {
+      if (!headErr && head && head.length) {
         const localTs = localStorage.getItem(accKey('tjp_last_updated_at'));
-        if (!localTs || data[0].updated_at > localTs) {
-          _isSyncing = true;
-          applyCloudData(data[0]);
-          showSync('✓ Mis à jour', '#22c55e');
+        if (!localTs || head[0].updated_at > localTs) {
+          // 2) Il y a du nouveau : on télécharge alors la ligne complète.
+          const {data, error} = await sb
+            .from('journal_data')
+            .select('*')
+            .eq('user_id', currentUser.id)
+            .eq('acc_id', _currentAccId)
+            .order('updated_at', {ascending: false})
+            .limit(1);
+          if (!error && data && data.length && !_isPushing) {
+            _isSyncing = true;
+            applyCloudData(data[0]);
+            showSync('✓ Mis à jour', '#22c55e');
+          }
         }
       }
       // Découverte des comptes créés depuis un autre appareil, en tâche de

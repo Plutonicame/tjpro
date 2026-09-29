@@ -2347,57 +2347,21 @@ window.renderTable = function () {
   }
 };
 
-const _cfOrigAddTrade = window.addTrade;
-window.addTrade = function () {
-  const idBefore = APP.nextId;
-  // IMPORTANT : on lit les valeurs des champs personnalisés AVANT d'appeler
-  // la fonction d'origine, car celle-ci termine par un resetForm() qui vide
-  // le formulaire (y compris nos champs) dès que le trade a été ajouté.
-  const cfValues = APP.cfFields.map(f => ({f, val: cfReadInput('f', f)}));
-  _cfOrigAddTrade();
-  try {
-    const t = APP.trades[0];
-    if (t && t.id === idBefore) {
-      cfValues.forEach(({f, val}) => {
-        t['cf_' + f.id] = val;
-      });
-      saveState();
-      renderTable();
-      if (
-        document.getElementById('page-trackrecord') &&
-        document.getElementById('page-trackrecord').classList.contains('active')
-      )
-        refreshAllCharts();
-      if (typeof currentUser !== 'undefined' && currentUser && !_isSyncing) schedulePush(300);
-    }
-  } catch (e) {
-    console.warn('CF addTrade:', e);
-  }
-};
-
-const _cfOrigSaveEditTrade = window.saveEditTrade;
-window.saveEditTrade = function () {
-  const id = _editId;
-  _cfOrigSaveEditTrade();
-  try {
-    const t = APP.trades.find(x => x.id === id);
-    if (t) {
-      APP.cfFields.forEach(f => {
-        t['cf_' + f.id] = cfReadInput('e', f);
-      });
-      saveState();
-      renderTable();
-      if (
-        document.getElementById('page-trackrecord') &&
-        document.getElementById('page-trackrecord').classList.contains('active')
-      )
-        refreshAllCharts();
-      if (typeof currentUser !== 'undefined' && currentUser && !_isSyncing) schedulePush(300);
-    }
-  } catch (e) {
-    console.warn('CF saveEditTrade:', e);
-  }
-};
+// Ajout / modification d'un trade : on complète le trade via les crochets de
+// app-part1.js (TJP_TRADE_HOOKS), appelés AVANT la sauvegarde et le resetForm()
+// de la fonction native — donc les champs du formulaire sont encore remplis, et
+// une seule sauvegarde + un seul rendu ont lieu (avant : enveloppe autour de
+// addTrade/saveEditTrade = 2e sauvegarde + rendu + envoi cloud par trade).
+window.TJP_TRADE_HOOKS.add.push(function (t) {
+  APP.cfFields.forEach(function (f) {
+    t['cf_' + f.id] = cfReadInput('f', f);
+  });
+});
+window.TJP_TRADE_HOOKS.edit.push(function (t) {
+  APP.cfFields.forEach(function (f) {
+    t['cf_' + f.id] = cfReadInput('e', f);
+  });
+});
 
 const _cfOrigOpenEditTrade = window.openEditTrade;
 window.openEditTrade = function (id) {

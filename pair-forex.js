@@ -424,66 +424,22 @@
   }
 
   // ── 6. Accroche sur les vraies sauvegardes/ouvertures ───────────────────
-  // Même technique que custom-fields.js/partial-results.js : on laisse le
-  // code natif faire son travail (il lit une valeur quelconque dans
-  // #f-paire/#e-paire, sans importance), puis on corrige le trade juste
-  // ajouté/modifié avec la bonne valeur, et on re-sauvegarde/redessine.
-  if (typeof window.addTrade === 'function') {
-    var _pxdOrigAddTrade = window.addTrade;
-    window.addTrade = function () {
-      var idBefore = APP.nextId;
+  // Crochets de app-part1.js (TJP_TRADE_HOOKS) : appelés pendant addTrade() /
+  // saveEditTrade(), avant la sauvegarde — le formulaire est encore rempli, et une
+  // seule sauvegarde + un seul rendu ont lieu (avant : enveloppe + 2e sauvegarde).
+  if (window.TJP_TRADE_HOOKS) {
+    window.TJP_TRADE_HOOKS.add.push(function (t) {
       var info = pxdReadFormValue('f');
-      var r = _pxdOrigAddTrade.apply(this, arguments);
-      try {
-        var t = APP.trades[0];
-        if (t && t.id === idBefore) {
-          t.paireType = info.paireType;
-          t.devises = info.devises;
-          if (info.paire !== null) t.paire = info.paire;
-          saveState();
-          renderTable();
-          if (
-            document.getElementById('page-trackrecord') &&
-            document.getElementById('page-trackrecord').classList.contains('active')
-          )
-            refreshAllCharts();
-          if (typeof currentUser !== 'undefined' && currentUser && !_isSyncing) schedulePush(300);
-        }
-      } catch (e) {
-        console.warn('PXD addTrade:', e);
-      }
-      return r;
-    };
-  }
-
-  if (typeof window.saveEditTrade === 'function') {
-    var _pxdOrigSaveEditTrade = window.saveEditTrade;
-    window.saveEditTrade = function () {
-      var id = _editId;
+      t.paireType = info.paireType;
+      t.devises = info.devises;
+      if (info.paire !== null) t.paire = info.paire;
+    });
+    window.TJP_TRADE_HOOKS.edit.push(function (t) {
       var info = pxdReadFormValue('e');
-      var r = _pxdOrigSaveEditTrade.apply(this, arguments);
-      try {
-        var t = APP.trades.find(function (x) {
-          return x.id === id;
-        });
-        if (t) {
-          t.paireType = info.paireType;
-          t.devises = info.devises;
-          if (info.paire !== null) t.paire = info.paire;
-          saveState();
-          renderTable();
-          if (
-            document.getElementById('page-trackrecord') &&
-            document.getElementById('page-trackrecord').classList.contains('active')
-          )
-            refreshAllCharts();
-          if (typeof currentUser !== 'undefined' && currentUser && !_isSyncing) schedulePush(300);
-        }
-      } catch (e) {
-        console.warn('PXD saveEditTrade:', e);
-      }
-      return r;
-    };
+      t.paireType = info.paireType;
+      t.devises = info.devises;
+      if (info.paire !== null) t.paire = info.paire;
+    });
   }
 
   if (typeof window.openEditTrade === 'function') {
