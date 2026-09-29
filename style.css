@@ -2679,3 +2679,20 @@ body.cf-mode-phone .chart-header .bt-toggle {
 body.cf-mode-phone .nav-mobile-clocks .clock-sec {
   font-size: 70%; /* -30 % sur les chiffres des secondes (25/09/2026) */
 }
+/* Horloges du menu, mode téléphone : encore -20 % (29/09/2026) sur le nom de la ville
+   et sur l'heure (heures, minutes ET secondes : les secondes valent 70 % de l'heure,
+   elles suivent donc automatiquement). Tailles de départ inchangées, multipliées par 0,8. */
+body.cf-mode-phone .nav-mobile-clocks .clock-city {
+  font-size: calc(11px * 0.8);
+}
+body.cf-mode-phone .nav-mobile-clocks .clock-time {
+  font-size: calc(22px * 0.8);
+}
+@media (max-width: 480px) {
+  body.cf-mode-phone .nav-mobile-clocks .clock-city {
+    font-size: calc(clamp(7px, 1.8vw, 10px) * 0.8);
+  }
+  body.cf-mode-phone .nav-mobile-clocks .clock-time {
+    font-size: calc(clamp(13px, 3.8vw, 18px) * 0.8);
+  }
+}

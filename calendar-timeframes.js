@@ -27,16 +27,16 @@
 // résultat, RR, trades — sans jamais ajouter de ligne supplémentaire, pour que les
 // cases jour / semaine / mois gardent TOUTES la même taille) :
 //   J    — sous le titre de chaque mois : nombre de trades, résultat, RR moyen.
-//   SEM  — dans chaque case semaine : la ligne RR devient le RR MOYEN de la semaine,
-//        et la variation vs la semaine précédente s'ajoute à la SUITE de la ligne
+//   SEM  — dans chaque case semaine : la ligne RR est le RR RÉALISÉ CUMULÉ de la semaine
+//        (somme du RR réalisé de chaque trade, pas la moyenne), et la variation vs la semaine précédente s'ajoute à la SUITE de la ligne
 //        résultat (ex. « +379€ ▲+3.6% ») ; en tête de chaque colonne-mois : le
 //        nombre de trades du mois ; sous le titre de l'année : trades, résultat, RR moyen.
-//   MOIS — même principe, RR moyen de mois et variation vs le mois précédent sur la
+//   MOIS — même principe, RR réalisé cumulé du mois et variation vs le mois précédent sur la
 //        ligne résultat ; sous le titre de l'année : trades, résultat, RR moyen.
 //   (Pas de comparaison en % en mode J.) Variation = résultat de la période ÷ CAPITAL
 //   À LA FIN de la période précédente (ex. capital de 10 000€ en fin de semaine
 //   dernière + 500€ cette semaine = +5%) ; « — » si ce capital est nul.
-//   RR moyen = total des RR de la période ÷ nombre de trades. Les trades BT suivent
+//   RR réalisé cumulé = somme des RR de la période ; RR moyen (synthèse, infobulles) = cette somme ÷ nombre de trades. Les trades BT suivent
 //   la case BT.
 //
 // Aucune couleur nouvelle : les boutons réutilisent les boutons de période des
@@ -208,6 +208,11 @@
   function fmtAvgR(info) {
     return sgn(info.rr / info.count) + (info.rr / info.count).toFixed(2) + 'R';
   }
+  // RR réalisé CUMULÉ : somme du RR réalisé de chaque trade de la période (même
+  // format que les cases « jour »). info.rr est déjà cette somme (voir aggregate()).
+  function fmtSumR(info) {
+    return sgn(info.rr) + info.rr.toFixed(1) + 'R';
+  }
   function plural(n) {
     return n + ' trade' + (n > 1 ? 's' : '');
   }
@@ -253,13 +258,13 @@
   }
 
   // Même 4 lignes que les cases « jour » (numéro, résultat, RR, trades) — jamais une
-  // ligne de plus : en semaine / mois (cmp fourni), la ligne RR affiche la MOYENNE
-  // au lieu du total, et la variation s'ajoute à la suite de la ligne résultat.
+  // ligne de plus : la ligne RR affiche le RR réalisé cumulé, et en semaine / mois
+  // (cmp fourni) la variation s'ajoute à la suite de la ligne résultat.
   function cellHtml(label, info, isToday, title, cmp) {
     var cls = 'cal-day';
     if (isToday) cls += ' today';
     if (info) cls += info.pnl >= 0 ? ' pos' : ' neg';
-    var rrTxt = info ? (cmp ? fmtAvgR(info) : (info.rr >= 0 ? '+' : '') + info.rr.toFixed(1) + 'R') : '';
+    var rrTxt = info ? fmtSumR(info) : ''; // RR réalisé cumulé (et non plus la moyenne) en jour, semaine et mois
     return (
       '<div class="' + cls + '" title="' + title + '"><div class="cal-day-num">' + label + '</div>' +
       (info
@@ -270,11 +275,11 @@
       '</div>'
     );
   }
-  // Infobulle d'une case semaine / mois : détail complet (le RR de la ligne étant
-  // déjà la moyenne, l'infobulle ne fait que la nommer explicitement).
+  // Infobulle d'une case semaine / mois : détail complet (RR cumulé de la ligne
+  // + RR moyen entre parenthèses).
   function cellTitle(name, info, prevCapEnd, prevName) {
     if (!info) return name;
-    var t = name + ' — ' + plural(info.count) + ' · résultat ' + fmtEur(info.pnl) + ' · RR moyen ' + fmtAvgR(info);
+    var t = name + ' — ' + plural(info.count) + ' · résultat ' + fmtEur(info.pnl) + ' · RR réalisé ' + fmtSumR(info) + ' (moyen ' + fmtAvgR(info) + ')';
     var v = pctVsPrevCapital(info, prevCapEnd);
     if (v !== null) t += ' · ' + fmtPct(v) + ' du capital de fin ' + prevName + ' (' + fmtEur(prevCapEnd) + ')';
     return t;
