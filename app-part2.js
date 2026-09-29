@@ -1026,17 +1026,27 @@ function buildSyncPayload(trades) {
 // ajoutées par des migrations Supabase à part (profile_pseudo/profile_photo,
 // cf_config, acc_name), qui peuvent ne pas avoir encore été appliquées sur ce
 // projet.
+// Colonnes facultatives : si elles n'existent pas (encore) dans Supabase, on
+// sauvegarde quand même tout le reste. ATTENTION : à l'écriture (upsert), Supabase
+// renvoie le code PGRST204 « Could not find the 'x' column ... in the schema cache »
+// (et non 42703, qui n'existe que pour les lectures) : les deux doivent être reconnus,
+// sinon la sauvegarde échoue en 400 au lieu de se replier.
+const TJP_OPTIONAL_COLUMNS = ['profile_pseudo', 'profile_photo', 'cf_config', 'acc_name', 'deleted_trades'];
+function missingColumnName(error) {
+  if (!error) return null;
+  const msg = (error.message || '') + ' ' + (error.details || '');
+  const m1 = msg.match(/Could not find the '([^']+)' column/i);
+  if (m1) return m1[1];
+  const m2 = msg.match(/column\s+(?:[\w"]+\.)?"?(\w+)"?\s+(?:of\s+relation\s+\S+\s+)?does not exist/i);
+  return m2 ? m2[1] : null;
+}
 function isMissingProfileColumnError(error) {
   if (!error) return false;
+  if (error.code !== '42703' && error.code !== 'PGRST204') return false;
+  const col = missingColumnName(error);
+  if (col) return TJP_OPTIONAL_COLUMNS.includes(col);
   const msg = ((error.message || '') + ' ' + (error.details || '')).toLowerCase();
-  return (
-    error.code === '42703' &&
-    (msg.includes('profile_pseudo') ||
-      msg.includes('profile_photo') ||
-      msg.includes('cf_config') ||
-      msg.includes('acc_name') ||
-      msg.includes('deleted'))
-  );
+  return TJP_OPTIONAL_COLUMNS.some(c => msg.includes(c));
 }
 function pushJournalDataRow(payload) {
   return sb.from('journal_data').upsert(payload, {onConflict: 'user_id,acc_id'});
@@ -1103,12 +1113,13 @@ async function pushToCloud(opts) {
       try {
         let res = await sb
           .from('journal_data')
-          .select('trades, deleted_trades')
+          .select(window._noDeletedTradesCol ? 'trades' : 'trades, deleted_trades')
           .eq('user_id', currentUser.id)
           .eq('acc_id', _currentAccId)
           .maybeSingle();
         if (res.error && isMissingProfileColumnError(res.error)) {
           // Migration « deleted_trades » pas encore faite : fusion sans pierres tombales.
+          window._noDeletedTradesCol = true;
           res = await sb
             .from('journal_data')
             .select('trades')
@@ -1153,20 +1164,27 @@ async function pushToCloud(opts) {
 
     const data = buildSyncPayload(finalTrades);
     _lastPushTimestamp = data.updated_at;
+    // Colonne des suppressions déjà connue comme absente sur ce serveur : on ne
+    // l'envoie pas (évite un aller-retour en erreur 400 à chaque sauvegarde).
+    if (window._noDeletedTradesCol) delete data.deleted_trades;
 
-    let {error} = await pushJournalDataRow(data);
+    let sendData = data;
+    let {error} = await pushJournalDataRow(sendData);
     if (myGen !== _pushGeneration) return true;
 
-    if (error && isMissingProfileColumnError(error)) {
-      // La migration qui ajoute profile_pseudo/profile_photo n'est pas encore
-      // appliquée sur Supabase : on ne bloque pas la sauvegarde des trades pour
-      // autant, on retente sans le profil et on avertit une seule fois.
-      console.warn(
-        'Colonnes profil absentes côté Supabase, nouvel essai sans elles :',
-        error.message
-      );
-      const {profile_pseudo, profile_photo, cf_config, acc_name, deleted_trades, ...dataWithoutProfile} = data;
-      ({error} = await pushJournalDataRow(dataWithoutProfile));
+    // Une colonne facultative manque côté Supabase (migration pas encore faite) :
+    // on ne bloque JAMAIS la sauvegarde des trades pour autant. On retire
+    // uniquement la colonne signalée et on réessaie (les autres colonnes,
+    // comme cf_config ou acc_name, continuent d'être synchronisées).
+    for (let attempt = 0; attempt < TJP_OPTIONAL_COLUMNS.length && error && isMissingProfileColumnError(error); attempt++) {
+      const col = missingColumnName(error);
+      console.warn('Colonne absente côté Supabase, nouvel essai sans elle :', col || error.message);
+      if (col === 'deleted_trades') window._noDeletedTradesCol = true;
+      const next = Object.assign({}, sendData);
+      if (col && col in next) delete next[col];
+      else TJP_OPTIONAL_COLUMNS.forEach(c => delete next[c]); // colonne non identifiée : on retire toutes les facultatives
+      sendData = next;
+      ({error} = await pushJournalDataRow(sendData));
       if (myGen !== _pushGeneration) return true;
     }
 
