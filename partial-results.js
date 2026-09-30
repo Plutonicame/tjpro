@@ -6,15 +6,15 @@
 // en plusieurs fois (prises de profits partielles). Autant de cases que
 // voulu, chacune retirable avec "−".
 //
-// À la sauvegarde, le TOTAL de toutes les cases devient la valeur
-// enregistrée comme résultat du trade — l'historique affiche donc déjà
-// le total automatiquement, sans rien changer côté affichage (il affiche
-// simplement le résultat du trade, qui est maintenant ce total).
+// À la sauvegarde, le TOTAL de toutes les cases devient le résultat du
+// trade : une seule ligne et un seul résultat dans l'historique. Le DÉTAIL
+// des cases est gardé dans le trade (t.partials = [100, 50, ...]) : en
+// cliquant sur « modifier le trade », on retrouve les cases distinctes, pas
+// une case unique additionnée (30/09/2026).
 //
 // Fonctionne sur le formulaire d'ajout (#f-res) et sur celui d'édition
-// (#e-res). Le détail des partiels n'est pas conservé après coup (seul le
-// total l'est) : en rouvrant un trade pour l'éditer, on repart d'une case
-// unique pré-remplie avec le total.
+// (#e-res). Le total est posé par les crochets TJP_TRADE_HOOKS (add/edit),
+// sans toucher au contenu des cases du formulaire.
 //
 // Le bouton "+" a l'apparence d'une case assortie à la case Résultat
 // (mêmes coins arrondis / bordure / fond), avec ses 3 couleurs (fond,
@@ -97,20 +97,22 @@
     return b;
   }
 
-  function pfAddRow(wrap) {
+  function pfAddRow(wrap, value) {
     var row = document.createElement('div');
     row.className = 'pf-row';
     var input = document.createElement('input');
     input.type = 'number';
     input.className = 'pf-input';
     input.placeholder = 'Partiel ' + (wrap.querySelectorAll('.pf-row').length + 1);
+    var prefilled = value !== undefined && value !== null && value !== '';
+    if (prefilled) input.value = value;
     var rm = pfMakeBtn('pf-remove-box', '\u2212', 'Retirer cette case', function () {
       row.remove();
     });
     row.appendChild(input);
     row.appendChild(rm);
     wrap.appendChild(row);
-    input.focus();
+    if (!prefilled) input.focus();
   }
 
   function pfSetup(inputId) {
@@ -149,6 +151,28 @@
       total += parseFloat(inp.value) || 0;
     });
     return Math.round(total * 100) / 100; // évite 0,1 + 0,2 = 0,30000000000000004
+  }
+
+  // Valeurs saisies, case par case (les cases vides sont ignorées).
+  function pfValues(inputId) {
+    var wrap = document.getElementById('pf-wrap-' + inputId);
+    var inputs = wrap ? wrap.querySelectorAll('input') : [document.getElementById(inputId)];
+    var vals = [];
+    Array.prototype.forEach.call(inputs, function (inp) {
+      if (!inp || inp.value === '') return;
+      var v = parseFloat(inp.value);
+      if (isFinite(v)) vals.push(Math.round(v * 100) / 100);
+    });
+    return vals;
+  }
+
+  // Pose sur le trade le total (t.res) ET le détail (t.partials, seulement s'il
+  // y a au moins 2 cases remplies : un trade simple reste un trade simple).
+  function pfApplyToTrade(t, inputId) {
+    var vals = pfValues(inputId);
+    t.res = pfTotal(inputId);
+    if (vals.length > 1) t.partials = vals;
+    else delete t.partials;
   }
 
   // Ne garde que la case de base, retire celles ajoutées en trop.
@@ -225,26 +249,18 @@
   }
 
   // ── 4. Accroche sur les vraies sauvegardes/ouvertures ────────────────
-  // addTrade() lit simplement la valeur de f-res : on y met le total
-  // juste avant qu'il ne la lise. resetForm() n'est appelé par addTrade()
-  // qu'en cas de succès réel (date renseignée) — on ne retire les cases
-  // en trop qu'à ce moment-là, jamais si la validation a échoué.
-  if (typeof window.addTrade === 'function') {
-    var _origAddTrade = window.addTrade;
-    window.addTrade = function () {
-      var el = document.getElementById('f-res');
-      var base = el ? el.value : '';
-      var before = APP.trades.length;
-      if (el) el.value = pfTotal('f-res');
-      try {
-        return _origAddTrade.apply(this, arguments);
-      } finally {
-        // Ajout refusé (date manquante...) : les cases « + » restent affichées, donc
-        // on remet la valeur de la case de base. Sinon le total y restait écrit et
-        // était recompté (100 + 50 → 150 dans la case de base, puis 200 au 2e essai).
-        if (el && APP.trades.length === before) el.value = base;
-      }
-    };
+  // Crochets de app-part1.js (TJP_TRADE_HOOKS) : appelés par addTrade() et
+  // saveEditTrade() sur le trade en cours, avant la sauvegarde. Le formulaire
+  // n'est plus modifié (avant : le total était écrit dans la case de base puis
+  // remis en place si l'ajout était refusé). resetForm() n'est appelé qu'en cas
+  // de succès réel : on ne retire les cases en trop qu'à ce moment-là.
+  if (window.TJP_TRADE_HOOKS) {
+    window.TJP_TRADE_HOOKS.add.push(function (t) {
+      pfApplyToTrade(t, 'f-res');
+    });
+    window.TJP_TRADE_HOOKS.edit.push(function (t) {
+      pfApplyToTrade(t, 'e-res');
+    });
   }
   if (typeof window.resetForm === 'function') {
     var _origResetForm = window.resetForm;
@@ -255,23 +271,35 @@
     };
   }
 
-  // Même principe pour l'édition d'un trade existant.
-  if (typeof window.saveEditTrade === 'function') {
-    var _origSaveEditTrade = window.saveEditTrade;
-    window.saveEditTrade = function () {
-      var el = document.getElementById('e-res');
-      if (el) el.value = pfTotal('e-res');
-      return _origSaveEditTrade.apply(this, arguments);
-    };
+  // À l'ouverture d'une fiche pour édition : on repart d'une case unique, puis,
+  // si le trade a des résultats partiels, on remet chaque partiel dans sa propre
+  // case. Sécurité : si la somme des partiels ne correspond plus au résultat du
+  // trade (modifié ailleurs), on ignore le détail et on garde le total.
+  function pfRestoreEdit(id) {
+    var t = APP.trades.find(function (x) {
+      return x.id === parseInt(id, 10);
+    });
+    var base = document.getElementById('e-res');
+    var wrap = document.getElementById('pf-wrap-e-res');
+    if (!t || !base || !wrap || !Array.isArray(t.partials) || t.partials.length < 2) return;
+    var sum = t.partials.reduce(function (a, b) {
+      return a + (parseFloat(b) || 0);
+    }, 0);
+    if (Math.abs(sum - (parseFloat(t.res) || 0)) > 0.005) return;
+    base.value = t.partials[0];
+    for (var i = 1; i < t.partials.length; i++) pfAddRow(wrap, t.partials[i]);
   }
-  // À l'ouverture d'une fiche pour édition, on repart d'une case unique
-  // avant qu'openEditTrade() n'y remette le total du trade (le détail des
-  // partiels n'est pas conservé d'une session à l'autre, seul le total).
   if (typeof window.openEditTrade === 'function') {
     var _origOpenEditTrade = window.openEditTrade;
-    window.openEditTrade = function () {
+    window.openEditTrade = function (id) {
       pfReset('e-res');
-      return _origOpenEditTrade.apply(this, arguments);
+      var r = _origOpenEditTrade.apply(this, arguments);
+      try {
+        pfRestoreEdit(id);
+      } catch (e) {
+        console.warn('Partiels openEditTrade :', e);
+      }
+      return r;
     };
   }
 })();
