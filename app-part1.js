@@ -865,7 +865,6 @@ const realTrades = () => APP.trades.filter(t => !t.backtest);
 });
 const CAPITAL = () => parseFloat(lsAcc('tj_capital', '10000'));
 const RBASE = () => parseFloat(lsAcc('tj_risk', '1'));
-const RDEC = () => lsAcc('tj_risk_decimal', false);
 const SMART = () => lsAcc('tj_smart_risk', true);
 const RMAX = () => parseFloat(lsAcc('tj_risk_max', '10'));
 
@@ -1613,9 +1612,13 @@ function getCurrentRiskPct() {
 function getCurrentRiskEur() {
   return Math.round(((getCurrentCap() * getCurrentRiskPct()) / 100) * 100) / 100;
 }
-// Formate un pourcentage de risque selon le réglage "Affichage risk : Décimales"
+// Formate un pourcentage de risque, automatiquement : valeur ronde sans décimale
+// (2 → "2%"), sinon décimales utiles seulement (2.5 → "2.5%", 0.75 → "0.75%").
+// Remplace l'ancien bouton « Affichage risk : Décimales » (supprimé).
 function fmtRiskPct(v) {
-  return RDEC() ? v.toFixed(2) + '%' : Math.round(v * 100) / 100 + '%';
+  v = Number(v);
+  if (!isFinite(v)) return '0%';
+  return Math.round(v * 100) / 100 + '%';
 }
 
 // ══ RISK CHART ══
@@ -2596,17 +2599,6 @@ function updateNavBadges() {
 }
 
 // ══ MODIFS ══
-function toggleDecimal() {
-  const c = RDEC();
-  lssAcc('tj_risk_decimal', !c);
-  document.getElementById('tglDec').classList.toggle('on', !c);
-  renderModifs();
-  updateNavBadges();
-  updateKPIs();
-  if (typeof currentUser !== 'undefined' && currentUser && !_isSyncing) {
-    schedulePush(300);
-  }
-}
 function toggleSmartRisk() {
   const c = SMART();
   lssAcc('tj_smart_risk', !c);
@@ -2745,7 +2737,6 @@ function renderModifs() {
   const rmLbl = document.getElementById('riskMaxLabel');
   if (rmLbl) rmLbl.textContent = lsAcc('tj_risk_max', '10');
   renderPayouts();
-  document.getElementById('tglDec').classList.toggle('on', RDEC());
   const smart = SMART();
   document.getElementById('tglSmart').classList.toggle('on', smart);
   document.getElementById('smartLbl').textContent = smart ? 'Activé' : 'Désactivé';
