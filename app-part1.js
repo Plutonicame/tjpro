@@ -3105,8 +3105,18 @@ function updateKPIs() {
     const pf = sumP > 0 ? sumG / sumP : sumG > 0 ? 99 : 0;
     const worst = computeWorstLose(BT_STATE.kpi);
     const pnlPct = CAPITAL() > 0 ? (pnl / CAPITAL()) * 100 : 0;
-    k1.textContent =
-      (pnl >= 0 ? '+' : '') + fr(pnl) + '€ (' + (pnlPct >= 0 ? '+' : '') + pnlPct.toFixed(1) + '%)';
+    // P&L réalisé : euros, pourcentage, et en dessous le RR réalisé cumulé (somme du RR de chaque trade).
+    const rrSum = rrArr.reduce((a, b) => a + b, 0);
+    k1.innerHTML =
+      (pnl >= 0 ? '+' : '') +
+      fr(pnl) +
+      '€ (' +
+      (pnlPct >= 0 ? '+' : '') +
+      pnlPct.toFixed(1) +
+      '%)<br><span class="kpi-sub-r">' +
+      (rrSum >= 0 ? '+' : '') +
+      rrSum.toFixed(2) +
+      'R</span>';
     k1.style.color = pnl >= 0 ? 'var(--green)' : 'var(--red)';
     document.getElementById('k2').textContent = wr.toFixed(1) + '%';
     document.getElementById('k3').textContent = rrMoy.toFixed(2) + 'R';

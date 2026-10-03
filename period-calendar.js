@@ -324,7 +324,21 @@
       if (dd > maxDD) maxDD = dd;
     });
     var pnlPct = cap0 > 0 ? (pnl / cap0) * 100 : 0;
-    set('k1', (pnl >= 0 ? '+' : '') + fr2(pnl) + '€ (' + (pnlPct >= 0 ? '+' : '') + pnlPct.toFixed(1) + '%)');
+    var rrSum = t.reduce(function (sum, x) {
+      return sum + computeRR(x);
+    }, 0);
+    var k1el = document.getElementById('k1');
+    if (k1el)
+      k1el.innerHTML =
+        (pnl >= 0 ? '+' : '') +
+        fr2(pnl) +
+        '€ (' +
+        (pnlPct >= 0 ? '+' : '') +
+        pnlPct.toFixed(1) +
+        '%)<br><span class="kpi-sub-r">' +
+        (rrSum >= 0 ? '+' : '') +
+        rrSum.toFixed(2) +
+        'R</span>';
     set('k2', wr.toFixed(1) + '%');
     set('k3', rrMoy.toFixed(2) + 'R');
     set('k4', pf.toFixed(2));

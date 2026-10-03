@@ -2700,3 +2700,11 @@ body.cf-mode-phone .nav-mobile-clocks .clock-time {
     font-size: calc(clamp(13px, 3.8vw, 18px) * 0.92);
   }
 }
+
+/* P&L Total (KPI) : le RR réalisé cumulé s'affiche sous l'euro et le pourcentage. */
+.kpi-sub-r {
+  display: block;
+  font-size: 0.8em;
+  opacity: 0.85;
+  margin-top: 1px;
+}
