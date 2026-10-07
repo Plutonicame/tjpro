@@ -1369,16 +1369,23 @@ tbody tr { border-bottom-color: rgba(35, 40, 56, 0.7); }
   function isOldBase(k, val) {
     return OLD[k] !== undefined && OLD[k] !== '' && norm(val) === OLD[k];
   }
+  // La migration ne tourne qu'UNE fois par thème (marqueur stocké dans le thème
+  // lui-même, donc synchronisé au cloud) : sinon une couleur choisie volontairement
+  // et égale à l'ancienne base serait supprimée à chaque connexion.
+  var MARK = '--tjp-theme-v2';
   function migrateTeVals() {
     if (typeof teVals === 'undefined' || !teVals) return false;
+    if (teVals[MARK]) return false;
     var changed = false;
+    var hadValues = Object.keys(teVals).length > 0;
     Object.keys(teVals).forEach(function (k) {
       if (NEW[k] !== undefined && isOldBase(k, teVals[k])) {
         delete teVals[k];
         changed = true;
       }
     });
-    return changed;
+    teVals[MARK] = '1';
+    return changed || hadValues;
   }
   // Retire de la page les valeurs « ancienne base » déjà posées en direct
   // (aperçu du thème avant connexion, valeurs gelées...). Les valeurs choisies
@@ -1430,6 +1437,36 @@ tbody tr { border-bottom-color: rgba(35, 40, 56, 0.7); }
   wrap('loadSavedTheme', true); // connexion, changement de compte, restauration
   wrap('previewThemeForUid', false); // aperçu sur l'écran du code PIN
   wrap('_applyCloudDataDirect', true); // thème reçu depuis le cloud
+
+  // ── 6. Déconnexion : proposer aussi la sauvegarde locale si le THÈME a changé ──
+  function themeSig() {
+    try {
+      var o = {};
+      Object.keys(teVals || {}).sort().forEach(function (k) { if (k !== MARK) o[k] = teVals[k]; });
+      return JSON.stringify(o);
+    } catch (e) { return ''; }
+  }
+  function sigKey() { return 'tj_last_backup_theme__' + (typeof profileKey === 'function' ? profileKey('x') : ''); }
+  if (typeof window.resetPin === 'function') {
+    var origReset = window.resetPin;
+    window.resetPin = function () {
+      try {
+        var saved = localStorage.getItem(sigKey());
+        var cur = themeSig();
+        if (cur !== '{}' && cur !== (saved == null ? '{}' : saved) && typeof accKey === 'function')
+          localStorage.setItem(accKey('tj_last_backup_hash'), '');
+      } catch (e) {}
+      return origReset.apply(this, arguments);
+    };
+  }
+  if (typeof window.exportLocalBackup === 'function') {
+    var origExport = window.exportLocalBackup;
+    window.exportLocalBackup = function () {
+      var r = origExport.apply(this, arguments);
+      try { localStorage.setItem(sigKey(), themeSig()); } catch (e) {}
+      return r;
+    };
+  }
 
   // Passage immédiat (aperçu déjà posé au démarrage, thème déjà chargé...)
   refresh(false);
