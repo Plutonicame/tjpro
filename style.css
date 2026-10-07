@@ -2630,38 +2630,38 @@ body.cf-mode-ultrawide #editModal .cp-modal {
       Si malgré ça la ligne est trop large (période affichée à côté du bouton),
       elle passe à la ligne au lieu de déborder de l'écran. */
 body.cf-mode-phone .nav-mobile-row2 {
-  gap: 5px;
-  row-gap: 4px;
+  gap: 4px;
   padding: 4px 8px 5px;
-  flex-wrap: wrap;
+  flex-wrap: nowrap; /* tout sur UNE ligne : les cases se partagent exactement la largeur (07/10/2026) */
 }
 body.cf-mode-phone .nav-mobile-badges {
-  gap: 5px;
-  row-gap: 4px;
-  flex-wrap: wrap;
-  justify-content: flex-end;
+  /* Le conteneur disparaît : Session, bouton calendrier, Trades, P&L et Risk deviennent
+     des cases d'une MÊME ligne et se partagent ensemble toute la largeur. */
+  display: contents;
 }
 body.cf-mode-phone .nav-mobile-session.session-badge,
 body.cf-mode-phone .nav-mobile-badges .nbadge {
-  /* Cases Session / Trades / P&L / Risk : taille DOUBLÉE (30/09/2026, « beaucoup trop
-     petit »). Police et marges intérieures x2 ; le bouton calendrier de la barre
-     (hauteur calée sur le badge Risk par fitAll) double donc aussi. */
-  font-size: 16.6px; /* 8.3px x 2 */
-  padding: 6.4px 12.8px; /* 3.2px 6.4px x 2 */
-  letter-spacing: 0.4px;
+  /* Cases Session / Trades / P&L / Risk (07/10/2026, demande de Paul) : nettement plus
+     petites (police ~ -25 %, marges ~ -45 %) ET elles s'étirent pour occuper pile toute
+     la largeur de la barre (flex-grow), texte centré. La police suit la largeur de
+     l'écran pour que le contenu ne déborde jamais. Le bouton calendrier (hauteur calée
+     sur le badge Risk par fitAll) rapetisse avec elles. */
+  font-size: clamp(7px, 2.05vw, 10px);
+  padding: 3px 4px;
+  letter-spacing: 0;
+  flex: 1 1 auto;
+  min-width: 0;
+  text-align: center;
+  overflow: hidden;
+  white-space: nowrap;
+  box-sizing: border-box;
 }
 body.cf-mode-phone .nav-mobile .pcal-btn {
-  margin-left: 3px;
+  margin-left: 0;
+  flex: 0 0 auto;
 }
 body.cf-mode-phone .nav-mobile .pcal-range-label {
   display: none; /* déjà visible en bas du popup une fois le calendrier rouvert (25/09/2026) */
-}
-@media (max-width: 480px) {
-  body.cf-mode-phone .nav-mobile-session.session-badge,
-  body.cf-mode-phone .nav-mobile-badges .nbadge {
-    font-size: calc(clamp(8px, 2.2vw, 11px) * 1.28); /* taille précédente (x 0,64) doublée */
-    padding: 3.8px 7.6px; /* 1.9px 3.8px doublé */
-  }
 }
 
 /* 2) Graphiques : le bouton BT (backtest) tout en haut à droite de la zone de
@@ -2687,14 +2687,15 @@ body.cf-mode-phone .nav-mobile-clocks .clock-sec {
    secondes : les secondes valent 70 % de l'heure, elles suivent donc automatiquement).
    Tailles de départ inchangées. */
 body.cf-mode-phone .nav-mobile-clocks .clock-city {
-  font-size: calc(11px * 0.92);
+  font-size: calc(11px * 0.92 * 1.1); /* +10 % (07/10/2026) */
+  -webkit-text-stroke: 0.35px currentColor; /* mi-gras : plus lisible sans passer au gras plein */
 }
 body.cf-mode-phone .nav-mobile-clocks .clock-time {
   font-size: calc(22px * 0.92);
 }
 @media (max-width: 480px) {
   body.cf-mode-phone .nav-mobile-clocks .clock-city {
-    font-size: calc(clamp(7px, 1.8vw, 10px) * 0.92);
+    font-size: calc(clamp(7px, 1.8vw, 10px) * 0.92 * 1.1); /* +10 % (07/10/2026) */
   }
   body.cf-mode-phone .nav-mobile-clocks .clock-time {
     font-size: calc(clamp(13px, 3.8vw, 18px) * 0.92);
