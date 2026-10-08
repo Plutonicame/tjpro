@@ -2709,3 +2709,10 @@ body.cf-mode-phone .nav-mobile-clocks .clock-time {
   opacity: 0.85;
   margin-top: 1px;
 }
+
+/* Mode téléphone : bouton menu burger un peu plus petit (ne touche plus la bordure du bas) */
+body.cf-mode-phone .hamburger {
+  font-size: 20px;
+  padding: 4px 10px;
+  line-height: 1.2;
+}
