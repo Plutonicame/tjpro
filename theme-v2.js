@@ -1471,3 +1471,67 @@ tbody tr { border-bottom-color: rgba(35, 40, 56, 0.7); }
   // Passage immédiat (aperçu déjà posé au démarrage, thème déjà chargé...)
   refresh(false);
 })();
+
+
+// Petits messages en bas à droite (« ✓ Sauvegardé », « ⚠ Réseau »...) : couleurs
+// de texte, de fond et de bordure modifiables dans Paramètres > Thème, avec deux
+// familles distinctes : confirmation (✓) et erreur / avertissement (⚠).
+(function () {
+  var DEF = {
+    '--toast-ok-tx': '#34d399',
+    '--toast-ok-bg': '#10231d',
+    '--toast-ok-bd': '#1f5c47',
+    '--toast-err-tx': '#fb7185',
+    '--toast-err-bg': '#2a1218',
+    '--toast-err-bd': '#6b2433'
+  };
+  var st = document.createElement('style');
+  st.textContent = ':root{' + Object.keys(DEF).map(function (k) { return k + ':' + DEF[k]; }).join(';') + '}';
+  document.head.appendChild(st);
+
+  var LIST = [
+    ['--toast-ok-tx', 'Notification confirmation (ex: Sauvegardé) — texte'],
+    ['--toast-ok-bg', 'Notification confirmation — fond'],
+    ['--toast-ok-bd', 'Notification confirmation — bordure'],
+    ['--toast-err-tx', 'Notification erreur (ex: Réseau) — texte'],
+    ['--toast-err-bg', 'Notification erreur — fond'],
+    ['--toast-err-bd', 'Notification erreur — bordure']
+  ].map(function (a) {
+    return { v: a[0], l: a[1], page: 'Général', section: 'Messages système' };
+  });
+
+  if (typeof window.buildTV === 'function') {
+    var origTV = window.buildTV;
+    window.buildTV = function () {
+      return origTV.apply(this, arguments).concat(LIST);
+    };
+  }
+
+  function kind(msg) {
+    msg = String(msg == null ? '' : msg).replace(/^\s+/, '');
+    if (msg.charAt(0) === '✓') return 'ok';
+    if (msg.charAt(0) === '⚠') return 'err';
+    return '';
+  }
+  if (typeof window.showSync === 'function') {
+    var orig = window.showSync;
+    window.showSync = function (msg) {
+      var r = orig.apply(this, arguments);
+      try {
+        var el = document.getElementById('syncStatus');
+        if (!el) return r;
+        var k = kind(msg);
+        if (k) {
+          var n = '--toast-' + k;
+          el.style.setProperty('color', 'var(' + n + '-tx)', 'important');
+          el.style.setProperty('background', 'var(' + n + '-bg)', 'important');
+          el.style.setProperty('border-color', 'var(' + n + '-bd)', 'important');
+        } else {
+          el.style.removeProperty('background');
+          el.style.removeProperty('border-color');
+        }
+      } catch (e) {}
+      return r;
+    };
+  }
+})();
