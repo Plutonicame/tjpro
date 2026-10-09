@@ -162,6 +162,9 @@ const FC_CSS = `
 .fc-contact-avatar-wrap{position:relative;flex-shrink:0;}
 .fc-contact-unread-dot{position:absolute;top:-2px;right:-2px;width:10px;height:10px;border-radius:50%;background:var(--fc-unread-dot-color,var(--red));border:2px solid var(--fc-sidebar-bg,var(--surface));}
 .fc-nav-badge{display:none;position:absolute;top:4px;right:2px;width:8px;height:8px;border-radius:50%;background:var(--fc-unread-dot-color,var(--red));box-shadow:0 0 0 2px var(--nav-bg,var(--bg));}
+.fc-burger-badge{top:-4px;right:-4px;}
+.fc-burger-badge.fc-badge-count{top:-7px;right:-7px;}
+#mobileMenu .fc-nav-badge{top:5px;right:auto;left:5px;}
 .fc-contact-unread-dot.fc-badge-count,.fc-nav-badge.fc-badge-count{width:auto;min-width:15px;height:15px;padding:0 3px;align-items:center;justify-content:center;color:var(--fc-unread-text-color,#fff);font-size:9px;font-family:var(--mono);line-height:1;}
 .fc-chat{flex:1;display:flex;flex-direction:column;min-width:0;}
 .fc-chat-empty{flex:1;display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:13px;padding:20px;text-align:center;}
@@ -213,6 +216,8 @@ const FC_CSS = `
 .fc-bt-badge{font-size:11px;line-height:1;padding:1px 3px;background:var(--bt-bg);color:var(--bt-tx);border-radius:3px;font-family:var(--mono);display:inline-block;}
 .fc-trade-card{width:220px;max-width:100%;border:1px solid var(--border);border-radius:8px;overflow:hidden;background:var(--card);}
 .fc-trade-card-head{display:flex;justify-content:space-between;align-items:center;gap:6px;padding:7px 10px;background:var(--fc-trade-head-bg,var(--surface));font-family:var(--mono);font-size:11px;color:var(--text);}
+.fc-trade-card-head.fc-has-img{cursor:zoom-in;}
+.fc-trade-card-head.fc-has-img:hover{filter:brightness(1.25);}
 .fc-trade-card-body{padding:8px 10px;font-size:11px;color:var(--text);}
 .fc-trade-row{display:flex;justify-content:space-between;gap:8px;margin-bottom:3px;}
 .fc-trade-row span:first-child{color:var(--muted);}
@@ -628,6 +633,15 @@ async function fcRenderPushButton() {
 }
 
 function fcInjectNavBadges() {
+  // Menu burger (onglets masqués) : un point rouge en haut à droite du bouton ☰,
+  // pour voir qu'un message est arrivé sans ouvrir le menu.
+  document.querySelectorAll('.hamburger').forEach((hb) => {
+    if (hb.querySelector('.fc-nav-badge')) return;
+    hb.style.position = 'relative';
+    const dot = document.createElement('span');
+    dot.className = 'fc-nav-badge fc-burger-badge';
+    hb.appendChild(dot);
+  });
   document.querySelectorAll('.nav-tab').forEach((btn) => {
     const oc = btn.getAttribute('onclick') || '';
     if (oc.indexOf("showPage('ami'") === -1 || btn.querySelector('.fc-nav-badge')) return;
@@ -960,7 +974,7 @@ function fcBuildTradeCardHtml(t) {
   let starsHtml = '';
   for (let i = 1; i <= 5; i++) starsHtml += i <= Math.round(starsN) ? '★' : '☆';
   return `<div class="fc-trade-card">
-    <div class="fc-trade-card-head">
+    <div class="fc-trade-card-head${imgs.length ? ' fc-has-img' : ''}"${imgs.length ? ' onclick="fcOpenTradeCardImages(this)" title="Voir le graphique en grand"' : ''}>
       <span>${fcEsc(t.paire || '—')}${t.dir ? ' · ' + fcEsc(t.dir) : ''}${t.backtest ? '&nbsp;<span class="fc-bt-badge">BT</span>' : ''}</span>
       <span style="color:${resColor};font-weight:700;">${fcEsc(resTxt)}</span>
     </div>
@@ -1029,8 +1043,27 @@ function fcRenderMessageRow(m, me) {
   const inner = mine ? triggerHtml + bubbleHtml : bubbleHtml + triggerHtml;
   return `<div class="fc-msg-row${mine ? ' mine' : ''}" onclick="fcOnMessageRowClick(event,this)"><div class="fc-msg-inner">${inner}</div></div>`;
 }
+// Clic sur le bandeau d'un trade partagé (paire · direction · gain) : affiche son
+// graphique (capture jointe) en grand, centré, avec de la marge sur les côtés.
+function fcOpenTradeCardImages(headEl) {
+  const card = headEl.closest('.fc-trade-card');
+  if (!card) return;
+  const srcs = Array.from(card.querySelectorAll('.fc-trade-imgs img')).map((i) => i.src);
+  if (!srcs.length || typeof openFullscreen !== 'function') return;
+  openFullscreen(srcs[0], srcs, 0);
+  try {
+    const ov = document.body.lastElementChild;
+    const im = ov && ov.querySelector('img');
+    if (im) {
+      im.style.maxWidth = 'min(82vw, 1500px)';
+      im.style.maxHeight = '74vh';
+      im.style.minWidth = 'min(60vw, 900px)';
+      im.style.objectFit = 'contain';
+    }
+  } catch (e) {}
+}
 function fcOnMessageRowClick(e, rowEl) {
-  if (e.target.closest('.fc-react-trigger, .fc-audio-play, .fc-trade-imgs img')) return;
+  if (e.target.closest('.fc-react-trigger, .fc-audio-play, .fc-trade-imgs img, .fc-trade-card-head.fc-has-img')) return;
   document.querySelectorAll('.fc-msg-row.show-react').forEach((r) => {
     if (r !== rowEl) r.classList.remove('show-react');
   });
