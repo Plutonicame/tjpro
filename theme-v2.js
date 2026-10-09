@@ -1392,6 +1392,9 @@ tbody tr { border-bottom-color: rgba(35, 40, 56, 0.7); }
   // à la main (différentes de l'ancienne base) ne sont pas touchées.
   function stripOldInline() {
     var st = document.documentElement.style;
+    // Thème déjà migré (marqueur présent) : TOUT ce qui est posé a été choisi par
+    // l'utilisateur, même si ça ressemble à l'ancienne base -> on n'y touche pas.
+    if (st.getPropertyValue(MARK)) return;
     Object.keys(NEW).forEach(function (k) {
       var cur = st.getPropertyValue(k);
       if (cur && isOldBase(k, cur)) st.removeProperty(k);
